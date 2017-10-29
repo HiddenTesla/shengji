@@ -2,6 +2,7 @@ package logger;
 
 import org.apache.log4j.Logger;
 
+// Maybe this class should be renamed into LoggerFactory
 public class LoggerBase {
-    protected static Logger log = Logger.getLogger(LoggerBase.class);
+    public static Logger log = Logger.getLogger(LoggerBase.class);
 }

@@ -1,3 +1,4 @@
+import gui.ImageContainer;
 import org.testng.annotations.Test;
 
 import javax.swing.*;
@@ -17,11 +18,17 @@ public class Mainframe extends logger.LoggerBase {
 
         JFrame frame = new JFrame();
 
-        frame.setSize(200, 100);
+        // Size may be adjusted at any time
+        frame.setSize(600, 300);
 
         // Centralize the frame
         frame.setLocationRelativeTo(null);
 
+        gui.ImageContainer card = new ImageContainer("sample.jpg");
+
+        frame.add(card);
+
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
     }
 
