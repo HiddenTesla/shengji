@@ -1,0 +1,10 @@
+# Intellij IDEA generated
+.idea
+*.iml
+
+# maven generated
+target
+
+# log4j generated
+logs
+*.log
