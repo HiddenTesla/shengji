@@ -1,3 +1,4 @@
+import gui.CardContainer;
 import gui.ImageContainer;
 import logger.LogFactory;
 import org.apache.log4j.Logger;
@@ -26,9 +27,9 @@ public class Mainframe extends LogFactory {
         // Centralize the frame
         frame.setLocationRelativeTo(null);
 
-        gui.ImageContainer card = new ImageContainer("sample.jpg");
+        ImageContainer chin = new CardContainer("sample_01.jpg");
 
-        frame.add(card);
+        frame.add(chin);
 
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
