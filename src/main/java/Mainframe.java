@@ -1,28 +1,40 @@
+import gui.CardContainer;
+import gui.ImageContainer;
+import logger.LogFactory;
+import org.apache.log4j.Logger;
 import org.testng.annotations.Test;
 
 import javax.swing.*;
-import java.awt.*;
 
 
 /**
  *
  */
 
-public class Mainframe extends logger.LoggerBase {
+public class Mainframe extends LogFactory {
 
     // region member variables
+    private static Logger log = LogFactory.getLog(Mainframe.class);
 
     // endregion
     public static void main(String[] args) {
 
         JFrame frame = new JFrame();
 
-        frame.setSize(200, 100);
+        // Size may be adjusted at any time
+        frame.setSize(600, 300);
 
         // Centralize the frame
         frame.setLocationRelativeTo(null);
 
+        ImageContainer chin = new CardContainer("sample_01.jpg");
+
+        frame.add(chin);
+
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
+
+        log.info("Main frame started");
     }
 
     @Test
