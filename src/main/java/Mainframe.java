@@ -1,17 +1,19 @@
 import gui.ImageContainer;
+import logger.LogFactory;
+import org.apache.log4j.Logger;
 import org.testng.annotations.Test;
 
 import javax.swing.*;
-import java.awt.*;
 
 
 /**
  *
  */
 
-public class Mainframe extends logger.LoggerBase {
+public class Mainframe extends LogFactory {
 
     // region member variables
+    private static Logger log = LogFactory.getLog(Mainframe.class);
 
     // endregion
     public static void main(String[] args) {
@@ -30,6 +32,8 @@ public class Mainframe extends logger.LoggerBase {
 
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
+
+        log.info("Main frame started");
     }
 
     @Test

@@ -1,6 +1,6 @@
 package gui;
 
-import logger.LoggerBase;
+import logger.LogFactory;
 import org.apache.log4j.Logger;
 
 import javax.swing.*;
@@ -10,7 +10,7 @@ public class ImageContainer extends JPanel {
     protected static final String PROJECT_PATH = System.getProperty("user.dir") + "/";
     protected static final String IMAGE_DIRECTORY = PROJECT_PATH + "src/main/resources/images/";
 
-    protected static Logger log = LoggerBase.log;
+    protected static Logger log = LogFactory.getLog(ImageContainer.class);
 
     public ImageContainer(String filenameInImages) {
 
