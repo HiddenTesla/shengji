@@ -11,7 +11,7 @@ import javax.swing.*;
  *
  */
 
-public class Mainframe extends LogFactory {
+public class Mainframe {
 
     // region member variables
     private static Logger log = LogFactory.getLog(Mainframe.class);
