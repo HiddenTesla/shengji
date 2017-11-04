@@ -1,26 +1,28 @@
 package gui;
 
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 
 public class CardContainer extends ImageContainer {
 
-    private void Moha() {}
     private boolean isSelected = false;
 
-    private static boolean SELECTED = true;
-    private static boolean NOT_SELECTED = false;
+    private static final boolean SELECTED = true;
+    private static final boolean NOT_SELECTED = false;
+
+    private static final int MOVE_DISTANCE = 20;
 
     public CardContainer(String filenameInImages) {
         super(filenameInImages);
 
         this.addMouseListener(new MouseListener() {
             public void mouseClicked(MouseEvent e) {
-                String newStatus = isSelected?
-                        "selected" : "not selected";
-                log.info("You have clicked a card! The status will be " + newStatus);
+                if (isSelected) {
+                    MoveVertical(MOVE_DISTANCE);
+                }
+                else {
+                    MoveVertical(-MOVE_DISTANCE);
+                }
 
                 isSelected = !isSelected;
             }
@@ -30,6 +32,12 @@ public class CardContainer extends ImageContainer {
             public void mouseEntered(MouseEvent e) { }
             public void mouseExited(MouseEvent e) { }
         });
+    }
+
+    private void MoveVertical(int distance) {
+        int oldX = this.getX();
+        int oldY = this.getY();
+        super.setLocation(oldX, oldY + distance);
     }
 
 }
