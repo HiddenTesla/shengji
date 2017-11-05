@@ -1,6 +1,6 @@
-package exception;
+package shengji.exception;
 
-import gui.ImageContainer;
+import shengji.gui.ImageContainer;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 

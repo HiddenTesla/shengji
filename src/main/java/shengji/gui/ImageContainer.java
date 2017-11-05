@@ -1,7 +1,7 @@
-package gui;
+package shengji.gui;
 
-import exception.ImageNotFoundException;
-import logger.LogFactory;
+import shengji.exception.ImageNotFoundException;
+import shengji.logger.LogFactory;
 import org.apache.log4j.Logger;
 
 import javax.swing.*;

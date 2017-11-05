@@ -1,6 +1,8 @@
-import gui.CardContainer;
-import gui.ImageContainer;
-import logger.LogFactory;
+package shengji;
+
+import shengji.gui.CardContainer;
+import shengji.gui.ImageContainer;
+import shengji.logger.LogFactory;
 import org.apache.log4j.Logger;
 import org.testng.annotations.Test;
 
