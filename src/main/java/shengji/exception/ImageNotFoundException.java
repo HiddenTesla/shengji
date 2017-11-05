@@ -1,4 +1,4 @@
-package exception;
+package shengji.exception;
 
 // I could have used java.io.FileNotFoundException,
 // but it has to been declared throws.

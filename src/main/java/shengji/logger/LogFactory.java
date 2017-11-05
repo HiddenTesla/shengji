@@ -1,4 +1,4 @@
-package logger;
+package shengji.logger;
 
 import org.apache.log4j.Logger;
 
