@@ -10,7 +10,7 @@ import java.io.File;
 public class ImageContainer extends JPanel {
 
     protected static final String PROJECT_PATH = System.getProperty("user.dir") + "/";
-    protected static final String IMAGE_DIRECTORY = PROJECT_PATH + "src/main/resources/images/";
+    public static final String IMAGE_DIRECTORY = PROJECT_PATH + "src/main/resources/images/";
 
     protected static Logger log = LogFactory.getLog(ImageContainer.class);
 
