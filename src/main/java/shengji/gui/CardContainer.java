@@ -1,43 +1,48 @@
 package shengji.gui;
 
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
+import com.sun.istack.internal.NotNull;
+import org.apache.log4j.Logger;
+import shengji.logger.LogFactory;
 
-public class CardContainer extends ImageContainer {
+import javax.swing.*;
+import java.util.ArrayList;
+import java.util.List;
 
-    private boolean isSelected = false;
+public class CardContainer {
 
-    private static final boolean SELECTED = true;
-    private static final boolean NOT_SELECTED = false;
+    private static Logger log = LogFactory.getLog(CardContainer.class);
 
-    private static final int MOVE_DISTANCE = 20;
+    private int mBaseX = 0, mBaseY = 0;
+    private JFrame mFrame;
+    private List<CardImage> mList;
 
-    public CardContainer(String filenameInImages) {
-        super(filenameInImages);
-
-        this.addMouseListener(new MouseListener() {
-            public void mouseClicked(MouseEvent e) {
-                if (isSelected) {
-                    MoveVertical(MOVE_DISTANCE);
-                }
-                else {
-                    MoveVertical(-MOVE_DISTANCE);
-                }
-
-                isSelected = !isSelected;
-            }
-
-            public void mousePressed(MouseEvent e) { }
-            public void mouseReleased(MouseEvent e) { }
-            public void mouseEntered(MouseEvent e) { }
-            public void mouseExited(MouseEvent e) { }
-        });
+    public CardContainer(@NotNull JFrame frame) {
+        this.mFrame = frame;
+        mList = new ArrayList<CardImage>();
     }
 
-    private void MoveVertical(int distance) {
-        int oldX = this.getX();
-        int oldY = this.getY();
-        super.setLocation(oldX, oldY + distance);
+    public void setBaseLocation(int x, int y) {
+        mBaseX = x;
+        mBaseY = y;
     }
 
+    public void addCard(@NotNull CardImage card) {
+        mList.add(card);
+    }
+
+    public void display() {
+        int size = mList.size();
+        log.info("" + size + " cards to display");
+
+        int cumulativeX = mBaseX;
+        for (int i = 0; i < size; i++) {
+            CardImage card = mList.get(i);
+            card.setLocation(cumulativeX, mBaseY);
+            String logStr = String.format("Card %d at (%d, %d)", i, cumulativeX, mBaseY);
+            log.info(logStr);
+            cumulativeX += card.mIcon.getIconWidth();
+            mList.set(i, card);
+        }
+        mFrame.setVisible(true);
+    }
 }

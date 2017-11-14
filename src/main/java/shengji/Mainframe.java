@@ -1,7 +1,5 @@
 package shengji;
 
-import shengji.gui.CardContainer;
-import shengji.gui.ImageContainer;
 import shengji.logger.LogFactory;
 import org.apache.log4j.Logger;
 import org.testng.annotations.Test;
@@ -29,11 +27,7 @@ public class Mainframe {
         // Centralize the frame
         frame.setLocationRelativeTo(null);
 
-        ImageContainer chin = new CardContainer("sample_01.jpg");
 
-        frame.add(chin);
-
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
 
         log.info("Main frame started");
