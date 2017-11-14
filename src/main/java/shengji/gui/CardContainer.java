@@ -2,6 +2,7 @@ package shengji.gui;
 
 import com.sun.istack.internal.NotNull;
 import org.apache.log4j.Logger;
+import shengji.common.Constants;
 import shengji.logger.LogFactory;
 
 import javax.swing.*;
@@ -12,7 +13,11 @@ public class CardContainer {
 
     private static Logger log = LogFactory.getLog(CardContainer.class);
 
+    public static final int HORIZONTAL = 0;
+    public static final int VERTICAL = 1;
+
     private int mBaseX = 0, mBaseY = 0;
+    private int mDirection = HORIZONTAL;
     private JFrame mFrame;
     private List<CardImage> mList;
 
@@ -20,6 +25,18 @@ public class CardContainer {
         this.mFrame = frame;
         mList = new ArrayList<CardImage>();
     }
+
+    public void setDirection(int direction) {
+        if (direction != HORIZONTAL && direction != VERTICAL) {
+            throw new IllegalArgumentException("Direction must be either 0 or 1");
+        }
+        this.mDirection = direction;
+    }
+
+    public int getDirection() {
+        return this.mDirection;
+    }
+
 
     public void setBaseLocation(int x, int y) {
         mBaseX = x;
@@ -31,6 +48,10 @@ public class CardContainer {
     }
 
     public void display() {
+        if (mDirection == VERTICAL) {
+            throw new IllegalArgumentException("Vertical not implemented yet");
+        }
+
         int size = mList.size();
         log.info("" + size + " cards to display");
 
@@ -40,7 +61,7 @@ public class CardContainer {
             card.setLocation(cumulativeX, mBaseY);
             String logStr = String.format("Card %d at (%d, %d)", i, cumulativeX, mBaseY);
             log.info(logStr);
-            cumulativeX += card.mIcon.getIconWidth();
+            cumulativeX += Constants.CARD_SPACING_HORIZONTAL;
             mList.set(i, card);
         }
         mFrame.setVisible(true);
