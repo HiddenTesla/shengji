@@ -22,6 +22,16 @@ public class TestMultipleCardContainer {
         north.setBaseLocation(CARD_CONTAINER_BASE_X_NORTH, CARD_CONTAINER_BASE_Y_NORTH);
         north.display();
 
+        CardContainer west = CardContainerFill(frame);
+        west.setBaseLocation(CARD_CONTAINER_BASE_X_WEST, CARD_CONTAINER_BASE_Y_WEST);
+        west.setDirection(CardContainer.VERTICAL);
+        west.display();
+
+        CardContainer east = CardContainerFill(frame);
+        east.setBaseLocation(CARD_CONTAINER_BASE_X_EAST, CARD_CONTAINER_BASE_Y_EAST);
+        east.setDirection(CardContainer.VERTICAL);
+        east.display();
+
         frame.setVisible(true);
     }
 

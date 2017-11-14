@@ -48,20 +48,33 @@ public class CardContainer {
     }
 
     public void display() {
-        if (mDirection == VERTICAL) {
-            throw new IllegalArgumentException("Vertical not implemented yet");
+        if (mDirection == HORIZONTAL) {
+            DisplayHorizontal();
         }
+        if (mDirection == VERTICAL) {
+            DisplayVertical();
+        }
+    }
 
+    private void DisplayHorizontal() {
         int size = mList.size();
-        log.info("" + size + " cards to display");
-
         int cumulativeX = mBaseX;
         for (int i = 0; i < size; i++) {
             CardImage card = mList.get(i);
             card.setLocation(cumulativeX, mBaseY);
-            String logStr = String.format("Card %d at (%d, %d)", i, cumulativeX, mBaseY);
-            log.info(logStr);
             cumulativeX += Constants.CARD_SPACING_HORIZONTAL;
+            mList.set(i, card);
+        }
+        mFrame.setVisible(true);
+    }
+
+    private void DisplayVertical() {
+        int size = mList.size();
+        int cumulativeY = mBaseY;
+        for (int i = 0; i < size; i++) {
+            CardImage card = mList.get(i);
+            card.setLocation(mBaseX, cumulativeY);
+            cumulativeY += Constants.CARD_SPACING_VERTICAL;
             mList.set(i, card);
         }
         mFrame.setVisible(true);
