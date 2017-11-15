@@ -39,7 +39,7 @@ public class TestMultipleCardContainer {
     private static CardContainer CardContainerFill(JFrame frame) {
         CardContainer cc = new CardContainer(frame);
         for (int i = 0; i < 25; i++) {
-            CardImage card = new CardImage(frame, "cards/53.png");
+            CardImage card = new CardImage(frame, "cards/big_joker.png");
             cc.addCard(card);
         }
         return cc;
