@@ -47,6 +47,12 @@ public class CardContainer {
         mList.add(card);
     }
 
+    public void popCard() {
+        int last = mList.size();
+        CardImage toRemove = mList.remove(last - 1);
+        mFrame.remove(toRemove);
+    }
+
     public void display() {
         if (mDirection == HORIZONTAL) {
             DisplayHorizontal();
@@ -55,6 +61,7 @@ public class CardContainer {
             DisplayVertical();
         }
     }
+
 
     private void DisplayHorizontal() {
         int size = mList.size();
