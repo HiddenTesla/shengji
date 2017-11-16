@@ -60,4 +60,6 @@ public class TestGameFrameWithClickLabel extends GameFrame {
 
         frame.setVisible(true);
     }
+
+    // Something to see if github can find
 }
