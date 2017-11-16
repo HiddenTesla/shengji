@@ -50,7 +50,7 @@ public class CardContainer {
     public void popCard() {
         int last = mList.size();
         CardImage toRemove = mList.remove(last - 1);
-        mFrame.remove(toRemove);
+        toRemove.perish();
     }
 
     public void display() {
