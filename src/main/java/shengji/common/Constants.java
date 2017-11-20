@@ -12,4 +12,7 @@ public class Constants {
     public static final int CARD_CONTAINER_BASE_Y_NORTH = 30;
     public static final int CARD_CONTAINER_BASE_Y_WEST = 40;
     public static final int CARD_CONTAINER_BASE_Y_EAST = CARD_CONTAINER_BASE_Y_WEST;
+
+    public static final int GAME_FRAME_WIDTH = 800;
+    public static final int GAME_FRAME_HEIGHT = 600;
 }

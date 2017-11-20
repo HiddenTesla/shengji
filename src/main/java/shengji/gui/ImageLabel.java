@@ -16,6 +16,7 @@ public class ImageLabel extends JLabel {
 
     private static Logger log = LogFactory.getLog(ImageLabel.class);
 
+    protected boolean isAlive = false;
     protected JFrame mFrame;
     protected ImageIcon mIcon;
 
@@ -30,6 +31,7 @@ public class ImageLabel extends JLabel {
 
     public ImageLabel(JFrame frame, String filePath) {
         this(frame);
+        isAlive = true;
         setImageDirectory(filePath);
     }
 
@@ -64,6 +66,18 @@ public class ImageLabel extends JLabel {
             public void mouseEntered(MouseEvent e) {}
             public void mouseExited(MouseEvent e) {}
         });
+    }
+
+    public void perish() {
+        if (isAlive) {
+            mFrame.remove(this);
+            mFrame.repaint();
+            isAlive = false;
+        }
+        else {
+            log.error("A dead image is calling method 'perish'!");
+        }
+
     }
 
     public static void main(String[] args) {
