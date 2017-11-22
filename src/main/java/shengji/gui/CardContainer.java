@@ -16,10 +16,10 @@ public class CardContainer {
     public static final int HORIZONTAL = 0;
     public static final int VERTICAL = 1;
 
-    private int mBaseX = 0, mBaseY = 0;
-    private int mDirection = HORIZONTAL;
-    private JFrame mFrame;
-    private List<CardImage> mList;
+    protected int mBaseX = 0, mBaseY = 0;
+    protected int mDirection = HORIZONTAL;
+    protected JFrame mFrame;
+    protected List<CardImage> mList;
 
     public CardContainer(@NotNull JFrame frame) {
         this.mFrame = frame;
@@ -63,7 +63,7 @@ public class CardContainer {
     }
 
 
-    private void DisplayHorizontal() {
+    protected void DisplayHorizontal() {
         int size = mList.size();
         int cumulativeX = mBaseX;
         for (int i = 0; i < size; i++) {
@@ -75,7 +75,7 @@ public class CardContainer {
         mFrame.setVisible(true);
     }
 
-    private void DisplayVertical() {
+    protected void DisplayVertical() {
         int size = mList.size();
         int cumulativeY = mBaseY;
         for (int i = 0; i < size; i++) {

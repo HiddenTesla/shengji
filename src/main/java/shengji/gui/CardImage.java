@@ -1,7 +1,9 @@
 package shengji.gui;
 
+import com.sun.istack.internal.NotNull;
 import org.apache.log4j.Logger;
 import shengji.logger.LogFactory;
+import shengji.logic.Card;
 
 import javax.swing.*;
 import java.awt.event.MouseEvent;
@@ -16,9 +18,21 @@ public class CardImage extends ImageLabel {
     private static final int MOVE_DISTANCE = 20;
 
     private int mSelectStatus = NOT_SELECTED;
+    private Card card;
 
     public CardImage(JFrame frame, String filePath) {
         super(frame, filePath);
+    }
+
+    public void setCard(@NotNull Card _card) {
+        if (this.card != null) {
+            throw new UnsupportedOperationException();
+        }
+        this.card = _card;
+    }
+
+    public Card getCard() {
+        return this.card;
     }
 
     @Override
