@@ -358,7 +358,9 @@ function App() {
       }}>
         <OpponentHand
           position={PlayerPosition.North}
-          cardCount={hands.N.length}
+          cards={hands.N}
+          levelRank={levelRank}
+          trumpSuit={trumpSuit}
           faceUp={visibility.N}
           showToggle
           onToggleVisibility={() => toggleVisibility(PlayerPosition.North)}
@@ -368,19 +370,23 @@ function App() {
       {/* ---- 中部：西家 + 牌桌 + 东家 ---- */}
       <div style={{
         flex: 1,
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns: '1fr auto 1fr',
         alignItems: 'center',
-        justifyContent: 'space-between',
         padding: '0 16px',
       }}>
         {/* 西家 */}
-        <OpponentHand
-          position={PlayerPosition.West}
-          cardCount={hands.W.length}
-          faceUp={visibility.W}
-          showToggle
-          onToggleVisibility={() => toggleVisibility(PlayerPosition.West)}
-        />
+        <div style={{ justifySelf: 'start' }}>
+          <OpponentHand
+            position={PlayerPosition.West}
+            cards={hands.W}
+            levelRank={levelRank}
+            trumpSuit={trumpSuit}
+            faceUp={visibility.W}
+            showToggle
+            onToggleVisibility={() => toggleVisibility(PlayerPosition.West)}
+          />
+        </div>
 
         {/* 牌桌中心 */}
         <div style={{
@@ -573,13 +579,17 @@ function App() {
         </div>
 
         {/* 东家 */}
-        <OpponentHand
-          position={PlayerPosition.East}
-          cardCount={hands.E.length}
-          faceUp={visibility.E}
-          showToggle
-          onToggleVisibility={() => toggleVisibility(PlayerPosition.East)}
-        />
+        <div style={{ justifySelf: 'end' }}>
+          <OpponentHand
+            position={PlayerPosition.East}
+            cards={hands.E}
+            levelRank={levelRank}
+            trumpSuit={trumpSuit}
+            faceUp={visibility.E}
+            showToggle
+            onToggleVisibility={() => toggleVisibility(PlayerPosition.East)}
+          />
+        </div>
       </div>
 
       {/* ---- 底部：南家（玩家）/ 庄家埋底 ---- */}

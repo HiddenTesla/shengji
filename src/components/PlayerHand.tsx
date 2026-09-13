@@ -7,8 +7,10 @@ import CardComponent from './CardComponent.tsx'
 
 interface PlayerHandProps {
   groups: CardGroup[]
-  selectedIndices: Set<number>
-  onToggleCard: (index: number) => void
+  /** 选中项（只读展示时可省略） */
+  selectedIndices?: Set<number>
+  /** 点击选牌（只读展示时可省略） */
+  onToggleCard?: (index: number) => void
 }
 
 /** 手牌重叠偏移量 */
@@ -86,8 +88,8 @@ function GroupSection({
 }: {
   group: CardGroup
   groupStartIdx: number
-  selectedIndices: Set<number>
-  onToggleCard: (index: number) => void
+  selectedIndices?: Set<number>
+  onToggleCard?: (index: number) => void
 }) {
   const count = group.cards.length
   const width = (count - 1) * OVERLAP + CARD_W_SMALL
@@ -137,7 +139,7 @@ function GroupSection({
       }}>
         {group.cards.map((card, idx) => {
           const globalIdx = groupStartIdx + idx
-          const isSelected = selectedIndices.has(globalIdx)
+          const isSelected = selectedIndices?.has(globalIdx) ?? false
           return (
             <div
               key={card.id}
@@ -153,7 +155,9 @@ function GroupSection({
                 faceUp
                 small
                 selected={isSelected}
-                onClick={() => onToggleCard(globalIdx)}
+                onClick={onToggleCard
+                  ? () => onToggleCard(globalIdx)
+                  : undefined}
               />
             </div>
           )
