@@ -62,9 +62,9 @@ const SUIT_ORDER: Record<Suit, number> = {
  * 升级手牌排序 —— 适用于 UI 展示
  *
  * 排序规则：
- *   1. 主牌全部排在最前（大王 > 小王 > 级牌主花 > 主花色其他）
+ *   1. 主牌全部排在最前（大王 > 小王 > 主级牌 > 副级牌 > 主花色其他）
  *   2. 副牌按花色分组（♠ > ♥ > ♣ > ♦）
- *   3. 每组内按点数降序（级牌始终排在该组最前）
+ *   3. 每组内按点数降序
  */
 export function sortCards(
   cards: Card[],
@@ -80,9 +80,9 @@ export function sortCards(
  * 升级专用比较函数 —— 用于手牌显示排序
  *
  * 优先级：
- *   1. 主牌性（大王 > 小王 > 主花色级牌 > 主花色非级牌 > 副花色级牌 > 副牌）
+ *   1. 主牌性（大王 > 小王 > 主花色级牌 > 副花色级牌 > 主花色非级牌 > 副牌）
  *   2. 同组内按点数降序
- *   3. 副牌按花色顺序
+ *   3. 同点数按花色顺序
  */
 function compareForDisplay(
   a: Card,
@@ -95,19 +95,27 @@ function compareForDisplay(
 
   if (ag !== bg) return ag - bg
   // 同组内：点数降序
-  return b.rank - a.rank
+  if (a.rank !== b.rank) return b.rank - a.rank
+  // 同点数：按花色顺序
+  return (SUIT_ORDER[a.suit] ?? 99) - (SUIT_ORDER[b.suit] ?? 99)
 }
 
 /**
  * 获取卡牌在升级显示中的分组权重（越小越靠前）
  *
- * 分组：
+ * 有主（trumpSuit !== null）：
  *   0 = 大王
  *   1 = 小王
  *   2 = 级牌（主花色）
- *   3 = 主花色（非级牌）
- *   4 = 级牌（副花色）
- *   5 = 副牌（按花色排序 offset 100）
+ *   3 = 级牌（副花色）
+ *   4 = 主花色（非级牌）
+ *   100+ = 副牌（按花色排序）
+ *
+ * 无主 / 尚未定主（trumpSuit === null）：
+ *   0 = 大王
+ *   1 = 小王
+ *   3 = 级牌（全部同级）
+ *   100+ = 副牌（按花色排序）
  */
 function getDisplayGroup(
   card: Card,
@@ -120,9 +128,14 @@ function getDisplayGroup(
 
   if (isJoker && card.rank === Rank.BigJoker) return 0
   if (isJoker && card.rank === Rank.SmallJoker) return 1
+  // 无主 / 未定主：级牌均为同级主牌
+  if (isLevel && trumpSuit === null) return 3
+  // 主级牌（主花色的级牌）
   if (isLevel && isTrumpSuit) return 2
-  if (isTrumpSuit) return 3
-  if (isLevel && trumpSuit !== null) return 4
+  // 副级牌（其余花色的级牌）—— 大于主花色普通牌
+  if (isLevel) return 3
+  // 主花色非级牌
+  if (isTrumpSuit) return 4
   // 副牌：花色序号 × 100 确保按花色分组
   return 100 + (SUIT_ORDER[card.suit] ?? 99) * 10
 }
@@ -136,10 +149,12 @@ export interface CardGroup {
 }
 
 /**
- * 将手牌按升级规则分为 4 门（主牌 + 3 副牌花色）
+ * 将手牌按升级规则分组（主牌 + 各副牌花色）
  *
- * - 有主时：主牌（大小王 + 级牌 + 主花色） + 其余 3 个花色 = 4 组
- * - 无主时：4 个花色各为一组（级牌归入各自花色，王归入 ♠ 组）
+ * - 主牌：大小王 + 全部级牌（无论花色，级牌永远算主牌） + 主花色（有主时）
+ * - 副牌：其余按 ♠ > ♥ > ♣ > ♦ 分组
+ *
+ * 发牌 / 尚未定主（trumpSuit === null）时，级牌同样归入主牌组。
  */
 export function groupCardsForDisplay(
   cards: Card[],
@@ -149,46 +164,24 @@ export function groupCardsForDisplay(
   const sorted = sortCards(cards, trumpSuit, levelRank)
   const suitOrder = [Suit.Spade, Suit.Heart, Suit.Club, Suit.Diamond]
 
-  if (trumpSuit !== null) {
-    // ---- 有主：主牌 + 3 副牌花色 ----
-    const groups: CardGroup[] = []
-    const trumpCards = sorted.filter(c =>
-      c.suit === Suit.Joker
-      || c.suit === trumpSuit
-      || c.rank === levelRank,
-    )
-    if (trumpCards.length > 0) {
-      groups.push({ label: '主牌', kind: 'trump', cards: trumpCards })
-    }
-    for (const suit of suitOrder) {
-      if (suit === trumpSuit) continue
-      const sc = sorted.filter(c => c.suit === suit && !trumpCards.includes(c))
-      if (sc.length > 0) {
-        groups.push({ label: SUIT_SYMBOL[suit], kind: suit, cards: sc })
-      }
-    }
-    return groups
-  }
-  else {
-    // ---- 无主：4 门花色（王归入 ♠，级牌归入各自花色） ----
-    const groups: CardGroup[] = []
-    const jokers = sorted.filter(c => c.suit === Suit.Joker)
-    const rest = sorted.filter(c => c.suit !== Suit.Joker)
+  // 主牌：王 + 全部级牌 + 主花色
+  const trumpCards = sorted.filter(c =>
+    c.suit === Suit.Joker
+    || c.rank === levelRank
+    || (trumpSuit !== null && c.suit === trumpSuit),
+  )
 
-    for (const suit of suitOrder) {
-      let sc: Card[]
-      if (suit === Suit.Spade) {
-        sc = [...jokers, ...rest.filter(c => c.suit === suit)]
-      }
-      else {
-        sc = rest.filter(c => c.suit === suit)
-      }
-      if (sc.length > 0) {
-        groups.push({ label: SUIT_SYMBOL[suit], kind: suit, cards: sc })
-      }
-    }
-    return groups
+  const groups: CardGroup[] = []
+  if (trumpCards.length > 0) {
+    groups.push({ label: '主牌', kind: 'trump', cards: trumpCards })
   }
+  for (const suit of suitOrder) {
+    const sc = sorted.filter(c => c.suit === suit && !trumpCards.includes(c))
+    if (sc.length > 0) {
+      groups.push({ label: SUIT_SYMBOL[suit], kind: suit, cards: sc })
+    }
+  }
+  return groups
 }
 
 /** 判断两张牌是否点数相同（用于检测对子） */
