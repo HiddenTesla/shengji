@@ -25,15 +25,21 @@ import {
   decisiveBottomIndex,
   determineTrumpFromBottom,
 } from './core/bidding.ts'
+import { aiChooseBury, countPoints } from './core/bury.ts'
 import PlayerHand from './components/PlayerHand.tsx'
 import OpponentHand from './components/OpponentHand.tsx'
 import BiddingBar from './components/BiddingBar.tsx'
+import BottomCards from './components/BottomCards.tsx'
+import BottomReveal from './components/BottomReveal.tsx'
 import CardComponent from './components/CardComponent.tsx'
 
 type Hands = Record<PlayerPosition, Card[]>
 
 /** 发牌结束后的叫主窗口时长（秒） */
 const BID_WINDOW_SECONDS = 8
+
+/** 底牌张数（= 庄家埋底张数） */
+const BOTTOM_COUNT = 8
 
 function App() {
   // ---- 游戏状态 ----
@@ -74,6 +80,8 @@ function App() {
   const [flipLog, setFlipLog] = useState<Card[]>([])
   /** 是否展开翻底记录 */
   const [showFlipLog, setShowFlipLog] = useState(false)
+  /** 埋底后的底牌 */
+  const [buriedCards, setBuriedCards] = useState<Card[]>([])
 
   const levelRank = Rank.Two
 
@@ -81,11 +89,17 @@ function App() {
   const bidStateRef = useRef(bidState)
   bidStateRef.current = bidState
 
+  // 用 ref 持有最新手牌 / 主牌，避免 AI 埋底时的闭包陷阱
+  const handsRef = useRef<Hands | null>(null)
+  handsRef.current = hands
+  const trumpSuitRef = useRef<Suit | null>(null)
+  trumpSuitRef.current = trumpSuit
+
   // ---- 新一局 ----
   function startNewGame() {
     const deck = createDecks()
     shuffleCards(deck)
-    const result = dealCards(deck, 8)
+    const result = dealCards(deck, BOTTOM_COUNT)
 
     // 保存完整发牌结果，稍后逐张揭示
     fullHandsRef.current = {
@@ -107,6 +121,7 @@ function App() {
     setFlipCount(0)
     setFlipLog([])
     setShowFlipLog(false)
+    setBuriedCards([])
     setBidState(createBidState(0))
     setPhase(GamePhase.Dealing)
   }
@@ -140,14 +155,18 @@ function App() {
 
   // ---- 选中/取消 ----
   function toggleCard(index: number) {
-    const next = new Set(selectedIndices)
-    if (next.has(index)) {
-      next.delete(index)
-    }
-    else {
-      next.add(index)
-    }
-    setSelectedIndices(next)
+    setSelectedIndices(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      }
+      else {
+        // 埋底阶段：最多选择与底牌等量的牌
+        if (phase === GamePhase.Burying && next.size >= BOTTOM_COUNT) return prev
+        next.add(index)
+      }
+      return next
+    })
   }
 
   // ---- 切换玩家模式 ----
@@ -179,15 +198,55 @@ function App() {
     if (state.current) {
       // 有人报主：以最终声明定主
       setTrumpSuit(state.current.suit)
-      setBanker(state.current.player)
       setBottomTrump(false)
-      setPhase(GamePhase.Playing)
+      startBurying(state.current.player)
     }
     else {
       // 无人报主：逐张翻底牌定主（此后不可再反主）
       setFlipCount(0)
       setFlipping(true)
     }
+  }
+
+  // ---- 进入埋底：庄家收走底牌（手牌 25 → 33），等待埋底 ----
+  function startBurying(bankerPos: PlayerPosition) {
+    setBanker(bankerPos)
+    setSelectedIndices(new Set())
+    // 庄家收走 8 张底牌
+    setHands(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        [bankerPos]: [...prev[bankerPos], ...bottomRef.current],
+      }
+    })
+    setPhase(GamePhase.Burying)
+  }
+
+  // ---- 执行埋底：埋入的牌成为新底牌，庄家手牌回到 25 张 ----
+  function applyBury(bankerPos: PlayerPosition, buried: Card[]) {
+    const buriedIds = new Set(buried.map(c => c.id))
+    setHands(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        [bankerPos]: prev[bankerPos].filter(c => !buriedIds.has(c.id)),
+      }
+    })
+    bottomRef.current = buried
+    setBuriedCards(buried)
+    setSelectedIndices(new Set())
+    setPhase(GamePhase.Playing)
+  }
+
+  // ---- 手动庄家确认埋底 ----
+  function confirmBury() {
+    if (!banker || !hands) return
+    const flat = groupCardsForDisplay(hands[banker], trumpSuit, levelRank)
+      .flatMap(g => g.cards)
+    const buried = flat.filter((_, i) => selectedIndices.has(i))
+    if (buried.length !== BOTTOM_COUNT) return
+    applyBury(banker, buried)
   }
 
   // ---- 翻底牌动画：依次翻开，直到级牌或王 ----
@@ -207,10 +266,9 @@ function App() {
     const t = setTimeout(() => {
       const suit = determineTrumpFromBottom(bottom, levelRank)
       setTrumpSuit(suit)
-      setBanker(ALL_POSITIONS[0])
       setBottomTrump(true)
       setFlipping(false)
-      setPhase(GamePhase.Playing)
+      startBurying(ALL_POSITIONS[0])
     }, 3000)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -239,6 +297,22 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, bidSeconds])
 
+  // ---- 托管庄家：AI 自动埋底 ----
+  useEffect(() => {
+    if (phase !== GamePhase.Burying) return
+    if (!banker) return
+    if (playerModes[banker] !== PlayerMode.Auto) return
+
+    const t = setTimeout(() => {
+      const hand = handsRef.current?.[banker]
+      if (!hand) return
+      const buried = aiChooseBury(hand, BOTTOM_COUNT, trumpSuitRef.current, levelRank)
+      applyBury(banker, buried)
+    }, 900)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, banker])
+
   // ---- 初始发牌 ----
   useMemo(() => {
     if (!hands) startNewGame()
@@ -249,11 +323,22 @@ function App() {
 
   const isBidding = phase === GamePhase.BiddingTrump
   const isDealing = phase === GamePhase.Dealing
+  const isBurying = phase === GamePhase.Burying
 
   // 南家报主栏：发牌/叫主阶段显示（仅南家为手动时），窗口内始终可操作
   const southManual = playerModes[PlayerPosition.South] === PlayerMode.Manual
   const showBar = southManual && (isDealing || (isBidding && !flipping))
   const barCanAct = !flipping && (isDealing || isBidding)
+
+  // 埋底：显示庄家手牌（南家为庄家时即南家手牌）
+  const bankerIsAuto = banker !== null && playerModes[banker] === PlayerMode.Auto
+  const handForDisplay = isBurying && banker ? hands[banker] : hands.S
+  const buryFlat = isBurying
+    ? groupCardsForDisplay(handForDisplay, trumpSuit, levelRank).flatMap(g => g.cards)
+    : []
+  const selectedBuriedPoints = countPoints(
+    buryFlat.filter((_, i) => selectedIndices.has(i)),
+  )
 
   return (
     <div style={{
@@ -389,7 +474,20 @@ function App() {
                 </b>
               </div>
             )}
+            {isBurying && (
+              <div style={{ fontSize: 13, color: '#ffd700' }}>
+                {bankerIsAuto
+                  ? '庄家托管，自动埋底中…'
+                  : `请选 ${BOTTOM_COUNT} 张埋入底牌（已选 ${selectedIndices.size} 张）`}
+              </div>
+            )}
           </div>
+
+          {/* 底牌查看（弹窗，仅南家为庄；桌中央留给出牌区） */}
+          <BottomReveal
+            cards={buriedCards}
+            canReveal={banker === PlayerPosition.South}
+          />
 
           {/* 翻底牌逐张展示 */}
           {flipping && (
@@ -484,7 +582,7 @@ function App() {
         />
       </div>
 
-      {/* ---- 底部：南家（玩家） ---- */}
+      {/* ---- 底部：南家（玩家）/ 庄家埋底 ---- */}
       <div style={{
         padding: '4px 16px 8px',
         background: 'linear-gradient(transparent, rgba(0,0,0,0.2))',
@@ -501,20 +599,39 @@ function App() {
             fontWeight: 600,
             color: 'rgba(255,255,255,0.75)',
           }}>
-            南家（你）
+            {isBurying && banker
+              ? `庄家（${POSITION_NAME_ZH[banker]}家）埋底`
+              : '南家（你）'}
           </span>
           <span style={{
             fontSize: 16,
             color: 'rgba(255,255,255,0.5)',
           }}>
-            {hands.S.length} 张
+            {handForDisplay.length} 张
           </span>
         </div>
+
+        {/* 埋底控制栏 */}
+        {isBurying && banker && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
+            <BottomCards
+              banker={banker}
+              auto={bankerIsAuto}
+              selectedCount={selectedIndices.size}
+              requiredCount={BOTTOM_COUNT}
+              buriedPoints={selectedBuriedPoints}
+              onConfirm={confirmBury}
+              onClear={() => setSelectedIndices(new Set())}
+            />
+          </div>
+        )}
+
+        {/* 南家报主栏（发牌/叫主阶段） */}
         <div style={{
           display: 'flex',
           justifyContent: 'center',
         }}>
-          {showBar && (
+          {!isBurying && showBar && (
             <BiddingBar
               player={PlayerPosition.South}
               hand={hands.S}
@@ -525,15 +642,26 @@ function App() {
             />
           )}
         </div>
+
         <div style={{
           display: 'flex',
           justifyContent: 'center',
         }}>
-          <PlayerHand
-            groups={groupCardsForDisplay(hands.S, trumpSuit, levelRank)}
-            selectedIndices={selectedIndices}
-            onToggleCard={toggleCard}
-          />
+          {isBurying && bankerIsAuto ? (
+            <div style={{
+              padding: '28px 0',
+              fontSize: 16,
+              color: 'rgba(255,255,255,0.65)',
+            }}>
+              🤖 {banker ? `${POSITION_NAME_ZH[banker]}家` : ''}托管埋底中…
+            </div>
+          ) : (
+            <PlayerHand
+              groups={groupCardsForDisplay(handForDisplay, trumpSuit, levelRank)}
+              selectedIndices={selectedIndices}
+              onToggleCard={toggleCard}
+            />
+          )}
         </div>
       </div>
     </div>
