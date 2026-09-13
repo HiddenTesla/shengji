@@ -211,7 +211,7 @@ export interface Trick {
 }
 
 // ---- 叫主 ----
-export interface CallRecord {
+export interface BidRecord {
   player: PlayerPosition
   /** 叫的花色（null 表示"无主"） */
   suit: Suit | null
@@ -252,7 +252,7 @@ export interface RoundRecord {
   /** 主花色 */
   trumpSuit: Suit | null
   /** 叫主记录 */
-  calls: CallRecord[]
+  bids: BidRecord[]
   /** 每个玩家的手牌（用于回放展示） */
   hands: Record<PlayerPosition, Card[]>
   /** 底牌 */
@@ -272,7 +272,7 @@ export enum GamePhase {
   /** 发牌 */
   Dealing = 'dealing',
   /** 叫主 */
-  CallingTrump = 'calling_trump',
+  BiddingTrump = 'bidding_trump',
   /** 扣底 */
   Burying = 'burying',
   /** 出牌 */
