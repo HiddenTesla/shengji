@@ -188,3 +188,63 @@ export function aiChooseDeclare(
   const threshold = current === null ? 110 : 150
   return bestScore >= threshold ? best : null
 }
+
+/**
+ * 声明的强度评分（用于多个 AI 竞争同一主牌时比较优劣）
+ */
+export function declarationScore(
+  hand: Card[],
+  decl: Declaration,
+  levelRank: Rank,
+): number {
+  if (decl.strength === BidStrength.JokerPair) {
+    const jokers = hand.filter(c => c.suit === Suit.Joker).length
+    const levels = hand.filter(c => c.rank === levelRank).length
+    return 60 + jokers * 20 + levels * 10 + decl.strength * 30
+  }
+  const info = evaluateTrumpStrength(hand, decl.suit as Suit, levelRank)
+  return info.score + decl.strength * 30
+}
+
+// ------------------------------------------------------------
+// 无人报主 → 翻底牌定主
+// ------------------------------------------------------------
+
+/**
+ * 无人报主时，按底牌确定主牌
+ *
+ * 规则（依底牌顺序）：
+ *   1. 遇到级牌 → 其花色为主
+ *   2. 遇到王   → 无主（NO_TRUMP）
+ *   3. 底牌中既无级牌也无王 → 取点数最大那张（同点取第一张）的花色
+ *
+ * 以此法定主后，不可再反主。
+ */
+export function determineTrumpFromBottom(
+  bottom: Card[],
+  levelRank: Rank,
+): Suit | null {
+  for (const card of bottom) {
+    if (card.rank === levelRank) return card.suit
+    if (card.suit === Suit.Joker) return null
+  }
+
+  let best: Card | null = null
+  for (const card of bottom) {
+    if (best === null || card.rank > best.rank) best = card
+  }
+  return best ? best.suit : null
+}
+
+/**
+ * 翻底牌时的"决定性"索引：底牌中第一张级牌或王所在的下标；
+ * 若整副底牌都没有级牌/王，返回 -1（此时需翻完全部，取最大点数）。
+ */
+export function decisiveBottomIndex(bottom: Card[], levelRank: Rank): number {
+  for (let i = 0; i < bottom.length; i++) {
+    const card = bottom[i]
+    if (card.rank === levelRank) return i
+    if (card.suit === Suit.Joker) return i
+  }
+  return -1
+}

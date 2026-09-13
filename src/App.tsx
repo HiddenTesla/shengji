@@ -15,22 +15,25 @@ import {
   SUIT_SYMBOL,
   RANK_NAME,
 } from './core/types.ts'
-import { sortCards, groupCardsForDisplay } from './core/card.ts'
+import { groupCardsForDisplay } from './core/card.ts'
 import { createDecks, shuffleCards, dealCards } from './core/deck.ts'
 import {
   type Declaration,
   type BidState,
   createBidState,
-  getPossibleDeclarations,
-  canOverride,
-  aiChooseDeclare,
   declarationLabel,
+  decisiveBottomIndex,
+  determineTrumpFromBottom,
 } from './core/bidding.ts'
 import PlayerHand from './components/PlayerHand.tsx'
 import OpponentHand from './components/OpponentHand.tsx'
-import TrumpBidder from './components/TrumpBidder.tsx'
+import BiddingBar from './components/BiddingBar.tsx'
+import CardComponent from './components/CardComponent.tsx'
 
 type Hands = Record<PlayerPosition, Card[]>
+
+/** 发牌结束后的叫主窗口时长（秒） */
+const BID_WINDOW_SECONDS = 8
 
 function App() {
   // ---- 游戏状态 ----
@@ -55,6 +58,23 @@ function App() {
   const [trumpSuit, setTrumpSuit] = useState<Suit | null>(null)
   const [banker, setBanker] = useState<PlayerPosition | null>(null)
 
+  // ---- 发牌状态（逐张发牌） ----
+  const fullHandsRef = useRef<Hands | null>(null)
+  const bottomRef = useRef<Card[]>([])
+  const [revealed, setRevealed] = useState(0)
+  /** 主牌是否由翻底牌确定（此时不可再反主） */
+  const [bottomTrump, setBottomTrump] = useState(false)
+  /** 叫主倒计时（秒） */
+  const [bidSeconds, setBidSeconds] = useState(BID_WINDOW_SECONDS)
+  /** 是否正在逐张翻底牌定主 */
+  const [flipping, setFlipping] = useState(false)
+  /** 已翻开的底牌张数 */
+  const [flipCount, setFlipCount] = useState(0)
+  /** 翻底定主的翻牌记录（按翻开顺序） */
+  const [flipLog, setFlipLog] = useState<Card[]>([])
+  /** 是否展开翻底记录 */
+  const [showFlipLog, setShowFlipLog] = useState(false)
+
   const levelRank = Rank.Two
 
   // 用 ref 持有最新 bidState，避免闭包陷阱
@@ -67,20 +87,56 @@ function App() {
     shuffleCards(deck)
     const result = dealCards(deck, 8)
 
-    const sorted: Hands = {
-      E: sortCards(result.hands.E, null, levelRank),
-      S: sortCards(result.hands.S, null, levelRank),
-      W: sortCards(result.hands.W, null, levelRank),
-      N: sortCards(result.hands.N, null, levelRank),
+    // 保存完整发牌结果，稍后逐张揭示
+    fullHandsRef.current = {
+      E: result.hands.E,
+      S: result.hands.S,
+      W: result.hands.W,
+      N: result.hands.N,
     }
+    bottomRef.current = result.bottom
 
-    setHands(sorted)
+    setHands({ E: [], S: [], W: [], N: [] })
+    setRevealed(0)
     setSelectedIndices(new Set())
     setTrumpSuit(null)
     setBanker(null)
+    setBottomTrump(false)
+    setBidSeconds(BID_WINDOW_SECONDS)
+    setFlipping(false)
+    setFlipCount(0)
+    setFlipLog([])
+    setShowFlipLog(false)
     setBidState(createBidState(0))
-    setPhase(GamePhase.BiddingTrump)
+    setPhase(GamePhase.Dealing)
   }
+
+  // ---- 逐张发牌动画 ----
+  useEffect(() => {
+    if (phase !== GamePhase.Dealing) return
+    const full = fullHandsRef.current
+    if (!full) return
+
+    const total = full.S.length
+    if (revealed >= total) {
+      // 发牌结束 → 进入叫主
+      setPhase(GamePhase.BiddingTrump)
+      return
+    }
+
+    const timer = setTimeout(() => {
+      const next = Math.min(revealed + 1, total)
+      setHands({
+        E: full.E.slice(0, next),
+        S: full.S.slice(0, next),
+        W: full.W.slice(0, next),
+        N: full.N.slice(0, next),
+      })
+      setRevealed(next)
+    }, 500)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, revealed])
 
   // ---- 选中/取消 ----
   function toggleCard(index: number) {
@@ -110,58 +166,78 @@ function App() {
     }))
   }
 
-  // ---- 应用一次叫主声明 ----
+  // ---- 应用一次声明（南家点击 / AI 抢反） ----
   function applyDeclare(decl: Declaration) {
     const prev = bidStateRef.current
-    const next: BidState = {
-      current: decl,
-      passes: 0,
-      turnIndex: (prev.turnIndex + 1) % 4,
-      history: [...prev.history, decl],
-    }
-    setBidState(next)
+    setBidState({ ...prev, current: decl, history: [...prev.history, decl] })
     setTrumpSuit(decl.suit)
     setBanker(decl.player)
   }
 
-  // ---- 应用一次过牌 ----
-  function applyPass() {
-    const prev = bidStateRef.current
-    const nextPasses = prev.passes + 1
-    if (nextPasses >= 4) {
-      finishBidding(prev)
-      return
-    }
-    setBidState({
-      current: prev.current,
-      passes: nextPasses,
-      turnIndex: (prev.turnIndex + 1) % 4,
-      history: prev.history,
-    })
-  }
-
   // ---- 结束叫主 ----
   function finishBidding(state: BidState) {
-    const decl = state.current
-    setTrumpSuit(decl?.suit ?? null)
-    setBanker(decl?.player ?? ALL_POSITIONS[0])
-    setPhase(GamePhase.Playing)
+    if (state.current) {
+      // 有人报主：以最终声明定主
+      setTrumpSuit(state.current.suit)
+      setBanker(state.current.player)
+      setBottomTrump(false)
+      setPhase(GamePhase.Playing)
+    }
+    else {
+      // 无人报主：逐张翻底牌定主（此后不可再反主）
+      setFlipCount(0)
+      setFlipping(true)
+    }
   }
 
-  // ---- AI 自动叫主驱动 ----
+  // ---- 翻底牌动画：依次翻开，直到级牌或王 ----
   useEffect(() => {
-    if (phase !== GamePhase.BiddingTrump || !hands) return
-    const player = ALL_POSITIONS[bidState.turnIndex]
-    if (playerModes[player] === PlayerMode.Manual) return // 等待玩家操作
+    if (!flipping) return
+    const bottom = bottomRef.current
+    const dec = decisiveBottomIndex(bottom, levelRank)
+    const stopAt = dec >= 0 ? dec + 1 : bottom.length
 
-    const timer = setTimeout(() => {
-      const decl = aiChooseDeclare(hands[player], levelRank, bidState.current, player)
-      if (decl) applyDeclare(decl)
-      else applyPass()
-    }, 900)
-    return () => clearTimeout(timer)
+    if (flipCount < stopAt) {
+      const t = setTimeout(() => setFlipCount(c => c + 1), 650)
+      return () => clearTimeout(t)
+    }
+
+    // 翻完 → 记录翻牌顺序，无论有无级牌/王都等 3 秒再定主
+    setFlipLog(bottom.slice(0, stopAt))
+    const t = setTimeout(() => {
+      const suit = determineTrumpFromBottom(bottom, levelRank)
+      setTrumpSuit(suit)
+      setBanker(ALL_POSITIONS[0])
+      setBottomTrump(true)
+      setFlipping(false)
+      setPhase(GamePhase.Playing)
+    }, 3000)
+    return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, bidState, playerModes, hands])
+  }, [flipping, flipCount])
+
+  // ---- 叫主窗口：进入时重置倒计时 ----
+  useEffect(() => {
+    if (phase !== GamePhase.BiddingTrump) return
+    setBidSeconds(BID_WINDOW_SECONDS)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
+  // ---- 叫主窗口：倒计时 tick ----
+  useEffect(() => {
+    if (phase !== GamePhase.BiddingTrump) return
+    if (bidSeconds <= 0) return
+    const t = setTimeout(() => setBidSeconds(s => Math.max(0, s - 1)), 1000)
+    return () => clearTimeout(t)
+  }, [phase, bidSeconds])
+
+  // ---- 叫主窗口结束 → 定主 ----
+  useEffect(() => {
+    if (phase !== GamePhase.BiddingTrump) return
+    if (bidSeconds > 0) return
+    finishBidding(bidStateRef.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, bidSeconds])
 
   // ---- 初始发牌 ----
   useMemo(() => {
@@ -171,16 +247,13 @@ function App() {
   // ---- 渲染 ----
   if (!hands) return null
 
-  const biddingPlayer = ALL_POSITIONS[bidState.turnIndex]
   const isBidding = phase === GamePhase.BiddingTrump
-  const manualBid =
-    isBidding && playerModes[biddingPlayer] === PlayerMode.Manual
+  const isDealing = phase === GamePhase.Dealing
 
-  // 手动玩家的合法声明（过滤为可覆盖当前）
-  const manualOptions = manualBid
-    ? getPossibleDeclarations(hands[biddingPlayer], levelRank, biddingPlayer)
-      .filter(d => canOverride(d, bidState.current))
-    : []
+  // 南家报主栏：发牌/叫主阶段显示（仅南家为手动时），窗口内始终可操作
+  const southManual = playerModes[PlayerPosition.South] === PlayerMode.Manual
+  const showBar = southManual && (isDealing || (isBidding && !flipping))
+  const barCanAct = !flipping && (isDealing || isBidding)
 
   return (
     <div style={{
@@ -263,29 +336,93 @@ function App() {
             <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.85)' }}>
               打 <b style={{ color: '#ffd700' }}>{RANK_NAME[levelRank]}</b>
             </div>
-            {isBidding
-              ? (
-                <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)' }}>
-                  叫主中… 轮到 {POSITION_NAME_ZH[biddingPlayer]}家
-                  {bidState.current && (
-                    <span style={{ color: '#7ee787', marginLeft: 6 }}>
-                      （当前 {POSITION_NAME_ZH[bidState.current.player]}家 {declarationLabel(bidState.current)}）
-                    </span>
+            {isDealing && (
+              <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>
+                发牌中… 可抢亮
+              </div>
+            )}
+            {isBidding && (
+              <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>
+                {flipping
+                  ? '翻底牌定主…'
+                  : (
+                    <>
+                      叫主倒计时 <b style={{ color: '#ffd700' }}>{bidSeconds}</b> 秒
+                      {bidState.current
+                        ? (
+                          <span style={{ color: '#7ee787', marginLeft: 6 }}>
+                            （当前 {POSITION_NAME_ZH[bidState.current.player]}家 {declarationLabel(bidState.current)}）
+                          </span>
+                        )
+                        : (
+                          <span style={{ color: 'rgba(255,255,255,0.5)', marginLeft: 6 }}>暂无人亮主</span>
+                        )}
+                    </>
                   )}
-                </div>
-              )
-              : (
-                <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>
-                  主牌：<b style={{ color: '#ffd700' }}>
-                    {trumpSuit ? `主 ${SUIT_SYMBOL[trumpSuit]}` : '无主'}
-                  </b>
-                  {' · '}
-                  庄家：<b style={{ color: '#7ee787' }}>
-                    {banker ? `${POSITION_NAME_ZH[banker]}家` : '—'}
-                  </b>
-                </div>
-              )}
+              </div>
+            )}
+            {!isDealing && !isBidding && (
+              <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>
+                主牌：<b style={{ color: '#ffd700' }}>
+                  {trumpSuit ? `主 ${SUIT_SYMBOL[trumpSuit]}` : '无主'}
+                </b>
+                {bottomTrump && (
+                  <span
+                    onClick={() => setShowFlipLog(v => !v)}
+                    title="点击查看翻底记录"
+                    style={{
+                      color: '#90caf9',
+                      marginLeft: 6,
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                      padding: '0 5px',
+                      borderRadius: 3,
+                      background: 'rgba(144,202,249,0.15)',
+                    }}
+                  >
+                    翻底定主
+                  </span>
+                )}
+                {' · '}
+                庄家：<b style={{ color: '#7ee787' }}>
+                  {banker ? `${POSITION_NAME_ZH[banker]}家` : '—'}
+                </b>
+              </div>
+            )}
           </div>
+
+          {/* 翻底牌逐张展示 */}
+          {flipping && (
+            <div style={{
+              display: 'flex',
+              gap: 5,
+              padding: '6px 10px',
+              borderRadius: 8,
+              background: 'rgba(0,0,0,0.35)',
+              border: '1px solid rgba(255,215,0,0.3)',
+            }}>
+              {bottomRef.current.slice(0, flipCount).map(c => (
+                <CardComponent key={c.id} card={c} faceUp small />
+              ))}
+            </div>
+          )}
+
+          {/* 翻底记录（点击“翻底定主”展开） */}
+          {showFlipLog && flipLog.length > 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '6px 10px',
+              borderRadius: 8,
+              background: 'rgba(0,0,0,0.35)',
+              border: '1px solid rgba(144,202,249,0.4)',
+            }}>
+              {flipLog.map(c => (
+                <CardComponent key={c.id} card={c} faceUp small />
+              ))}
+            </div>
+          )}
 
           {/* 新游戏按钮 */}
           <button
@@ -377,6 +514,21 @@ function App() {
           display: 'flex',
           justifyContent: 'center',
         }}>
+          {showBar && (
+            <BiddingBar
+              player={PlayerPosition.South}
+              hand={hands.S}
+              levelRank={levelRank}
+              current={bidState.current}
+              canAct={barCanAct}
+              onBid={applyDeclare}
+            />
+          )}
+        </div>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+        }}>
           <PlayerHand
             groups={groupCardsForDisplay(hands.S, trumpSuit, levelRank)}
             selectedIndices={selectedIndices}
@@ -384,28 +536,6 @@ function App() {
           />
         </div>
       </div>
-
-      {/* ---- 叫主弹窗（手动玩家） ---- */}
-      {manualBid && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'rgba(0,0,0,0.35)',
-          zIndex: 100,
-        }}>
-          <TrumpBidder
-            player={biddingPlayer}
-            levelRank={levelRank}
-            current={bidState.current}
-            options={manualOptions}
-            onDeclare={applyDeclare}
-            onPass={applyPass}
-          />
-        </div>
-      )}
     </div>
   )
 }
