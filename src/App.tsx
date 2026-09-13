@@ -138,7 +138,7 @@ function App() {
         }}>
           {/* 游戏标题 */}
           <div style={{
-            fontSize: 20,
+            fontSize: 28,
             fontWeight: 700,
             color: 'rgba(255,255,255,0.85)',
             letterSpacing: 2,
@@ -147,8 +147,8 @@ function App() {
             升级
           </div>
           <div style={{
-            fontSize: 13,
-            color: 'rgba(255,255,255,0.5)',
+            fontSize: 17,
+            color: 'rgba(255,255,255,0.55)',
           }}>
             拖拉机 · 80分
           </div>
@@ -158,8 +158,8 @@ function App() {
             onClick={startNewGame}
             style={{
               marginTop: 8,
-              padding: '8px 24px',
-              fontSize: 14,
+              padding: '10px 32px',
+              fontSize: 18,
               cursor: 'pointer',
               border: 'none',
               borderRadius: 6,
@@ -185,8 +185,8 @@ function App() {
                 key={pos}
                 onClick={() => toggleMode(pos)}
                 style={{
-                  padding: '4px 10px',
-                  fontSize: 11,
+                  padding: '6px 14px',
+                  fontSize: 15,
                   cursor: 'pointer',
                   border: '1px solid rgba(255,255,255,0.25)',
                   borderRadius: 4,
@@ -226,15 +226,15 @@ function App() {
           padding: '0 8px',
         }}>
           <span style={{
-            fontSize: 13,
+            fontSize: 18,
             fontWeight: 600,
-            color: 'rgba(255,255,255,0.7)',
+            color: 'rgba(255,255,255,0.75)',
           }}>
             南家（你）
           </span>
           <span style={{
-            fontSize: 12,
-            color: 'rgba(255,255,255,0.4)',
+            fontSize: 16,
+            color: 'rgba(255,255,255,0.5)',
           }}>
             {hands.S.length} 张
           </span>

@@ -14,10 +14,10 @@ interface OpponentHandProps {
 }
 
 /** 牌背重叠偏移 */
-const OVERLAP_H = 20 // 水平（北/南）
-const OVERLAP_V = 16 // 垂直（东/西）
-const CARD_W = 71
-const CARD_H = 96
+const OVERLAP_H = 26 // 水平（北/南）
+const OVERLAP_V = 22 // 垂直（东/西）
+const CARD_W = 71 * 0.95
+const CARD_H = 96 * 0.95
 
 export default function OpponentHand({
   position,
@@ -39,15 +39,15 @@ export default function OpponentHand({
         gap: 4,
       }}>
         <div style={{
-          fontSize: 13,
+          fontSize: 18,
           fontWeight: 600,
-          color: 'rgba(255,255,255,0.7)',
+          color: 'rgba(255,255,255,0.75)',
         }}>
           {label}家
         </div>
         <div style={{
-          color: 'rgba(255,255,255,0.3)',
-          fontSize: 12,
+          color: 'rgba(255,255,255,0.35)',
+          fontSize: 15,
         }}>
           无手牌
         </div>
@@ -74,7 +74,7 @@ export default function OpponentHand({
         <div style={{
           position: 'relative',
           width,
-          height: CARD_H * 0.75,
+          height: CARD_H,
         }}>
           {Array.from({ length: maxShow }).map((_, idx) => (
             <div
@@ -100,7 +100,7 @@ export default function OpponentHand({
   }
 
   // ---- 竖排（东/西） ----
-  const height = maxShow * OVERLAP_V + CARD_H * 0.75
+  const height = maxShow * OVERLAP_V + CARD_H
   return (
     <div style={{
       display: 'flex',
@@ -116,7 +116,7 @@ export default function OpponentHand({
       />
       <div style={{
         position: 'relative',
-        width: CARD_W * 0.75 + 6,
+        width: CARD_W + 6,
         height,
       }}>
         {Array.from({ length: maxShow }).map((_, idx) => (
@@ -162,9 +162,9 @@ function LabelRow({
       gap: 6,
     }}>
       <span style={{
-        fontSize: 13,
+        fontSize: 16,
         fontWeight: 600,
-        color: 'rgba(255,255,255,0.7)',
+        color: 'rgba(255,255,255,0.75)',
       }}>
         {label}家
       </span>
@@ -172,8 +172,8 @@ function LabelRow({
         <button
           onClick={onToggleVisibility}
           style={{
-            padding: '2px 7px',
-            fontSize: 10,
+            padding: '3px 9px',
+            fontSize: 13,
             cursor: 'pointer',
             border: '1px solid rgba(255,255,255,0.3)',
             borderRadius: 4,
@@ -191,8 +191,8 @@ function LabelRow({
 function CardCount({ count }: { count: number }) {
   return (
     <div style={{
-      fontSize: 11,
-      color: 'rgba(255,255,255,0.4)',
+      fontSize: 14,
+      color: 'rgba(255,255,255,0.45)',
     }}>
       {count} 张
     </div>
@@ -206,11 +206,11 @@ function ExtraBadge({ count, side }: { count: number; side?: boolean }) {
       ...(side
         ? { bottom: -2, left: '50%', transform: 'translateX(-50%)' }
         : { right: -18, top: 24 }),
-      fontSize: 10,
-      color: 'rgba(255,255,255,0.5)',
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.6)',
       background: 'rgba(0,0,0,0.3)',
       borderRadius: 8,
-      padding: '1px 5px',
+      padding: '1px 6px',
       whiteSpace: 'nowrap',
     }}>
       +{count}

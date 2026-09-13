@@ -157,15 +157,15 @@ function JokerFace({ card, small }: { card: Card; small?: boolean }) {
       </text>
       <SuitSymbol
         suit={Suit.Joker}
-        x={small ? 11 : 14}
-        y={small ? 16 : 20}
-        size={small ? 16 : 22}
+        x={small ? 14 : 16}
+        y={small ? 20 : 22}
+        size={small ? 16 : 20}
       />
       <SuitSymbol
         suit={Suit.Joker}
-        x={small ? CARD_WIDTH - 11 : CARD_WIDTH - 14}
-        y={small ? CARD_HEIGHT - 16 : CARD_HEIGHT - 20}
-        size={small ? 16 : 22}
+        x={small ? CARD_WIDTH - 14 : CARD_WIDTH - 16}
+        y={small ? CARD_HEIGHT - 20 : CARD_HEIGHT - 22}
+        size={small ? 16 : 20}
       />
     </g>
   )
@@ -178,14 +178,13 @@ function NormalFace({ card, small }: { card: Card; small?: boolean }) {
   const rankName = RANK_NAME[card.rank]
   const suitSymbol = SUIT_SYMBOL[card.suit]
 
-  // small 模式下也尽量放大
-  const sz = small ? 0.85 : 1
-  const rankSize = Math.round(22 * sz)
-  const suitCornerSize = Math.round(18 * sz)
-  const centerSize = Math.round(48 * sz)
-  const cornerX = Math.round(10 * sz)
-  const rankY = Math.round(20 * sz)
-  const suitY = Math.round(36 * sz)
+  // 手牌（small）模式也保持足够大的点数/花色，并留出边距
+  const rankSize = small ? 23 : 20
+  const suitCornerSize = small ? 18 : 15
+  const centerSize = small ? 40 : 42
+  const cornerX = 12
+  const rankY = 26
+  const suitY = 43
 
   return (
     <g>
@@ -214,7 +213,7 @@ function NormalFace({ card, small }: { card: Card; small?: boolean }) {
       {/* 左上角花色 */}
       <SuitSymbol
         suit={card.suit}
-        x={cornerX + (small ? 2 : 4)}
+        x={cornerX + 8}
         y={suitY}
         size={suitCornerSize}
       />
@@ -247,7 +246,7 @@ function NormalFace({ card, small }: { card: Card; small?: boolean }) {
           </text>
           <SuitSymbol
             suit={card.suit}
-            x={CARD_WIDTH - cornerX - (small ? 2 : 4)}
+            x={CARD_WIDTH - cornerX - 8}
             y={CARD_HEIGHT - suitY + 2}
             size={suitCornerSize}
           />
@@ -265,8 +264,8 @@ export default function CardComponent({
   onClick,
   style,
 }: CardComponentProps) {
-  const w = small ? CARD_WIDTH * 0.75 : CARD_WIDTH
-  const h = small ? CARD_HEIGHT * 0.75 : CARD_HEIGHT
+  const w = small ? CARD_WIDTH * 0.95 : CARD_WIDTH
+  const h = small ? CARD_HEIGHT * 0.95 : CARD_HEIGHT
 
   return (
     <svg

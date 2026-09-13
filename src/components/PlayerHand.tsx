@@ -12,9 +12,13 @@ interface PlayerHandProps {
 }
 
 /** 手牌重叠偏移量 */
-const OVERLAP = 28
+const OVERLAP = 34
 /** 组间距 */
 const GROUP_GAP = 16
+/** 手牌缩放后单牌宽度 */
+const CARD_W_SMALL = 71 * 0.95
+/** 手牌缩放后单牌高度 */
+const CARD_H_SMALL = 96 * 0.95
 
 /** 花色颜色映射 — 与卡牌一致 */
 const SUIT_COLORS: Record<string, string> = {
@@ -38,7 +42,7 @@ export default function PlayerHand({
         justifyContent: 'center',
         minHeight: 80,
         color: 'rgba(255,255,255,0.5)',
-        fontSize: 14,
+        fontSize: 16,
       }}>
         无手牌
       </div>
@@ -54,7 +58,7 @@ export default function PlayerHand({
       alignItems: 'flex-end',
       padding: '4px 0',
       gap: GROUP_GAP,
-      overflowX: 'hidden',
+      overflow: 'hidden',
       maxWidth: '100%',
     }}>
       {groups.map((group) => {
@@ -86,7 +90,7 @@ function GroupSection({
   onToggleCard: (index: number) => void
 }) {
   const count = group.cards.length
-  const width = (count - 1) * OVERLAP + 71 * 0.75
+  const width = (count - 1) * OVERLAP + CARD_W_SMALL
   const color = SUIT_COLORS[group.kind] ?? 'rgba(255,255,255,0.6)'
 
   return (
@@ -100,11 +104,11 @@ function GroupSection({
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 5,
-        fontSize: 14,
+        gap: 6,
+        fontSize: 18,
         fontWeight: 700,
         color,
-        padding: '2px 8px',
+        padding: '3px 10px',
         borderRadius: 4,
         background: group.kind === 'trump'
           ? 'rgba(255,215,0,0.12)'
@@ -113,13 +117,13 @@ function GroupSection({
       }}>
         <span>{group.label}</span>
         <span style={{
-          fontSize: 10,
+          fontSize: 13,
           fontWeight: 500,
-          color: 'rgba(255,255,255,0.45)',
+          color: 'rgba(255,255,255,0.55)',
           background: 'rgba(255,255,255,0.1)',
           borderRadius: 8,
-          padding: '0 5px',
-          lineHeight: '16px',
+          padding: '0 6px',
+          lineHeight: '18px',
         }}>
           {count}
         </span>
@@ -129,7 +133,7 @@ function GroupSection({
       <div style={{
         position: 'relative',
         width,
-        height: 72,
+        height: CARD_H_SMALL + 8,
       }}>
         {group.cards.map((card, idx) => {
           const globalIdx = groupStartIdx + idx
