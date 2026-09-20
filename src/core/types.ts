@@ -105,9 +105,9 @@ export const POSITION_NAME_ZH: Record<PlayerPosition, string> = {
 
 export const ALL_POSITIONS: readonly PlayerPosition[] = [
   PlayerPosition.East,
-  PlayerPosition.South,
-  PlayerPosition.West,
   PlayerPosition.North,
+  PlayerPosition.West,
+  PlayerPosition.South,
 ]
 
 /** 返回对家方位 */
@@ -124,16 +124,16 @@ export function partnerOf(pos: PlayerPosition): PlayerPosition {
   }
 }
 
-/** 返回下一个出牌方位（顺时针） */
+/** 返回下一个出牌方位（逆时针：东→北→西→南，符合国内习惯） */
 export function nextPlayer(pos: PlayerPosition): PlayerPosition {
   switch (pos) {
     case PlayerPosition.East:
-      return PlayerPosition.South
-    case PlayerPosition.South:
-      return PlayerPosition.West
-    case PlayerPosition.West:
       return PlayerPosition.North
     case PlayerPosition.North:
+      return PlayerPosition.West
+    case PlayerPosition.West:
+      return PlayerPosition.South
+    case PlayerPosition.South:
       return PlayerPosition.East
   }
 }

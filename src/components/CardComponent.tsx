@@ -9,6 +9,8 @@ interface CardComponentProps {
   faceUp?: boolean
   selected?: boolean
   small?: boolean
+  /** 额外缩放（1 = 不缩放）；配合 small 可渲染更小的牌（如出牌区） */
+  scale?: number
   onClick?: () => void
   style?: React.CSSProperties
 }
@@ -261,11 +263,13 @@ export default function CardComponent({
   faceUp = true,
   selected = false,
   small = false,
+  scale,
   onClick,
   style,
 }: CardComponentProps) {
-  const w = small ? CARD_WIDTH * 0.95 : CARD_WIDTH
-  const h = small ? CARD_HEIGHT * 0.95 : CARD_HEIGHT
+  const s = scale ?? (small ? 0.95 : 1)
+  const w = CARD_WIDTH * s
+  const h = CARD_HEIGHT * s
 
   return (
     <svg

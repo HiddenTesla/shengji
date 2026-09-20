@@ -26,11 +26,22 @@ import {
   determineTrumpFromBottom,
 } from './core/bidding.ts'
 import { aiChooseBury, countPoints } from './core/bury.ts'
+import {
+  type PlayState,
+  aiChoosePlay,
+  applyPlay,
+  collectTrick,
+  createPlayState,
+  isLeading,
+  validatePlay,
+} from './core/play.ts'
 import PlayerHand from './components/PlayerHand.tsx'
 import OpponentHand from './components/OpponentHand.tsx'
 import BiddingBar from './components/BiddingBar.tsx'
 import BottomCards from './components/BottomCards.tsx'
 import BottomReveal from './components/BottomReveal.tsx'
+import TrickArea from './components/TrickArea.tsx'
+import PlayBar from './components/PlayBar.tsx'
 import CardComponent from './components/CardComponent.tsx'
 
 type Hands = Record<PlayerPosition, Card[]>
@@ -82,6 +93,8 @@ function App() {
   const [showFlipLog, setShowFlipLog] = useState(false)
   /** 埋底后的底牌 */
   const [buriedCards, setBuriedCards] = useState<Card[]>([])
+  /** 出牌阶段状态 */
+  const [playState, setPlayState] = useState<PlayState | null>(null)
 
   const levelRank = Rank.Two
 
@@ -94,6 +107,10 @@ function App() {
   handsRef.current = hands
   const trumpSuitRef = useRef<Suit | null>(null)
   trumpSuitRef.current = trumpSuit
+
+  // 用 ref 持有最新出牌状态，避免 AI 出牌 / 收墩时的闭包陷阱
+  const playStateRef = useRef<PlayState | null>(null)
+  playStateRef.current = playState
 
   // ---- 新一局 ----
   function startNewGame() {
@@ -122,6 +139,7 @@ function App() {
     setFlipLog([])
     setShowFlipLog(false)
     setBuriedCards([])
+    setPlayState(null)
     setBidState(createBidState(0))
     setPhase(GamePhase.Dealing)
   }
@@ -163,6 +181,11 @@ function App() {
       else {
         // 埋底阶段：最多选择与底牌等量的牌
         if (phase === GamePhase.Burying && next.size >= BOTTOM_COUNT) return prev
+        // 出牌跟出阶段：最多选到首出张数
+        if (phase === GamePhase.Playing) {
+          const ps = playStateRef.current
+          if (ps && !isLeading(ps) && next.size >= ps.trick.leadCount) return prev
+        }
         next.add(index)
       }
       return next
@@ -313,6 +336,68 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, banker])
 
+  // ---- 出牌阶段：进入后由庄家领出 ----
+  useEffect(() => {
+    if (phase !== GamePhase.Playing) return
+    if (playState) return
+    setPlayState(createPlayState(banker ?? PlayerPosition.South))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, playState, banker])
+
+  // ---- 托管玩家：AI 自动出牌 ----
+  useEffect(() => {
+    if (phase !== GamePhase.Playing) return
+    const ps = playState
+    if (!ps || ps.trick.complete) return
+    if (playerModes[ps.turn] !== PlayerMode.Auto) return
+
+    const t = setTimeout(() => {
+      const cur = playStateRef.current
+      const hs = handsRef.current
+      if (!cur || !hs || cur.trick.complete) return
+      if (playerModes[cur.turn] !== PlayerMode.Auto) return
+      const cards = aiChoosePlay(cur, hs[cur.turn], trumpSuitRef.current, levelRank)
+      if (cards.length === 0) return
+      const res = applyPlay(hs, cur, cur.turn, cards, trumpSuitRef.current, levelRank)
+      setHands(res.hands)
+      setPlayState(res.state)
+    }, 800)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, playState, playerModes])
+
+  // ---- 四家出满 → 收墩，赢家继续领出 ----
+  useEffect(() => {
+    if (phase !== GamePhase.Playing) return
+    if (!playState?.trick.complete) return
+
+    const t = setTimeout(() => {
+      const cur = playStateRef.current
+      const hs = handsRef.current
+      if (!cur || !hs || !cur.trick.complete) return
+      const res = collectTrick(hs, cur)
+      setHands(res.hands)
+      setPlayState(res.state)
+      if (res.roundOver) setPhase(GamePhase.RoundEnd)
+    }, 1100)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, playState])
+
+  // ---- 手动玩家确认出牌 ----
+  function commitPlay() {
+    if (!playState || !hands) return
+    const flat = groupCardsForDisplay(hands[playState.turn], trumpSuit, levelRank)
+      .flatMap(g => g.cards)
+    const cards = flat.filter((_, i) => selectedIndices.has(i))
+    const v = validatePlay(playState, cards, trumpSuit, levelRank)
+    if (!v.ok) return
+    const res = applyPlay(hands, playState, playState.turn, cards, trumpSuit, levelRank)
+    setHands(res.hands)
+    setPlayState(res.state)
+    setSelectedIndices(new Set())
+  }
+
   // ---- 初始发牌 ----
   useMemo(() => {
     if (!hands) startNewGame()
@@ -324,6 +409,8 @@ function App() {
   const isBidding = phase === GamePhase.BiddingTrump
   const isDealing = phase === GamePhase.Dealing
   const isBurying = phase === GamePhase.Burying
+  const isPlaying = phase === GamePhase.Playing
+  const isRoundEnd = phase === GamePhase.RoundEnd
 
   // 南家报主栏：发牌/叫主阶段显示（仅南家为手动时），窗口内始终可操作
   const southManual = playerModes[PlayerPosition.South] === PlayerMode.Manual
@@ -332,13 +419,35 @@ function App() {
 
   // 埋底：显示庄家手牌（南家为庄家时即南家手牌）
   const bankerIsAuto = banker !== null && playerModes[banker] === PlayerMode.Auto
-  const handForDisplay = isBurying && banker ? hands[banker] : hands.S
+
+  // 出牌：轮到手动玩家时，显示该玩家手牌供其操作
+  const playingTurn = playState?.turn ?? null
+  const turnIsManual = isPlaying && playingTurn !== null
+    && playerModes[playingTurn] === PlayerMode.Manual
+
+  const handForDisplay = isBurying && banker
+    ? hands[banker]
+    : turnIsManual && playingTurn
+      ? hands[playingTurn]
+      : hands.S
+
+  const canSelectHand = (isBurying && !bankerIsAuto) || turnIsManual
+
   const buryFlat = isBurying
     ? groupCardsForDisplay(handForDisplay, trumpSuit, levelRank).flatMap(g => g.cards)
     : []
   const selectedBuriedPoints = countPoints(
     buryFlat.filter((_, i) => selectedIndices.has(i)),
   )
+
+  // 出牌：已选牌 + 合法性
+  const playFlat = isPlaying
+    ? groupCardsForDisplay(handForDisplay, trumpSuit, levelRank).flatMap(g => g.cards)
+    : []
+  const selectedPlayCards = playFlat.filter((_, i) => selectedIndices.has(i))
+  const playValidation = isPlaying && playState
+    ? validatePlay(playState, selectedPlayCards, trumpSuit, levelRank)
+    : null
 
   return (
     <div style={{
@@ -395,22 +504,26 @@ function App() {
           alignItems: 'center',
           gap: 8,
         }}>
-          {/* 游戏标题 */}
-          <div style={{
-            fontSize: 28,
-            fontWeight: 700,
-            color: 'rgba(255,255,255,0.85)',
-            letterSpacing: 2,
-            textShadow: '0 2px 8px rgba(0,0,0,0.4)',
-          }}>
-            升级
-          </div>
-          <div style={{
-            fontSize: 17,
-            color: 'rgba(255,255,255,0.55)',
-          }}>
-            拖拉机 · 80分
-          </div>
+          {/* 游戏标题（出牌阶段让位给出牌区） */}
+          {!isPlaying && !isRoundEnd && (
+            <>
+              <div style={{
+                fontSize: 28,
+                fontWeight: 700,
+                color: 'rgba(255,255,255,0.85)',
+                letterSpacing: 2,
+                textShadow: '0 2px 8px rgba(0,0,0,0.4)',
+              }}>
+                升级
+              </div>
+              <div style={{
+                fontSize: 17,
+                color: 'rgba(255,255,255,0.55)',
+              }}>
+                拖拉机 · 80分
+              </div>
+            </>
+          )}
 
           {/* 叫主状态 / 结果 */}
           <div style={{
@@ -487,7 +600,25 @@ function App() {
                   : `请选 ${BOTTOM_COUNT} 张埋入底牌（已选 ${selectedIndices.size} 张）`}
               </div>
             )}
+            {isPlaying && playState && (
+              <div style={{ fontSize: 13, color: '#ffd700' }}>
+                轮到 {POSITION_NAME_ZH[playState.turn]}家
+                （{playerModes[playState.turn] === PlayerMode.Manual ? '手动' : '托管'}）
+              </div>
+            )}
           </div>
+
+          {/* 出牌区（本墩四家出牌） */}
+          {isPlaying && playState && (
+            <TrickArea state={playState} />
+          )}
+
+          {/* 本局结束 */}
+          {isRoundEnd && (
+            <div style={{ fontSize: 15, color: '#ffd700' }}>
+              本局结束 · 共 {playState?.tricks.length ?? 0} 墩
+            </div>
+          )}
 
           {/* 底牌查看（弹窗，仅南家为庄；桌中央留给出牌区） */}
           <BottomReveal
@@ -611,7 +742,9 @@ function App() {
           }}>
             {isBurying && banker
               ? `庄家（${POSITION_NAME_ZH[banker]}家）埋底`
-              : '南家（你）'}
+              : turnIsManual && playingTurn
+                ? `${POSITION_NAME_ZH[playingTurn]}家出牌（手动）`
+                : '南家（你）'}
           </span>
           <span style={{
             fontSize: 16,
@@ -631,6 +764,21 @@ function App() {
               requiredCount={BOTTOM_COUNT}
               buriedPoints={selectedBuriedPoints}
               onConfirm={confirmBury}
+              onClear={() => setSelectedIndices(new Set())}
+            />
+          </div>
+        )}
+
+        {/* 出牌控制栏 */}
+        {isPlaying && turnIsManual && playingTurn && playState && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
+            <PlayBar
+              player={playingTurn}
+              isLeading={isLeading(playState)}
+              requiredCount={isLeading(playState) ? null : playState.trick.leadCount}
+              selectedCount={selectedIndices.size}
+              reason={selectedPlayCards.length > 0 ? (playValidation?.reason ?? null) : null}
+              onPlay={commitPlay}
               onClear={() => setSelectedIndices(new Set())}
             />
           </div>
@@ -668,8 +816,8 @@ function App() {
           ) : (
             <PlayerHand
               groups={groupCardsForDisplay(handForDisplay, trumpSuit, levelRank)}
-              selectedIndices={selectedIndices}
-              onToggleCard={toggleCard}
+              selectedIndices={canSelectHand ? selectedIndices : undefined}
+              onToggleCard={canSelectHand ? toggleCard : undefined}
             />
           )}
         </div>

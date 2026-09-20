@@ -90,7 +90,7 @@ export interface DealResult {
 
 /**
  * 发牌：每人 25 张，留 8 张底牌
- * 发牌顺序：东→南→西→北 循环
+ * 发牌顺序：东→北→西→南 循环（逆时针）
  */
 export function dealCards(
   deck: Card[],
