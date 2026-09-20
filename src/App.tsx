@@ -42,6 +42,7 @@ import BottomCards from './components/BottomCards.tsx'
 import BottomReveal from './components/BottomReveal.tsx'
 import TrickArea from './components/TrickArea.tsx'
 import PlayBar from './components/PlayBar.tsx'
+import ScoreBoard from './components/ScoreBoard.tsx'
 import CardComponent from './components/CardComponent.tsx'
 
 type Hands = Record<PlayerPosition, Card[]>
@@ -666,6 +667,14 @@ function App() {
               </div>
             )}
           </div>
+
+          {/* 计分板（闲家得分 / 庄家逃分） */}
+          {playState && (
+            <ScoreBoard
+              defendingPoints={playState.defendingPoints}
+              bankerPoints={playState.bankerPoints}
+            />
+          )}
 
           {/* 出牌区（本墩四家出牌） */}
           {isPlaying && playState && (

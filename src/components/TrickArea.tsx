@@ -9,6 +9,7 @@ import {
   POSITION_NAME_ZH,
 } from '../core/types.ts'
 import { type PlayState, doorLabel } from '../core/play.ts'
+import { trickPoints } from '../core/scoring.ts'
 import CardComponent from './CardComponent.tsx'
 
 interface TrickAreaProps {
@@ -36,6 +37,7 @@ export default function TrickArea({ state }: TrickAreaProps) {
   const { trick } = state
   const trickNo = state.tricks.length + 1
   const leadLabel = trick.leadDoor ? doorLabel(trick.leadDoor) : null
+  const curPoints = trickPoints(trick.plays.flatMap(p => p.cards))
 
   return (
     <div style={{
@@ -82,6 +84,9 @@ export default function TrickArea({ state }: TrickAreaProps) {
         </div>
         {leadLabel && <div>首出 {leadLabel}</div>}
         {trick.leadCount > 0 && <div>{trick.leadCount} 张</div>}
+        {curPoints > 0 && (
+          <div style={{ color: '#7ee787', fontWeight: 600 }}>本墩 {curPoints} 分</div>
+        )}
         {trick.complete && trick.winner && (
           <div style={{ color: '#ffd700' }}>
             {POSITION_NAME_ZH[trick.winner]}家赢

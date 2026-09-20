@@ -30,6 +30,7 @@ import {
   validateLead,
 } from './hand.ts'
 import { judgePlays } from './trick.ts'
+import { accumulate, trickPoints } from './scoring.ts'
 
 /** 四家手牌 */
 export type Hands = Record<PlayerPosition, Card[]>
@@ -62,12 +63,18 @@ export interface TrickState {
 
 /** 出牌阶段整体状态 */
 export interface PlayState {
+  /** 庄家（用于区分闲家 / 庄家队伍计分） */
+  banker: PlayerPosition
   /** 轮到谁出牌 */
   turn: PlayerPosition
   /** 当前墩 */
   trick: TrickState
   /** 已收的墩 */
   tricks: Trick[]
+  /** 闲家（进攻方）得分 */
+  defendingPoints: number
+  /** 庄家（防守方）逃分 */
+  bankerPoints: number
 }
 
 /** 出牌结果 */
@@ -96,12 +103,15 @@ function emptyTrick(leadPlayer: PlayerPosition): TrickState {
   }
 }
 
-/** 开局：首家（庄家）领出 */
-export function createPlayState(leader: PlayerPosition): PlayState {
+/** 开局：庄家领出第一墩 */
+export function createPlayState(banker: PlayerPosition): PlayState {
   return {
-    turn: leader,
-    trick: emptyTrick(leader),
+    banker,
+    turn: banker,
+    trick: emptyTrick(banker),
     tricks: [],
+    defendingPoints: 0,
+    bankerPoints: 0,
   }
 }
 
@@ -224,25 +234,38 @@ export function applyPlay(
   }
 }
 
-/** 收墩：结算赢家，开始下一墩；若手牌已空则本局结束 */
+/** 收墩：结算赢家与分数，开始下一墩；若手牌已空则本局结束 */
 export function collectTrick(hands: Hands, state: PlayState): PlayResult {
   const winner = state.trick.winner ?? state.trick.leadPlayer
+  const cards = state.trick.plays.flatMap(p => p.cards)
+  const points = trickPoints(cards)
+
   const collected: Trick = {
     plays: state.trick.plays,
     leadPlayer: state.trick.leadPlayer,
     winner,
-    // 步骤 1 不计分
-    points: 0,
+    points,
   }
 
   const roundOver = ALL_POSITIONS.every(p => hands[p].length === 0)
+  const score = accumulate(
+    {
+      defendingPoints: state.defendingPoints,
+      bankerPoints: state.bankerPoints,
+    },
+    winner,
+    cards,
+    state.banker,
+  )
 
   return {
     hands,
     state: {
+      banker: state.banker,
       turn: winner,
       trick: emptyTrick(winner),
       tricks: [...state.tricks, collected],
+      ...score,
     },
     roundOver,
   }

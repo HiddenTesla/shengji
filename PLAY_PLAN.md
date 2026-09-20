@@ -202,7 +202,12 @@ interface PlayState {
 
 ---
 
-### 步骤 6 · 计分（闲家得分 / 庄家逃分）
+### 步骤 6 · 计分（闲家得分 / 庄家逃分）✅
+
+> **已完成**：新增 `core/scoring.ts`、`components/ScoreBoard.tsx`。
+> 实测：种子 1/7/42 整轮模拟均 `finished:true, illegal:0, tricks:25, remain:0`，
+> 且**分数守恒** `闲家 + 庄家 = 200 − 底牌分`；界面实测从 0 实时递增到 200，
+> 终局 **闲家 105 / 庄家 95 / 合计 200**（与「本局结束 · 共 25 墩」同时出现）。
 
 **范围**
 - 每张 **5 = 5 分**，**10 / K = 10 分**（`pointValue` 已实现）。
@@ -214,12 +219,16 @@ interface PlayState {
 - 提示：本局在打的总分 = 闲家墩分 + 庄家墩分；底牌分单独结算。
 
 **实现**
-- `core/scoring.ts`：`trickPoints(cards)`、`accumulate(state, winner, cards)`。
-- `components/ScoreBoard.tsx`：两队分数 + 80 分进度。
+- `core/scoring.ts`：`trickPoints(cards)`（5=5、10/K=10）、`isDefender(pos, banker)`、
+  `accumulate(prev, winner, cards, banker)`。
+- `core/play.ts`：`PlayState` 增 `banker` / `defendingPoints`（闲家得分）/ `bankerPoints`（庄家逃分）；
+  `createPlayState(banker)`；`collectTrick` 收墩时按赢家所在队累计。
+- `components/ScoreBoard.tsx`：闲家得分（≥80 进度条转红）+ 庄家逃分 + 合计，渲染在 `TrickArea` 上方。
+- `components/TrickArea.tsx`：墩心显示 `本墩 X 分`。
 
-**验收**
-- 单测：5/10/K 计分正确；**分数守恒**（闲家墩分 + 庄家墩分 = 在打牌张的总分）。
-- 界面实时刷新。
+**验收**✅
+- 分数守恒：`闲家墩分 + 庄家墩分 = 200 − 底牌分`（3 种子整轮模拟，0 非法出牌）。
+- 界面随每次收墩**实时刷新**，结束时数值与引擎一致。
 
 ---
 
