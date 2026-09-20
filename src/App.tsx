@@ -383,6 +383,11 @@ function App() {
       if (playerModes[cur.turn] !== PlayerMode.Auto) return
       const cards = aiChoosePlay(cur, hs[cur.turn], trumpSuitRef.current, levelRank)
       if (cards.length === 0) return
+      // 自检：托管出牌必须合法（规则回归的早期预警）
+      const chk = validatePlay(cur, hs[cur.turn], cards, trumpSuitRef.current, levelRank)
+      if (!chk.ok) {
+        console.warn('[AI] 非法出牌：', chk.reason, cards)
+      }
       const res = applyPlay(hs, cur, cur.turn, cards, trumpSuitRef.current, levelRank)
       setHands(res.hands)
       setPlayState(res.state)
@@ -415,7 +420,7 @@ function App() {
     const flat = groupCardsForDisplay(hands[playState.turn], trumpSuit, levelRank)
       .flatMap(g => g.cards)
     const cards = flat.filter((_, i) => selectedIndices.has(i))
-    const v = validatePlay(playState, cards, trumpSuit, levelRank)
+    const v = validatePlay(playState, hands[playState.turn], cards, trumpSuit, levelRank)
     if (!v.ok) return
     // 压入撤销点（玩家出牌前的状态）
     setHistory(prev => [...prev, {
@@ -495,7 +500,7 @@ function App() {
     : []
   const selectedPlayCards = playFlat.filter((_, i) => selectedIndices.has(i))
   const playValidation = isPlaying && playState
-    ? validatePlay(playState, selectedPlayCards, trumpSuit, levelRank)
+    ? validatePlay(playState, hands[playState.turn], selectedPlayCards, trumpSuit, levelRank)
     : null
 
   /** 是否有可撤销的玩家操作 */

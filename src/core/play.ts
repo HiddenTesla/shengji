@@ -19,27 +19,24 @@ import {
   HandType,
   nextPlayer,
 } from './types.ts'
-import { isTrump } from './trump.ts'
+import {
+  type Door,
+  type HandShape,
+  type PlayValidation,
+  analyzeShape,
+  chooseFollow,
+  chooseLead,
+  validateFollow,
+  validateLead,
+} from './hand.ts'
 
 /** 四家手牌 */
 export type Hands = Record<PlayerPosition, Card[]>
 
-/** 门：主牌门（'trump'）或某个副花色 */
-export type Door = Suit | 'trump'
-
-/** 判定一张牌属于哪一门 */
-export function doorOf(
-  card: Card,
-  trumpSuit: Suit | null,
-  levelRank: Rank,
-): Door {
-  return isTrump(card, trumpSuit, levelRank) ? 'trump' : card.suit
-}
-
-/** 门的显示名 */
-export function doorLabel(door: Door): string {
-  return door === 'trump' ? '主牌' : `${door}`
-}
+// 门相关工具已移入 hand.ts，这里再导出以兼容既有引用
+export { doorOf, doorLabel } from './hand.ts'
+export type { Door } from './hand.ts'
+export type { PlayValidation } from './hand.ts'
 
 /** 本墩出牌状态 */
 export interface TrickState {
@@ -50,6 +47,10 @@ export interface TrickState {
   leadCount: number
   /** 首出牌型（步骤 1 仅作展示用） */
   leadType: HandType
+  /** 首出含有的对子数 */
+  leadPairs: number
+  /** 首出拖拉机长度（对数，0 = 非拖拉机） */
+  leadTractor: number
   /** 本墩出牌记录（按顺序） */
   plays: PlayedCards[]
   /** 四家是否已出完（等待收墩） */
@@ -86,6 +87,8 @@ function emptyTrick(leadPlayer: PlayerPosition): TrickState {
     leadDoor: null,
     leadCount: 0,
     leadType: HandType.Single,
+    leadPairs: 0,
+    leadTractor: 0,
     plays: [],
     complete: false,
     winner: null,
@@ -107,33 +110,13 @@ export function isLeading(state: PlayState): boolean {
 }
 
 /**
- * 牌型（步骤 1 的宽松版：仅供展示）
- * 后续步骤 4 会用完整规则替换。
- */
-export function shapeOf(cards: Card[]): HandType {
-  if (cards.length === 1) return HandType.Single
-  if (cards.length === 2) {
-    return cards[0].rank === cards[1].rank ? HandType.Pair : HandType.Throw
-  }
-  return HandType.Throw
-}
-
-// ------------------------------------------------------------
-// 合法性（步骤 1：最宽松）
-// ------------------------------------------------------------
-
-export interface PlayValidation {
-  ok: boolean
-  reason?: string
-}
-
-/**
- * 校验一次出牌（步骤 1）
- *   - 领出：所有牌必须同一门
- *   - 跟出：张数必须与首出相同
+ * 校验一次出牌
+ *   - 领出：同一门（甩牌合法性见步骤 5）
+ *   - 跟出：有此门必跟、有对必对、有拖必拖、该门不足时先出完再垫/毙
  */
 export function validatePlay(
   state: PlayState,
+  hand: Card[],
   cards: Card[],
   trumpSuit: Suit | null,
   levelRank: Rank,
@@ -142,21 +125,19 @@ export function validatePlay(
     return { ok: false, reason: '请先选牌' }
   }
 
-  const { trick } = state
-
   if (isLeading(state)) {
-    const door = doorOf(cards[0], trumpSuit, levelRank)
-    const mixed = cards.some(c => doorOf(c, trumpSuit, levelRank) !== door)
-    if (mixed) {
-      return { ok: false, reason: '领出必须同一门（主牌算一门）' }
-    }
-    return { ok: true }
+    return validateLead(cards, trumpSuit, levelRank)
   }
 
-  if (cards.length !== trick.leadCount) {
-    return { ok: false, reason: `需出 ${trick.leadCount} 张（首出 ${trick.leadCount} 张）` }
+  const { trick } = state
+  const lead: HandShape = {
+    type: trick.leadType,
+    door: trick.leadDoor,
+    count: trick.leadCount,
+    pairs: trick.leadPairs,
+    tractor: trick.leadTractor,
   }
-  return { ok: true }
+  return validateFollow(hand, lead, cards, trumpSuit, levelRank)
 }
 
 // ------------------------------------------------------------
@@ -196,14 +177,21 @@ export function applyPlay(
     [player]: removeCards(hands[player], cards),
   }
 
-  const play: PlayedCards = { player, cards, handType: shapeOf(cards) }
+  const play: PlayedCards = {
+    player,
+    cards,
+    handType: analyzeShape(cards, trumpSuit, levelRank).type,
+  }
   const trick: TrickState = { ...state.trick, plays: [...state.trick.plays, play] }
 
   // 首家出牌 → 记录首出信息
   if (trick.leadDoor === null) {
-    trick.leadDoor = doorOf(cards[0], trumpSuit, levelRank)
+    const shape = analyzeShape(cards, trumpSuit, levelRank)
+    trick.leadDoor = shape.door
     trick.leadCount = cards.length
-    trick.leadType = play.handType
+    trick.leadType = shape.type
+    trick.leadPairs = shape.pairs
+    trick.leadTractor = shape.tractor
   }
 
   // 四家出完 → 等待收墩
@@ -252,14 +240,10 @@ export function collectTrick(hands: Hands, state: PlayState): PlayResult {
 // 托管 AI（步骤 1：最简策略）
 // ------------------------------------------------------------
 
-function byRankAsc(a: Card, b: Card): number {
-  return a.rank - b.rank
-}
-
 /**
- * AI 选择出牌（步骤 1）
+ * AI 选择出牌
  *   - 领出：优先出副牌中最小的一张
- *   - 跟出：优先出该门最小的牌，不足则用其它门补齐
+ *   - 跟出：按合法性与最小代价构造（见 hand.ts::chooseFollow）
  */
 export function aiChoosePlay(
   state: PlayState,
@@ -268,19 +252,16 @@ export function aiChoosePlay(
   levelRank: Rank,
 ): Card[] {
   if (isLeading(state)) {
-    const sideCards = hand.filter(c => doorOf(c, trumpSuit, levelRank) !== 'trump')
-    const pool = sideCards.length > 0 ? sideCards : hand
-    return [[...pool].sort(byRankAsc)[0]]
+    return chooseLead(hand, trumpSuit, levelRank)
   }
 
-  const need = state.trick.leadCount
-  const inDoor = hand
-    .filter(c => doorOf(c, trumpSuit, levelRank) === state.trick.leadDoor)
-    .sort(byRankAsc)
-  const picked = inDoor.slice(0, need)
-  if (picked.length >= need) return picked
-
-  const pickedIds = new Set(picked.map(c => c.id))
-  const rest = hand.filter(c => !pickedIds.has(c.id)).sort(byRankAsc)
-  return [...picked, ...rest.slice(0, need - picked.length)]
+  const { trick } = state
+  const lead: HandShape = {
+    type: trick.leadType,
+    door: trick.leadDoor,
+    count: trick.leadCount,
+    pairs: trick.leadPairs,
+    tractor: trick.leadTractor,
+  }
+  return chooseFollow(hand, lead, trumpSuit, levelRank)
 }
