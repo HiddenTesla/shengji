@@ -46,6 +46,19 @@ import CardComponent from './components/CardComponent.tsx'
 
 type Hands = Record<PlayerPosition, Card[]>
 
+/** 撤销快照：记录「玩家决策前」的完整状态 */
+interface UndoSnapshot {
+  /** 该快照对应的动作（用于按钮提示） */
+  kind: 'bury' | 'play'
+  hands: Hands
+  playState: PlayState | null
+  phase: GamePhase
+  /** 埋底后的底牌 */
+  buriedCards: Card[]
+  /** bottomRef 的值（原始底牌 / 已埋底牌） */
+  bottom: Card[]
+}
+
 /** 发牌结束后的叫主窗口时长（秒） */
 const BID_WINDOW_SECONDS = 8
 
@@ -95,6 +108,8 @@ function App() {
   const [buriedCards, setBuriedCards] = useState<Card[]>([])
   /** 出牌阶段状态 */
   const [playState, setPlayState] = useState<PlayState | null>(null)
+  /** 撤销栈（仅记录「玩家」出牌前的状态；托管出牌不压栈） */
+  const [history, setHistory] = useState<UndoSnapshot[]>([])
 
   const levelRank = Rank.Two
 
@@ -140,6 +155,7 @@ function App() {
     setShowFlipLog(false)
     setBuriedCards([])
     setPlayState(null)
+    setHistory([])
     setBidState(createBidState(0))
     setPhase(GamePhase.Dealing)
   }
@@ -269,6 +285,15 @@ function App() {
       .flatMap(g => g.cards)
     const buried = flat.filter((_, i) => selectedIndices.has(i))
     if (buried.length !== BOTTOM_COUNT) return
+    // 压入撤销点（埋底前的状态：庄家 33 张、底牌未变）
+    setHistory(prev => [...prev, {
+      kind: 'bury',
+      hands,
+      playState,
+      phase,
+      buriedCards,
+      bottom: bottomRef.current,
+    }])
     applyBury(banker, buried)
   }
 
@@ -392,9 +417,33 @@ function App() {
     const cards = flat.filter((_, i) => selectedIndices.has(i))
     const v = validatePlay(playState, cards, trumpSuit, levelRank)
     if (!v.ok) return
+    // 压入撤销点（玩家出牌前的状态）
+    setHistory(prev => [...prev, {
+      kind: 'play',
+      hands,
+      playState,
+      phase,
+      buriedCards,
+      bottom: bottomRef.current,
+    }])
     const res = applyPlay(hands, playState, playState.turn, cards, trumpSuit, levelRank)
     setHands(res.hands)
     setPlayState(res.state)
+    setSelectedIndices(new Set())
+  }
+
+  // ---- 撤销：回到「上一次玩家决策之前」（埋底 / 出牌均适用）
+  // 快照之后的所有托管出牌（含收墩、甚至结束本局）一并回退，
+  // 恢复后轮到的是原手动玩家（或回到埋底阶段），因此不会出现 AI 「秒回」。
+  function undo() {
+    const snap = history[history.length - 1]
+    if (!snap) return
+    setHistory(prev => prev.slice(0, -1))
+    setHands(snap.hands)
+    setPlayState(snap.playState)
+    setPhase(snap.phase)
+    setBuriedCards(snap.buriedCards)
+    bottomRef.current = snap.bottom
     setSelectedIndices(new Set())
   }
 
@@ -448,6 +497,11 @@ function App() {
   const playValidation = isPlaying && playState
     ? validatePlay(playState, selectedPlayCards, trumpSuit, levelRank)
     : null
+
+  /** 是否有可撤销的玩家操作 */
+  const canUndo = history.length > 0
+  /** 最近一次可撤销的操作类型（用于按钮提示） */
+  const lastUndoKind = history[history.length - 1]?.kind ?? null
 
   return (
     <div style={{
@@ -659,24 +713,49 @@ function App() {
             </div>
           )}
 
-          {/* 新游戏按钮 */}
-          <button
-            onClick={startNewGame}
-            style={{
-              marginTop: 8,
-              padding: '10px 32px',
-              fontSize: 18,
-              cursor: 'pointer',
-              border: 'none',
-              borderRadius: 6,
-              background: 'linear-gradient(135deg, #ffd700, #ffb300)',
-              color: '#1a1a1a',
-              fontWeight: 600,
-              boxShadow: '0 2px 8px rgba(255,215,0,0.3)',
-            }}
-          >
-            新的一局
-          </button>
+          {/* 新游戏 / 撤销 */}
+          <div style={{
+            display: 'flex',
+            gap: 8,
+            marginTop: 8,
+            alignItems: 'stretch',
+          }}>
+            <button
+              onClick={startNewGame}
+              style={{
+                padding: '10px 32px',
+                fontSize: 18,
+                cursor: 'pointer',
+                border: 'none',
+                borderRadius: 6,
+                background: 'linear-gradient(135deg, #ffd700, #ffb300)',
+                color: '#1a1a1a',
+                fontWeight: 600,
+                boxShadow: '0 2px 8px rgba(255,215,0,0.3)',
+              }}
+            >
+              新的一局
+            </button>
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title={canUndo
+                ? `撤销${lastUndoKind === 'bury' ? '埋底' : '出牌'}（共 ${history.length} 步）`
+                : '暂无可撤销的玩家操作'}
+              style={{
+                padding: '10px 22px',
+                fontSize: 17,
+                cursor: canUndo ? 'pointer' : 'not-allowed',
+                border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: 6,
+                background: canUndo ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.05)',
+                color: canUndo ? '#fff' : 'rgba(255,255,255,0.35)',
+                fontWeight: 600,
+              }}
+            >
+              ↩ 撤销{canUndo ? `（${history.length}）` : ''}
+            </button>
+          </div>
 
           {/* 模式控制 */}
           <div style={{
