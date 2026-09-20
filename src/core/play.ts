@@ -29,6 +29,7 @@ import {
   validateFollow,
   validateLead,
 } from './hand.ts'
+import { judgePlays } from './trick.ts'
 
 /** 四家手牌 */
 export type Hands = Record<PlayerPosition, Card[]>
@@ -141,12 +142,23 @@ export function validatePlay(
 }
 
 // ------------------------------------------------------------
-// 大小判断（步骤 1：永远是领出者大）
+// 大小判断（步骤 5：见 trick.ts）
 // ------------------------------------------------------------
 
-/** 判定本墩赢家（步骤 1：恒为首出者） */
-export function judgeTrick(trick: TrickState): PlayerPosition {
-  return trick.leadPlayer
+/** 判定本墩赢家 */
+export function judgeTrick(
+  trick: TrickState,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): PlayerPosition {
+  const lead: HandShape = {
+    type: trick.leadType,
+    door: trick.leadDoor,
+    count: trick.leadCount,
+    pairs: trick.leadPairs,
+    tractor: trick.leadTractor,
+  }
+  return judgePlays(trick.plays, lead, trumpSuit, levelRank)
 }
 
 // ------------------------------------------------------------
@@ -197,7 +209,7 @@ export function applyPlay(
   // 四家出完 → 等待收墩
   if (trick.plays.length === ALL_POSITIONS.length) {
     trick.complete = true
-    trick.winner = judgeTrick(trick)
+    trick.winner = judgeTrick(trick, trumpSuit, levelRank)
     return {
       hands: newHands,
       state: { ...state, trick },

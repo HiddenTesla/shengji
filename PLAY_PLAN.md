@@ -180,7 +180,10 @@ interface PlayState {
 
 ---
 
-### 步骤 5 · 大小判断
+### 步骤 5 · 大小判断 ✅
+
+> **已完成**：新增 `core/trick.ts`；`play.ts::judgeTrick(trick, trumpSuit, levelRank)` 改为委托 `judgePlays`。
+> 实测：**20 条比较用例全过**；全托管整轮 25 墩，赢家出现**东南西北四家**（不再是恒为领出者），无非法出牌告警。
 
 **范围**
 - 同门同型比大小：单张比点数、对子比对子、拖拉机比最高对。
@@ -189,11 +192,13 @@ interface PlayState {
 - 替换步骤 1 的「领出者恒赢」。
 
 **实现（`core/trick.ts`）**
-- `beats(candidate, best, ctx): boolean`
-- `judgeTrick(trick, trumpSuit, levelRank): PlayerPosition`
-- 复用 `trump.ts::getTrumpRank`（已验证次序正确）；现有的 `canCardBeat` 视情况重构或弃用。
+- `tierOf`：层级 2 = 主牌毙（首出非主）、1 = 首出门、0 = 垫牌（不能赢）
+- `beats(candidate, best, lead, …)`：先比层级；同层内需 `canCompete`（同型同长度）后再比「门内最大槽位」
+- `judgePlays(plays, lead, …)`：按出牌顺序取最大，同大时**先出者赢**
+- 复用 `hand.ts::slotOf` / `analyzeShape`；旧 `trump.ts::canCardBeat` 未再使用
+- 甩牌：暂按「张数相同」比较（甩牌合法性仍未启用）
 
-**验收**：单墩用例表 —— 跟大/跟小、毙/盖毙、垫牌、对子不能压单张、拖拉机压制。
+**验收**：✅ 20 条用例全过——跟大/跟小、毙/盖毙、垫牌不能赢、对子不能压单张、拖拉机压制、同大先出者赢。
 
 ---
 
