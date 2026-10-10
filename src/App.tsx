@@ -481,6 +481,9 @@ function App() {
   // 埋底：显示庄家手牌（南家为庄家时即南家手牌）
   const bankerIsAuto = banker !== null && playerModes[banker] === PlayerMode.Auto
   const buryingManualBanker = isBurying && banker !== null && !bankerIsAuto
+  const bottomOriginIds = buryingManualBanker
+    ? new Set(bottomRef.current.map(card => card.id))
+    : undefined
 
   // 出牌时南家手牌留在底部，其他玩家在各自方位操作手牌
   const playingTurn = playState?.turn ?? null
@@ -575,6 +578,9 @@ function App() {
           onToggleVisibility={() => toggleVisibility(PlayerPosition.North)}
           playerMode={playerModes[PlayerPosition.North]}
           onToggleMode={() => toggleMode(PlayerPosition.North)}
+          sourceCardIds={buryingManualBanker && banker === PlayerPosition.North
+            ? bottomOriginIds
+            : undefined}
           selectedIndices={canSelectPosition(PlayerPosition.North)
             ? selectedIndices
             : undefined}
@@ -611,6 +617,9 @@ function App() {
             onToggleVisibility={() => toggleVisibility(PlayerPosition.West)}
             playerMode={playerModes[PlayerPosition.West]}
             onToggleMode={() => toggleMode(PlayerPosition.West)}
+            sourceCardIds={buryingManualBanker && banker === PlayerPosition.West
+              ? bottomOriginIds
+              : undefined}
             selectedIndices={canSelectPosition(PlayerPosition.West)
               ? selectedIndices
               : undefined}
@@ -895,6 +904,9 @@ function App() {
             onToggleVisibility={() => toggleVisibility(PlayerPosition.East)}
             playerMode={playerModes[PlayerPosition.East]}
             onToggleMode={() => toggleMode(PlayerPosition.East)}
+            sourceCardIds={buryingManualBanker && banker === PlayerPosition.East
+              ? bottomOriginIds
+              : undefined}
             selectedIndices={canSelectPosition(PlayerPosition.East)
               ? selectedIndices
               : undefined}
@@ -1006,6 +1018,9 @@ function App() {
               groups={groupCardsForDisplay(handForDisplay, trumpSuit, levelRank)}
               selectedIndices={canSelectHand ? selectedIndices : undefined}
               onToggleCard={canSelectHand ? toggleCard : undefined}
+              sourceCardIds={buryingManualBanker && banker === PlayerPosition.South
+                ? bottomOriginIds
+                : undefined}
             />
           )}
         </div>

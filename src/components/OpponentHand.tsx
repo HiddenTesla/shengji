@@ -34,6 +34,7 @@ interface OpponentHandProps {
   onToggleMode: () => void
   selectedIndices?: Set<number>
   onToggleCard?: (index: number) => void
+  sourceCardIds?: Set<string>
 }
 
 /** 牌背重叠偏移 */
@@ -74,6 +75,7 @@ export default function OpponentHand({
   onToggleMode,
   selectedIndices,
   onToggleCard,
+  sourceCardIds,
 }: OpponentHandProps) {
   const label = POSITION_NAME_ZH[position]
   const isSide = position === 'E' || position === 'W'
@@ -139,6 +141,7 @@ export default function OpponentHand({
               groups={groups}
               selectedIndices={selectedIndices}
               onToggleCard={onToggleCard}
+              sourceCardIds={sourceCardIds}
             />
           ) : (
             <div style={{
@@ -206,6 +209,7 @@ export default function OpponentHand({
             groups={groups}
             selectedIndices={selectedIndices}
             onToggleCard={onToggleCard}
+            sourceCardIds={sourceCardIds}
           />
         ) : (
           <div style={{
@@ -245,10 +249,12 @@ function SideGroupColumns({
   groups,
   selectedIndices,
   onToggleCard,
+  sourceCardIds,
 }: {
   groups: CardGroup[]
   selectedIndices?: Set<number>
   onToggleCard?: (index: number) => void
+  sourceCardIds?: Set<string>
 }) {
   if (groups.length === 0) return null
 
@@ -305,6 +311,8 @@ function SideGroupColumns({
                             card={card}
                             faceUp
                             small
+                            badge={sourceCardIds?.has(card.id) ? '底' : undefined}
+                            badgePosition="top-right"
                             selected={selected}
                             onClick={onToggleCard
                               ? () => onToggleCard(cardIndex)

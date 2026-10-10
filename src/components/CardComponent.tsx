@@ -9,6 +9,8 @@ interface CardComponentProps {
   faceUp?: boolean
   selected?: boolean
   small?: boolean
+  badge?: string
+  badgePosition?: 'top-right' | 'bottom-left'
   /** 额外缩放（1 = 不缩放）；配合 small 可渲染更小的牌（如出牌区） */
   scale?: number
   onClick?: () => void
@@ -263,6 +265,8 @@ export default function CardComponent({
   faceUp = true,
   selected = false,
   small = false,
+  badge,
+  badgePosition = 'bottom-left',
   scale,
   onClick,
   style,
@@ -292,7 +296,31 @@ export default function CardComponent({
             : <NormalFace card={card} small={small} />
         )
         : <CardBack />}
+      {faceUp && badge && (
+        <g>
+          <rect
+            x={badgePosition === 'top-right' ? 49 : 3}
+            y={badgePosition === 'top-right' ? 3 : 78}
+            width={19}
+            height={15}
+            rx={4}
+            fill="#1565c0"
+            stroke="#fff"
+            strokeWidth={0.75}
+          />
+          <text
+            x={badgePosition === 'top-right' ? 58.5 : 12.5}
+            y={badgePosition === 'top-right' ? 10.5 : 85.5}
+            fontSize={10}
+            fill="#fff"
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontWeight="bold"
+          >
+            {badge}
+          </text>
+        </g>
+      )}
     </svg>
   )
 }
-

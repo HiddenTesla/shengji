@@ -11,6 +11,8 @@ interface PlayerHandProps {
   selectedIndices?: Set<number>
   /** 点击选牌（只读展示时可省略） */
   onToggleCard?: (index: number) => void
+  /** 当前埋底阶段标记为从原底牌拿起的牌 */
+  sourceCardIds?: Set<string>
 }
 
 /** 手牌重叠偏移量 */
@@ -35,6 +37,7 @@ export default function PlayerHand({
   groups,
   selectedIndices,
   onToggleCard,
+  sourceCardIds,
 }: PlayerHandProps) {
   if (groups.length === 0) {
     return (
@@ -73,6 +76,7 @@ export default function PlayerHand({
             groupStartIdx={groupStartIdx}
             selectedIndices={selectedIndices}
             onToggleCard={onToggleCard}
+            sourceCardIds={sourceCardIds}
           />
         )
       })}
@@ -85,11 +89,13 @@ function GroupSection({
   groupStartIdx,
   selectedIndices,
   onToggleCard,
+  sourceCardIds,
 }: {
   group: CardGroup
   groupStartIdx: number
   selectedIndices?: Set<number>
   onToggleCard?: (index: number) => void
+  sourceCardIds?: Set<string>
 }) {
   const count = group.cards.length
   const width = (count - 1) * OVERLAP + CARD_W_SMALL
@@ -154,6 +160,7 @@ function GroupSection({
                 card={card}
                 faceUp
                 small
+                badge={sourceCardIds?.has(card.id) ? '底' : undefined}
                 selected={isSelected}
                 onClick={onToggleCard
                   ? () => onToggleCard(globalIdx)
@@ -166,4 +173,3 @@ function GroupSection({
     </div>
   )
 }
-
