@@ -37,6 +37,7 @@ import {
 } from './core/play.ts'
 import PlayerHand from './components/PlayerHand.tsx'
 import OpponentHand from './components/OpponentHand.tsx'
+import PlayerModeButton from './components/PlayerModeButton.tsx'
 import BiddingBar from './components/BiddingBar.tsx'
 import BottomCards from './components/BottomCards.tsx'
 import BottomReveal from './components/BottomReveal.tsx'
@@ -545,6 +546,8 @@ function App() {
           faceUp={visibility.N}
           showToggle
           onToggleVisibility={() => toggleVisibility(PlayerPosition.North)}
+          playerMode={playerModes[PlayerPosition.North]}
+          onToggleMode={() => toggleMode(PlayerPosition.North)}
           selectedIndices={canSelectPosition(PlayerPosition.North)
             ? selectedIndices
             : undefined}
@@ -574,6 +577,8 @@ function App() {
             faceUp={visibility.W}
             showToggle
             onToggleVisibility={() => toggleVisibility(PlayerPosition.West)}
+            playerMode={playerModes[PlayerPosition.West]}
+            onToggleMode={() => toggleMode(PlayerPosition.West)}
             selectedIndices={canSelectPosition(PlayerPosition.West)
               ? selectedIndices
               : undefined}
@@ -797,35 +802,6 @@ function App() {
             </button>
           </div>
 
-          {/* 模式控制 */}
-          <div style={{
-            display: 'flex',
-            gap: 8,
-            marginTop: 8,
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-          }}>
-            {ALL_POSITIONS.map(pos => (
-              <button
-                key={pos}
-                onClick={() => toggleMode(pos)}
-                style={{
-                  padding: '6px 14px',
-                  fontSize: 15,
-                  cursor: 'pointer',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  borderRadius: 4,
-                  background: playerModes[pos] === PlayerMode.Manual
-                    ? 'rgba(255,215,0,0.2)'
-                    : 'rgba(100,200,255,0.15)',
-                  color: playerModes[pos] === PlayerMode.Manual ? '#ffd700' : '#90caf9',
-                }}
-              >
-                {POSITION_NAME_ZH[pos]}家·
-                {playerModes[pos] === PlayerMode.Manual ? '手动' : '托管'}
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* 东家 */}
@@ -838,6 +814,8 @@ function App() {
             faceUp={visibility.E}
             showToggle
             onToggleVisibility={() => toggleVisibility(PlayerPosition.East)}
+            playerMode={playerModes[PlayerPosition.East]}
+            onToggleMode={() => toggleMode(PlayerPosition.East)}
             selectedIndices={canSelectPosition(PlayerPosition.East)
               ? selectedIndices
               : undefined}
@@ -860,15 +838,26 @@ function App() {
           marginBottom: 4,
           padding: '0 8px',
         }}>
-          <span style={{
-            fontSize: 18,
-            fontWeight: 600,
-            color: 'rgba(255,255,255,0.75)',
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
           }}>
-            {isBurying && banker === PlayerPosition.South
-              ? `庄家（${POSITION_NAME_ZH[banker]}家）埋底`
-              : '南家（你）'}
-          </span>
+            <span style={{
+              fontSize: 18,
+              fontWeight: 600,
+              color: 'rgba(255,255,255,0.75)',
+            }}>
+              {isBurying && banker === PlayerPosition.South
+                ? `庄家（${POSITION_NAME_ZH[banker]}家）埋底`
+                : '南家（你）'}
+            </span>
+            <PlayerModeButton
+              position={PlayerPosition.South}
+              mode={playerModes[PlayerPosition.South]}
+              onToggle={() => toggleMode(PlayerPosition.South)}
+            />
+          </div>
           <span style={{
             fontSize: 16,
             color: 'rgba(255,255,255,0.5)',

@@ -11,11 +11,13 @@ import {
   type PlayerPosition,
   type Rank,
   type Suit,
+  type PlayerMode,
   POSITION_NAME_ZH,
 } from '../core/types.ts'
 import { type CardGroup, groupCardsForDisplay } from '../core/card.ts'
 import CardComponent from './CardComponent.tsx'
 import PlayerHand from './PlayerHand.tsx'
+import PlayerModeButton from './PlayerModeButton.tsx'
 
 interface OpponentHandProps {
   position: PlayerPosition
@@ -28,6 +30,8 @@ interface OpponentHandProps {
   faceUp: boolean
   showToggle?: boolean
   onToggleVisibility?: () => void
+  playerMode: PlayerMode
+  onToggleMode: () => void
   selectedIndices?: Set<number>
   onToggleCard?: (index: number) => void
 }
@@ -66,6 +70,8 @@ export default function OpponentHand({
   faceUp,
   showToggle,
   onToggleVisibility,
+  playerMode,
+  onToggleMode,
   selectedIndices,
   onToggleCard,
 }: OpponentHandProps) {
@@ -85,13 +91,14 @@ export default function OpponentHand({
         alignItems: 'center',
         gap: 4,
       }}>
-        <div style={{
-          fontSize: 18,
-          fontWeight: 600,
-          color: 'rgba(255,255,255,0.75)',
-        }}>
-          {label}家
-        </div>
+        <LabelRow
+          position={position}
+          faceUp={faceUp}
+          showToggle={showToggle}
+          onToggleVisibility={onToggleVisibility}
+          playerMode={playerMode}
+          onToggleMode={onToggleMode}
+        />
         <div style={{
           color: 'rgba(255,255,255,0.35)',
           fontSize: 15,
@@ -113,10 +120,12 @@ export default function OpponentHand({
         gap: 4,
       }}>
         <LabelRow
-          label={label}
+          position={position}
           faceUp={showCardsFaceUp}
           showToggle={showToggle && !isSelectable}
           onToggleVisibility={onToggleVisibility}
+          playerMode={playerMode}
+          onToggleMode={onToggleMode}
         />
         {/* 固定高度：显示/隐藏切换时按钮位置不变 */}
         <div style={{
@@ -180,10 +189,12 @@ export default function OpponentHand({
       gap: 4,
     }}>
       <LabelRow
-        label={label}
+        position={position}
         faceUp={showCardsFaceUp}
         showToggle={showToggle && !isSelectable}
         onToggleVisibility={onToggleVisibility}
+        playerMode={playerMode}
+        onToggleMode={onToggleMode}
       />
       <div style={{
         height: sideAreaHeight,
@@ -341,15 +352,19 @@ function GroupLabel({ group }: { group: CardGroup }) {
 }
 
 function LabelRow({
-  label,
+  position,
   faceUp,
   showToggle,
   onToggleVisibility,
+  playerMode,
+  onToggleMode,
 }: {
-  label: string
+  position: PlayerPosition
   faceUp: boolean
   showToggle?: boolean
   onToggleVisibility?: () => void
+  playerMode: PlayerMode
+  onToggleMode: () => void
 }) {
   return (
     <div style={{
@@ -362,8 +377,13 @@ function LabelRow({
         fontWeight: 600,
         color: 'rgba(255,255,255,0.75)',
       }}>
-        {label}家
+        {POSITION_NAME_ZH[position]}家
       </span>
+      <PlayerModeButton
+        position={position}
+        mode={playerMode}
+        onToggle={onToggleMode}
+      />
       {showToggle && (
         <button
           onClick={onToggleVisibility}
