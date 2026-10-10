@@ -474,22 +474,30 @@ function App() {
 
   // 埋底：显示庄家手牌（南家为庄家时即南家手牌）
   const bankerIsAuto = banker !== null && playerModes[banker] === PlayerMode.Auto
+  const buryingManualBanker = isBurying && banker !== null && !bankerIsAuto
 
-  // 出牌：轮到手动玩家时，显示该玩家手牌供其操作
+  // 出牌时南家手牌留在底部，其他玩家在各自方位操作手牌
   const playingTurn = playState?.turn ?? null
   const turnIsManual = isPlaying && playingTurn !== null
     && playerModes[playingTurn] === PlayerMode.Manual
 
-  const handForDisplay = isBurying && banker
-    ? hands[banker]
-    : turnIsManual && playingTurn
-      ? hands[playingTurn]
-      : hands.S
+  const handForDisplay = hands.S
 
-  const canSelectHand = (isBurying && !bankerIsAuto) || turnIsManual
+  const canSelectHand = (
+    (isBurying && banker === PlayerPosition.South && !bankerIsAuto)
+    || (turnIsManual && playingTurn === PlayerPosition.South)
+  )
+
+  const canSelectPosition = (position: PlayerPosition) =>
+    (buryingManualBanker && banker === position)
+    || (turnIsManual && playingTurn === position)
 
   const buryFlat = isBurying
-    ? groupCardsForDisplay(handForDisplay, trumpSuit, levelRank).flatMap(g => g.cards)
+    ? groupCardsForDisplay(
+      banker ? hands[banker] : [],
+      trumpSuit,
+      levelRank,
+    ).flatMap(g => g.cards)
     : []
   const selectedBuriedPoints = countPoints(
     buryFlat.filter((_, i) => selectedIndices.has(i)),
@@ -497,7 +505,11 @@ function App() {
 
   // 出牌：已选牌 + 合法性
   const playFlat = isPlaying
-    ? groupCardsForDisplay(handForDisplay, trumpSuit, levelRank).flatMap(g => g.cards)
+    ? groupCardsForDisplay(
+      playState && playingTurn ? hands[playingTurn] : [],
+      trumpSuit,
+      levelRank,
+    ).flatMap(g => g.cards)
     : []
   const selectedPlayCards = playFlat.filter((_, i) => selectedIndices.has(i))
   const playValidation = isPlaying && playState
@@ -533,12 +545,20 @@ function App() {
           faceUp={visibility.N}
           showToggle
           onToggleVisibility={() => toggleVisibility(PlayerPosition.North)}
+          selectedIndices={canSelectPosition(PlayerPosition.North)
+            ? selectedIndices
+            : undefined}
+          onToggleCard={canSelectPosition(PlayerPosition.North)
+            ? toggleCard
+            : undefined}
         />
       </div>
 
       {/* ---- 中部：西家 + 牌桌 + 东家 ---- */}
       <div style={{
         flex: 1,
+        minHeight: 0,
+        overflow: 'hidden',
         display: 'grid',
         gridTemplateColumns: '1fr auto 1fr',
         alignItems: 'center',
@@ -554,6 +574,12 @@ function App() {
             faceUp={visibility.W}
             showToggle
             onToggleVisibility={() => toggleVisibility(PlayerPosition.West)}
+            selectedIndices={canSelectPosition(PlayerPosition.West)
+              ? selectedIndices
+              : undefined}
+            onToggleCard={canSelectPosition(PlayerPosition.West)
+              ? toggleCard
+              : undefined}
           />
         </div>
 
@@ -812,6 +838,12 @@ function App() {
             faceUp={visibility.E}
             showToggle
             onToggleVisibility={() => toggleVisibility(PlayerPosition.East)}
+            selectedIndices={canSelectPosition(PlayerPosition.East)
+              ? selectedIndices
+              : undefined}
+            onToggleCard={canSelectPosition(PlayerPosition.East)
+              ? toggleCard
+              : undefined}
           />
         </div>
       </div>
@@ -833,11 +865,9 @@ function App() {
             fontWeight: 600,
             color: 'rgba(255,255,255,0.75)',
           }}>
-            {isBurying && banker
+            {isBurying && banker === PlayerPosition.South
               ? `庄家（${POSITION_NAME_ZH[banker]}家）埋底`
-              : turnIsManual && playingTurn
-                ? `${POSITION_NAME_ZH[playingTurn]}家出牌（手动）`
-                : '南家（你）'}
+              : '南家（你）'}
           </span>
           <span style={{
             fontSize: 16,
@@ -942,4 +972,3 @@ function App() {
 }
 
 export default App
-

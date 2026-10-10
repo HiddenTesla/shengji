@@ -28,6 +28,8 @@ interface OpponentHandProps {
   faceUp: boolean
   showToggle?: boolean
   onToggleVisibility?: () => void
+  selectedIndices?: Set<number>
+  onToggleCard?: (index: number) => void
 }
 
 /** 牌背重叠偏移 */
@@ -64,12 +66,16 @@ export default function OpponentHand({
   faceUp,
   showToggle,
   onToggleVisibility,
+  selectedIndices,
+  onToggleCard,
 }: OpponentHandProps) {
   const label = POSITION_NAME_ZH[position]
   const isSide = position === 'E' || position === 'W'
   const cardCount = cards.length
   const maxShow = Math.min(cardCount, 12)
   const groups = groupCardsForDisplay(cards, trumpSuit, levelRank)
+  const isSelectable = onToggleCard !== undefined
+  const showCardsFaceUp = faceUp || isSelectable
 
   if (cardCount === 0) {
     return (
@@ -108,8 +114,8 @@ export default function OpponentHand({
       }}>
         <LabelRow
           label={label}
-          faceUp={faceUp}
-          showToggle={showToggle}
+          faceUp={showCardsFaceUp}
+          showToggle={showToggle && !isSelectable}
           onToggleVisibility={onToggleVisibility}
         />
         {/* 固定高度：显示/隐藏切换时按钮位置不变 */}
@@ -119,8 +125,12 @@ export default function OpponentHand({
           alignItems: 'flex-start',
           justifyContent: 'center',
         }}>
-          {faceUp ? (
-            <PlayerHand groups={groups} />
+          {showCardsFaceUp ? (
+            <PlayerHand
+              groups={groups}
+              selectedIndices={selectedIndices}
+              onToggleCard={onToggleCard}
+            />
           ) : (
             <div style={{
               position: 'relative',
@@ -157,7 +167,9 @@ export default function OpponentHand({
   const revealHeight =
     (Math.min(cardCount, SIDE_ROWS_PER_COL) - 1) * SIDE_STEP_Y + CARD_H
   // 固定高度 + 以外缘为锚点：显示/隐藏切换时按钮位置不变
-  const sideAreaHeight = Math.max(backHeight, revealHeight)
+  const sideAreaHeight = isSelectable
+    ? revealHeight
+    : Math.max(backHeight, revealHeight)
   const sideAlign = position === 'W' ? 'flex-start' : 'flex-end'
 
   return (
@@ -169,8 +181,8 @@ export default function OpponentHand({
     }}>
       <LabelRow
         label={label}
-        faceUp={faceUp}
-        showToggle={showToggle}
+        faceUp={showCardsFaceUp}
+        showToggle={showToggle && !isSelectable}
         onToggleVisibility={onToggleVisibility}
       />
       <div style={{
@@ -178,8 +190,12 @@ export default function OpponentHand({
         display: 'flex',
         alignItems: 'flex-start',
       }}>
-        {faceUp ? (
-          <SideGroupColumns groups={groups} />
+        {showCardsFaceUp ? (
+          <SideGroupColumns
+            groups={groups}
+            selectedIndices={selectedIndices}
+            onToggleCard={onToggleCard}
+          />
         ) : (
           <div style={{
             position: 'relative',
@@ -214,7 +230,15 @@ export default function OpponentHand({
 // ---- 子组件 ----
 
 /** 东/西家翻开：按「门」分列，同一门内竖排（必要时同门拆成多列） */
-function SideGroupColumns({ groups }: { groups: CardGroup[] }) {
+function SideGroupColumns({
+  groups,
+  selectedIndices,
+  onToggleCard,
+}: {
+  groups: CardGroup[]
+  selectedIndices?: Set<number>
+  onToggleCard?: (index: number) => void
+}) {
   if (groups.length === 0) return null
 
   return (
@@ -224,7 +248,10 @@ function SideGroupColumns({ groups }: { groups: CardGroup[] }) {
       alignItems: 'flex-start',
       gap: 10,
     }}>
-      {groups.map(group => {
+      {groups.map((group, groupIndex) => {
+        const groupStart = groups
+          .slice(0, groupIndex)
+          .reduce((count, previous) => count + previous.cards.length, 0)
         const n = group.cards.length
         const colCount = Math.max(1, Math.ceil(n / SIDE_ROWS_PER_COL))
         const rows = Math.min(n, SIDE_ROWS_PER_COL)
@@ -250,18 +277,31 @@ function SideGroupColumns({ groups }: { groups: CardGroup[] }) {
                 >
                   {group.cards
                     .slice(ci * SIDE_ROWS_PER_COL, (ci + 1) * SIDE_ROWS_PER_COL)
-                    .map((card, i) => (
-                      <div
-                        key={card.id}
-                        style={{
-                          position: 'absolute',
-                          top: i * SIDE_STEP_Y,
-                          zIndex: i,
-                        }}
-                      >
-                        <CardComponent card={card} faceUp small />
-                      </div>
-                    ))}
+                    .map((card, i) => {
+                      const cardIndex = groupStart + ci * SIDE_ROWS_PER_COL + i
+                      const selected = selectedIndices?.has(cardIndex) ?? false
+                      return (
+                        <div
+                          key={card.id}
+                          style={{
+                            position: 'absolute',
+                            top: i * SIDE_STEP_Y,
+                            zIndex: i,
+                            transition: 'transform 0.15s, filter 0.15s',
+                          }}
+                        >
+                          <CardComponent
+                            card={card}
+                            faceUp
+                            small
+                            selected={selected}
+                            onClick={onToggleCard
+                              ? () => onToggleCard(cardIndex)
+                              : undefined}
+                          />
+                        </div>
+                      )
+                    })}
                 </div>
               ))}
             </div>
@@ -373,4 +413,3 @@ function ExtraBadge({ count, side }: { count: number; side?: boolean }) {
     </div>
   )
 }
-
