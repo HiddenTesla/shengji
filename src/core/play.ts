@@ -30,7 +30,7 @@ import {
   validateFollow,
   validateLead,
 } from './hand.ts'
-import { judgePlays } from './trick.ts'
+import { beats, judgePlays } from './trick.ts'
 import { accumulate, trickPoints } from './scoring.ts'
 
 /** 四家手牌 */
@@ -184,6 +184,41 @@ export function judgeTrick(
     tractor: trick.leadTractor,
   }
   return judgePlays(trick.plays, lead, trumpSuit, levelRank)
+}
+
+/** 当前已出牌中的最大者；本墩尚未有人出牌时返回 null */
+export function currentTrickLeader(
+  trick: TrickState,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): PlayerPosition | null {
+  return trick.plays.length > 0
+    ? judgeTrick(trick, trumpSuit, levelRank)
+    : null
+}
+
+/** 当前候选牌是否能大过本墩已出的最大牌；尚无可比较对象时返回 null */
+export function canBeatCurrentPlay(
+  state: PlayState,
+  cards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean | null {
+  const { trick } = state
+  if (trick.leadDoor === null || trick.plays.length === 0) return null
+
+  const leader = currentTrickLeader(trick, trumpSuit, levelRank)
+  const best = trick.plays.find(play => play.player === leader)
+  if (!best) return null
+
+  const lead: HandShape = {
+    type: trick.leadType,
+    door: trick.leadDoor,
+    count: trick.leadCount,
+    pairs: trick.leadPairs,
+    tractor: trick.leadTractor,
+  }
+  return beats(cards, best.cards, lead, trumpSuit, levelRank)
 }
 
 // ------------------------------------------------------------

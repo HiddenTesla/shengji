@@ -30,6 +30,7 @@ import {
   type PlayState,
   aiChoosePlay,
   applyPlay,
+  canBeatCurrentPlay,
   collectTrick,
   createPlayState,
   isLeading,
@@ -520,6 +521,9 @@ function App() {
   const playValidation = isPlaying && playState
     ? validatePlay(playState, hands[playState.turn], selectedPlayCards, trumpSuit, levelRank)
     : null
+  const selectedCanBeatCurrent = playValidation?.ok && playState
+    ? canBeatCurrentPlay(playState, selectedPlayCards, trumpSuit, levelRank)
+    : null
 
   /** 是否有可撤销的玩家操作 */
   const canUndo = history.length > 0
@@ -538,6 +542,7 @@ function App() {
         onPlay={commitPlay}
         onClear={() => setSelectedIndices(new Set())}
         compact={compact}
+        canBeatCurrent={selectedCanBeatCurrent}
       />
     )
   }
@@ -741,7 +746,11 @@ function App() {
 
           {/* 出牌区（本墩四家出牌） */}
           {isPlaying && playState && (
-            <TrickArea state={playState} />
+            <TrickArea
+              state={playState}
+              trumpSuit={trumpSuit}
+              levelRank={levelRank}
+            />
           )}
 
           {/* 本局结束 */}

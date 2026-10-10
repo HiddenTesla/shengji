@@ -8,13 +8,21 @@ import {
   type Card,
   PlayerPosition,
   POSITION_NAME_ZH,
+  type Rank,
+  type Suit,
 } from '../core/types.ts'
-import { type PlayState, doorLabel } from '../core/play.ts'
+import {
+  type PlayState,
+  currentTrickLeader,
+  doorLabel,
+} from '../core/play.ts'
 import { trickPoints } from '../core/scoring.ts'
 import CardComponent from './CardComponent.tsx'
 
 interface TrickAreaProps {
   state: PlayState
+  trumpSuit: Suit | null
+  levelRank: Rank
 }
 
 /** 出牌区用的牌缩放（比手牌更小） */
@@ -34,11 +42,12 @@ const SLOTS: { player: PlayerPosition; col: number; row: number }[] = [
   { player: PlayerPosition.South, col: 2, row: 3 },
 ]
 
-export default function TrickArea({ state }: TrickAreaProps) {
+export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProps) {
   const { trick } = state
   const trickNo = state.tricks.length + 1
   const leadLabel = trick.leadDoor ? doorLabel(trick.leadDoor) : null
   const curPoints = trickPoints(trick.plays.flatMap(p => p.cards))
+  const currentLeader = currentTrickLeader(trick, trumpSuit, levelRank)
   // 折叠框：记录「当前展开的是哪一墩」，换墩后自然回到收起
   const [openTrick, setOpenTrick] = useState<number | null>(null)
 
@@ -66,6 +75,7 @@ export default function TrickArea({ state }: TrickAreaProps) {
               attempt={isLeadSlot ? trick.throwAttempt : []}
               attemptOpen={openTrick === trickNo}
               onToggleAttempt={() => setOpenTrick(openTrick === trickNo ? null : trickNo)}
+              isCurrentMax={currentLeader === slot.player}
               isWinner={trick.complete && trick.winner === slot.player}
               isLead={trick.leadPlayer === slot.player}
             />
@@ -94,6 +104,11 @@ export default function TrickArea({ state }: TrickAreaProps) {
         {curPoints > 0 && (
           <div style={{ color: '#7ee787', fontWeight: 600 }}>本墩 {curPoints} 分</div>
         )}
+        {currentLeader && (
+          <div style={{ color: '#ffd700', fontWeight: 700 }}>
+            当前最大：{POSITION_NAME_ZH[currentLeader]}家
+          </div>
+        )}
         {trick.complete && trick.winner && (
           <div style={{ color: '#ffd700' }}>
             {POSITION_NAME_ZH[trick.winner]}家赢
@@ -112,6 +127,7 @@ function PlaySlot({
   attempt,
   attemptOpen,
   onToggleAttempt,
+  isCurrentMax,
   isWinner,
   isLead,
 }: {
@@ -122,6 +138,7 @@ function PlaySlot({
   /** 「欲甩的牌」折叠框是否展开 */
   attemptOpen: boolean
   onToggleAttempt: () => void
+  isCurrentMax: boolean
   isWinner: boolean
   isLead: boolean
 }) {
@@ -142,8 +159,8 @@ function PlaySlot({
       {/* 方位标签 */}
       <div style={{
         fontSize: 12,
-        fontWeight: isWinner ? 700 : 500,
-        color: isWinner
+        fontWeight: isCurrentMax ? 700 : 500,
+        color: isCurrentMax
           ? '#ffd700'
           : isLead
             ? 'rgba(255,255,255,0.85)'
@@ -151,7 +168,7 @@ function PlaySlot({
         whiteSpace: 'nowrap',
       }}>
         {POSITION_NAME_ZH[player]}家
-        {isWinner ? ' 🏆' : isLead ? ' · 首出' : ''}
+        {isWinner ? ' 🏆' : isCurrentMax ? ' · 当前最大' : isLead ? ' · 首出' : ''}
       </div>
 
       {/* 牌 */}

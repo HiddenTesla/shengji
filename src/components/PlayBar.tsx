@@ -23,6 +23,7 @@ interface PlayBarProps {
   /** 清空选择 */
   onClear: () => void
   compact?: boolean
+  canBeatCurrent?: boolean | null
 }
 
 export default function PlayBar({
@@ -34,6 +35,7 @@ export default function PlayBar({
   onPlay,
   onClear,
   compact = false,
+  canBeatCurrent = null,
 }: PlayBarProps) {
   const canPlay = selectedCount > 0 && reason === null
 
@@ -66,6 +68,20 @@ export default function PlayBar({
               : `跟出：需出 ${requiredCount} 张`)}
         </div>
       </div>
+
+      {canBeatCurrent !== null && (
+        <div style={{
+          maxWidth: compact ? 90 : 130,
+          fontSize: compact ? 11 : 12,
+          lineHeight: 1.25,
+          fontWeight: 600,
+          color: canBeatCurrent ? '#2e7d32' : '#c62828',
+        }}>
+          {compact
+            ? canBeatCurrent ? '能大过' : '不能大过'
+            : canBeatCurrent ? '能大过当前最大者' : '不能大过当前最大者'}
+        </div>
+      )}
 
       {/* 已选张数 */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
