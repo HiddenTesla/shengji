@@ -66,11 +66,13 @@ const BID_WINDOW_SECONDS = 8
 
 /** 底牌张数（= 庄家埋底张数） */
 const BOTTOM_COUNT = 8
+const SPEED_MULTIPLIERS = [2, 1.5, 1, 0.75, 0.5] as const
 
 function App() {
   // ---- 游戏状态 ----
   const [hands, setHands] = useState<Hands | null>(null)
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set())
+  const [gameSpeed, setGameSpeed] = useState(3)
   const [playerModes, setPlayerModes] = useState<Record<PlayerPosition, PlayerMode>>({
     E: PlayerMode.Auto,
     S: PlayerMode.Manual,
@@ -114,6 +116,8 @@ function App() {
   const [history, setHistory] = useState<UndoSnapshot[]>([])
 
   const levelRank = Rank.Two
+  const gameDelay = (baseMs: number) =>
+    Math.round(baseMs * SPEED_MULTIPLIERS[gameSpeed - 1])
 
   // 用 ref 持有最新 bidState，避免闭包陷阱
   const bidStateRef = useRef(bidState)
@@ -184,7 +188,7 @@ function App() {
         N: full.N.slice(0, next),
       })
       setRevealed(next)
-    }, 500)
+    }, gameDelay(500))
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, revealed])
@@ -307,7 +311,7 @@ function App() {
     const stopAt = dec >= 0 ? dec + 1 : bottom.length
 
     if (flipCount < stopAt) {
-      const t = setTimeout(() => setFlipCount(c => c + 1), 650)
+      const t = setTimeout(() => setFlipCount(c => c + 1), gameDelay(650))
       return () => clearTimeout(t)
     }
 
@@ -319,7 +323,7 @@ function App() {
       setBottomTrump(true)
       setFlipping(false)
       startBurying(ALL_POSITIONS[0])
-    }, 3000)
+    }, gameDelay(3000))
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flipping, flipCount])
@@ -358,7 +362,7 @@ function App() {
       if (!hand) return
       const buried = aiChooseBury(hand, BOTTOM_COUNT, trumpSuitRef.current, levelRank)
       applyBury(banker, buried)
-    }, 900)
+    }, gameDelay(900))
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, banker])
@@ -393,7 +397,7 @@ function App() {
       const res = applyPlay(hs, cur, cur.turn, cards, trumpSuitRef.current, levelRank)
       setHands(res.hands)
       setPlayState(res.state)
-    }, 800)
+    }, gameDelay(800))
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, playState, playerModes])
@@ -411,7 +415,7 @@ function App() {
       setHands(res.hands)
       setPlayState(res.state)
       if (res.roundOver) setPhase(GamePhase.RoundEnd)
-    }, 1100)
+    }, gameDelay(1100))
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, playState])
@@ -800,6 +804,44 @@ function App() {
             >
               ↩ 撤销{canUndo ? `（${history.length}）` : ''}
             </button>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 5,
+            marginTop: 8,
+            color: 'rgba(255,255,255,0.7)',
+            fontSize: 14,
+          }}>
+            <span style={{ marginRight: 3 }}>速度</span>
+            {SPEED_MULTIPLIERS.map((_, index) => {
+              const level = index + 1
+              const active = gameSpeed === level
+              return (
+                <button
+                  key={level}
+                  onClick={() => setGameSpeed(level)}
+                  aria-pressed={active}
+                  title={`速度 ${level}${level === 3 ? '（当前默认）' : ''}`}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    padding: 0,
+                    fontSize: 14,
+                    fontWeight: active ? 700 : 500,
+                    cursor: 'pointer',
+                    border: `1px solid ${active ? '#ffd700' : 'rgba(255,255,255,0.25)'}`,
+                    borderRadius: 5,
+                    background: active ? 'rgba(255,215,0,0.24)' : 'rgba(255,255,255,0.08)',
+                    color: active ? '#ffd700' : 'rgba(255,255,255,0.75)',
+                  }}
+                >
+                  {level}
+                </button>
+              )
+            })}
           </div>
 
         </div>
