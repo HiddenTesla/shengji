@@ -915,6 +915,28 @@ function App() {
           )}
         </div>
       </div>
+
+      {/* 甩牌被拦：只告知出牌者「被拦了」，不透露是谁 / 哪些牌 / 对方持有什么 */}
+      {isPlaying && playState?.trick.throwBlocked && (
+        <div style={{
+          position: 'fixed',
+          top: 14,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 50,
+          padding: '8px 18px',
+          borderRadius: 999,
+          background: 'rgba(198,40,40,0.92)',
+          color: '#fff',
+          fontSize: 15,
+          fontWeight: 700,
+          letterSpacing: 0.5,
+          boxShadow: '0 4px 14px rgba(0,0,0,0.45)',
+          pointerEvents: 'none',
+        }}>
+          ⛔ 甩牌被拦了
+        </div>
+      )}
     </div>
   )
 }

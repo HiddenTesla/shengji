@@ -28,6 +28,7 @@ import {
   chooseLead,
   validateFollow,
   validateLead,
+  validateThrowLegality,
 } from './hand.ts'
 import { judgePlays } from './trick.ts'
 import { accumulate, trickPoints } from './scoring.ts'
@@ -53,6 +54,8 @@ export interface TrickState {
   leadPairs: number
   /** 首出拖拉机长度（对数，0 = 非拖拉机） */
   leadTractor: number
+  /** 首出为甩牌且已被三家管住（**出牌之后**判定；对局中只告知出牌者「被拦」） */
+  throwBlocked: boolean
   /** 本墩出牌记录（按顺序） */
   plays: PlayedCards[]
   /** 四家是否已出完（等待收墩） */
@@ -97,6 +100,7 @@ function emptyTrick(leadPlayer: PlayerPosition): TrickState {
     leadType: HandType.Single,
     leadPairs: 0,
     leadTractor: 0,
+    throwBlocked: false,
     plays: [],
     complete: false,
     winner: null,
@@ -120,10 +124,34 @@ export function isLeading(state: PlayState): boolean {
   return state.trick.leadDoor === null
 }
 
+/** 取某一家的其余三家手牌（甩牌合法性判定用） */
+export function otherHands(hands: Hands, player: PlayerPosition): Card[][] {
+  return ALL_POSITIONS.filter(p => p !== player).map(p => hands[p])
+}
+
 /**
- * 校验一次出牌
- *   - 领出：同一门（甩牌合法性见步骤 5）
+ * 甩牌合法性（**出牌后**判定）：其余三家「要不上」才成立
+ *
+ * 之所以放在出牌后：出牌前判定会向出牌者泄露其余三家手牌。
+ * 返回值只用于内部记录 / 日志，**不得**直接展示给玩家。
+ */
+export function judgeLeadThrow(
+  cards: Card[],
+  hands: Hands,
+  leader: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  return validateThrowLegality(cards, otherHands(hands, leader), trumpSuit, levelRank).ok
+}
+
+/**
+ * 校验一次出牌（出牌前的「能不能这样出」，**不含**甩牌是否被管）
+ *   - 领出：同一门
  *   - 跟出：有此门必跟、有对必对、有拖必拖、该门不足时先出完再垫/毙
+ *
+ * 注：甩牌合法性不在出牌前判定（否则会泄露其余三家手牌），
+ *     而在 `applyPlay` 出牌后判定并记入 `trick.throwBlocked`。
  */
 export function validatePlay(
   state: PlayState,
@@ -214,6 +242,9 @@ export function applyPlay(
     trick.leadType = shape.type
     trick.leadPairs = shape.pairs
     trick.leadTractor = shape.tractor
+    // 甩牌合法性：在牌已经打出**之后**判定（不拦出牌，只记录是否被三家管住）
+    trick.throwBlocked = shape.type === HandType.Throw
+      && !judgeLeadThrow(cards, hands, player, trumpSuit, levelRank)
   }
 
   // 四家出完 → 等待收墩

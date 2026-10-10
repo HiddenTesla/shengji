@@ -6,7 +6,8 @@
 //   2. 主牌 > 副牌（毙）；主牌之间按主牌次序比大小（盖毙）
 //   3. 同门之间按门内次序比大小
 //   4. 必须与首出「同型」才可争胜：单张 vs 单张、对子 vs 对子、
-//      拖拉机 vs 同长度拖拉机（甩牌简化按张数）
+//      拖拉机 vs 同长度拖拉机；甩牌按「张数相同 + 最大牌」
+//      （甩牌合法性在出牌后判定，见 play.ts::applyPlay）
 //   5. 同大时先出者赢（使用严格大于比较）
 // ============================================================
 
@@ -69,7 +70,7 @@ export function canCompete(shape: HandShape, lead: HandShape): boolean {
     case HT.Tractor:
       return shape.type === HT.Tractor && shape.tractor === lead.tractor
     default:
-      // 甩牌：暂按「张数相同」简化（甩牌合法性未启用，见 PLAY_PLAN）
+      // 甩牌：按「张数相同」比较，胜负看最大牌（合法性见 validateThrowLegality）
       return shape.count === lead.count
   }
 }

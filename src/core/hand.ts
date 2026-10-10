@@ -8,6 +8,7 @@
 //   4. 有拖必拖：首出为长度 L 的拖拉机且该门内有同长度拖拉机时必须出
 //   5. 该门不足：必须先出完该门，剩余用其它门补（垫牌 / 用主牌毙）
 //   6. 毙牌：补牌全部为主牌时，同样受「有对必对 / 有拖必拖」约束
+//   7. 甩牌：领出多张组合时必须「其余三家要不上」（见 validateThrowLegality）
 // ============================================================
 
 import {
@@ -222,6 +223,140 @@ export function analyzeShape(
 }
 
 // ------------------------------------------------------------
+// 甩牌合法性（其余三家「要不上」）
+// ------------------------------------------------------------
+
+/** 同门内一段连续对子：长度 1 = 独立对子，长度 ≥2 = 拖拉机 */
+interface SlotRun {
+  /** 连续槽位个数（即对子数） */
+  length: number
+  /** 起始（最小）槽位 */
+  minSlot: number
+  /** 末尾（最大）槽位 */
+  maxSlot: number
+  /** 代表牌（用于提示信息） */
+  sample: Card
+}
+
+/**
+ * 把对子单元切成若干「极大连续段」。
+ * 同槽位的不同花色副级牌只保留一个（与 maxTractorLength 一致：不算连续）。
+ */
+function slotRuns(units: PairUnit[]): SlotRun[] {
+  const bySlot = new Map<number, PairUnit>()
+  for (const u of units) {
+    if (!bySlot.has(u.slot)) bySlot.set(u.slot, u)
+  }
+  const slots = [...bySlot.keys()].sort((a, b) => a - b)
+  const runs: SlotRun[] = []
+  let start = 0
+  for (let i = 1; i <= slots.length; i++) {
+    if (i === slots.length || slots[i] !== slots[i - 1] + 1) {
+      runs.push({
+        length: i - start,
+        minSlot: slots[start],
+        maxSlot: slots[i - 1],
+        sample: bySlot.get(slots[start])!.cards[0],
+      })
+      start = i
+    }
+  }
+  return runs
+}
+
+/** 拖拉机强弱比较：长度优先（越长越大），同长度比点数 */
+function tractorBigger(a: SlotRun, b: SlotRun): boolean {
+  return a.length !== b.length ? a.length > b.length : a.maxSlot > b.maxSlot
+}
+
+/**
+ * 甩牌合法性：其余三家「要不上」才允许甩
+ *
+ * 分「组」判定，任一组被管住即甩牌不成立：
+ *   1. 含单张 → 该门内其余三家没有任何比「最小单张」大的牌
+ *   2. 含独立对子 → 该门内其余三家没有比「最小对子」大的对子
+ *      （对子统计含其拖拉机内部的对子）
+ *   3. 含拖拉机 → 该门内其余三家没有比「最小拖拉机」大的拖拉机
+ *      （长度优先：8899 大于 4455；445566 大于 8899）
+ *
+ * 注 1：不考虑「毙牌」——只要求该门内要不上，对手该门已空即可甩。
+ * 注 2：**不检查自己剩下的牌**——甩牌者手上可以留着比甩出的牌更大的牌
+ *       （例如手上还有 ♠A ♠K 时照样可以甩 ♠Q ♠J，只要三家要不上）。
+ * 注 3：**出牌之后**才判定（见 `play.ts::applyPlay`）。返回的 `reason` 含其余三家
+ *       手牌信息，**不得**展示给玩家：对局中只能告知出牌者「甩牌被拦」
+ *       不透露是谁、哪些牌被拦、对方持有什么牌。
+ */
+export function validateThrowLegality(
+  cards: Card[],
+  opponents: Card[][],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): PlayValidation {
+  const door = analyzeShape(cards, trumpSuit, levelRank).door
+  if (door === null) {
+    return { ok: false, reason: '甩牌必须同一门（主牌算一门）' }
+  }
+
+  const slot = (c: Card) => slotOf(c, trumpSuit, levelRank)
+  const units = pairUnits(cards, trumpSuit, levelRank)
+  const pairedIds = new Set(units.flatMap(u => u.cards.map(c => c.id)))
+  const singles = cards.filter(c => !pairedIds.has(c.id))
+  const runs = slotRuns(units)
+  const alonePairs = runs.filter(r => r.length === 1)
+  const tractors = runs.filter(r => r.length >= 2)
+
+  const oppInDoor = opponents.map(h =>
+    h.filter(c => doorOf(c, trumpSuit, levelRank) === door))
+
+  // 1) 单张：其余三家没有比最小单张大的牌
+  if (singles.length > 0) {
+    const minSingle = singles.reduce((a, b) => (slot(a) <= slot(b) ? a : b))
+    for (const h of oppInDoor) {
+      for (const c of h) {
+        if (slot(c) > slot(minSingle)) {
+          return {
+            ok: false,
+            reason: `甩牌不成立：${cardsLabel([c])} 比最小单张 ${cardsLabel([minSingle])} 大`,
+          }
+        }
+      }
+    }
+  }
+
+  // 2) 独立对子：其余三家没有比最小对子大的对子（含其拖拉机里的对子）
+  if (alonePairs.length > 0) {
+    const minPair = alonePairs.reduce((a, b) => (a.maxSlot <= b.maxSlot ? a : b))
+    for (const h of oppInDoor) {
+      for (const u of pairUnits(h, trumpSuit, levelRank)) {
+        if (u.slot > minPair.maxSlot) {
+          return {
+            ok: false,
+            reason: `甩牌不成立：三家还有更大的对子（${cardsLabel([u.cards[0]])}）`,
+          }
+        }
+      }
+    }
+  }
+
+  // 3) 拖拉机：其余三家没有比最小拖拉机大的拖拉机
+  if (tractors.length > 0) {
+    const minTractor = tractors.reduce((a, b) => (tractorBigger(a, b) ? b : a))
+    for (const h of oppInDoor) {
+      for (const r of slotRuns(pairUnits(h, trumpSuit, levelRank))) {
+        if (r.length >= 2 && tractorBigger(r, minTractor)) {
+          return {
+            ok: false,
+            reason: `甩牌不成立：三家还有更大的 ${r.length} 连对（${cardsLabel([r.sample])} 起）`,
+          }
+        }
+      }
+    }
+  }
+
+  return { ok: true }
+}
+
+// ------------------------------------------------------------
 // 校验
 // ------------------------------------------------------------
 
@@ -230,7 +365,13 @@ export interface PlayValidation {
   reason?: string
 }
 
-/** 领出校验：必须同一门（甩牌合法性需「无人能管」，留待步骤 5） */
+/**
+ * 领出校验（出牌前）：只要求同一门
+ *
+ * 甩牌合法性**不在这里**判定——出牌前检查会泄露其余三家手牌，
+ * 改为出牌之后由 `play.ts::applyPlay` 调用 `validateThrowLegality` 并记入
+ * `trick.throwBlocked`。
+ */
 export function validateLead(
   cards: Card[],
   trumpSuit: Suit | null,
@@ -482,5 +623,9 @@ export function cardsLabel(cards: Card[]): string {
 // 2. 主牌拖拉机「允许跨档」：按 主花色非级牌 → 副级牌 → 主级牌 → 小王 → 大王 的
 //    槽位顺序，相邻槽位即成对即算拖拉机（如 ♥2对+♠2对、♠A对+小王对）。
 //    不同花色的副级牌共享同一槽位 → 不算连续。
-// 3. 甩牌：牌型识别为 Throw，但「无人能管」的合法性校验需要大小判断（步骤 5），暂未启用。
+// 3. 甩牌：**出牌之后**按「其余三家要不上」判定（validateThrowLegality，由 applyPlay 调用）——
+//    含单张比最小单张、含独立对子比最小对子（含对方拖拉机里的对子）、
+//    含拖拉机比最小拖拉机（长度优先：越长越大，同长度比点数）。
+//    不考虑毙牌：只要该门内要不上即可甩（对手该门已空即可）。
+//    纯 Single / Pair / Tractor 领出不是甩牌，**不受**此检查（如 4455 可随便领出）。
 // 4. 毙牌：补牌全部为主牌时按主牌门套用「有对必对 / 有拖必拖」。

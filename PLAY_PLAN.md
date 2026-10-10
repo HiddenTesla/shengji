@@ -159,23 +159,37 @@ interface PlayState {
 3. **有对必对**：首出含 N 个对子时，跟者在该门内有对子必须优先出对（数量 ≤ N）。
 4. **有拖必拖**：首出为拖拉机且跟者该门内有**同长度**拖拉机时必须出；不足时先出对子，再出单张。
 5. **垫牌 / 毙牌**：该门无牌时可垫任意牌，或用主牌毙；**毙牌同样受「有对必对/有拖必拖」约束**。
-6. **甩牌合法性**：领出多张组合时必须「其余三家都管不上」，`DEFAULT_GAME_CONFIG.allowThrow` 控制开关。
+6. **甩牌合法性**（✅ 已实现，见下）：领出多张组合（`Throw`）时其余三家必须「要不上」，
+   但**在出牌之后**判定，且只告知出牌者「被拦」。
 
-**实现（`core/hand.ts`）**
-- `detectHandType(cards, trumpSuit, levelRank): HandType | null`
-- `getLegalLeads(hand, trumpSuit, levelRank, allowThrow): Card[][]`
-- `getLegalFollows(hand, lead, trumpSuit, levelRank): Card[][]`
-- `getLegalPlays(...)`：统一入口；组合数可能爆炸 → **生成器 + 上限保护**。
+**实现（`core/hand.ts` / `core/play.ts`）**
+- `analyzeShape(cards, trumpSuit, levelRank): HandShape` → `{type, door, count, pairs, tractor}`
+- `validateLead(cards, trumpSuit, levelRank)`：出牌前**只**校验同一门
+- `validateThrowLegality(cards, opponents, trumpSuit, levelRank)`：甩牌分「组」判定
+- `validateFollow(hand, lead, cards, trumpSuit, levelRank)`：有此门必跟 / 有对必对 / 有拖必拖
+- `chooseLead` / `chooseFollow`：托管 AI 直接构造合法出牌（不穷举组合）
+- `applyPlay` 在记录首出信息后调 `judgeLeadThrow` → 写入 `TrickState.throwBlocked`
 
 **已定规则（默认取值，详见 `hand.ts` 末尾「规则取舍」）**
 - 级牌抽走后**搭桥**：打 5 时 ♠4 与 ♠6 视为连续 → **算**拖拉机。（已实现）
 - 主牌拖拉机**允许跨档**：主花色非级牌 → 副级牌 → 主级牌 → 小王 → 大王，相邻槽位成对即算；
   不同花色的副级牌共享同一槽位 → **不算**。
-- 甩牌：已识别为 `Throw`，但「无人能管」的校验依赖大小判断（步骤 5）→ **暂未启用**。
+- 甩牌（✅ 已实现）：**出牌之后**由 `applyPlay` 调用 `validateThrowLegality` 判定，分「组」比较，
+  任一组被管住即甩牌不成立——
+  1. 含**单张** → 该门内其余三家没有比**最小单张**大的牌；
+  2. 含**独立对子**（不属于拖拉机的对子）→ 没有比**最小对子**大的对子（含对方拖拉机里的对子）；
+  3. 含**拖拉机** → 没有比**最小拖拉机**大的拖拉机（**长度优先**：8899 > 4455；445566 > 8899）。
+  **不考虑毙牌**：只要该门内要不上即可甩。纯 `Single` / `Pair` / `Tractor` 领出**不受**此检查
+  （只有 `Throw` 才是甩牌，如 4455 可随便领出）。
+  **不检查自己剩下的牌**：手上可以留着比甩出牌更大的牌。
+  **信息隔离**：出牌前不判定（否则泄露其余三家手牌）；被拦时只提示「甩牌被拦了」，
+  不透露是谁、哪些牌被拦、对方持有什么牌（`reason` 仅供日志/测试，不得展示）。
 - 毙牌：补牌全为主牌时，套用主牌门的「有对必对 / 有拖必拖」。
 
 **验收（单测重点）**
 - 有此门必跟 / 有对必对 / 有拖必拖 / 无此门可垫可毙 / 甩牌合法。
+- 甩牌用例（实测）：`AKQ` 被对方 `K` 挡下；`AA99` 被 `JJ`（含 `JJTT` 里的对子）挡下；
+  `AA+4455` 被 `8899` 挡下，而 `AA+445566` 可甩；单张 `J` 不挡 `AAQ`。
 - 边界：级牌当主、无主局、拆对拆拖、张数不足。
 
 ---
@@ -196,7 +210,7 @@ interface PlayState {
 - `beats(candidate, best, lead, …)`：先比层级；同层内需 `canCompete`（同型同长度）后再比「门内最大槽位」
 - `judgePlays(plays, lead, …)`：按出牌顺序取最大，同大时**先出者赢**
 - 复用 `hand.ts::slotOf` / `analyzeShape`；旧 `trump.ts::canCardBeat` 未再使用
-- 甩牌：暂按「张数相同」比较（甩牌合法性仍未启用）
+- 甩牌：按「张数相同 + 最大牌」比较；合法性在出牌后判定（`applyPlay` → `validateThrowLegality`）
 
 **验收**：✅ 20 条用例全过——跟大/跟小、毙/盖毙、垫牌不能赢、对子不能压单张、拖拉机压制、同大先出者赢。
 
