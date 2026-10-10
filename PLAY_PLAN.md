@@ -5,6 +5,27 @@
 
 ---
 
+## 进度总览（截至本 session 结束）
+
+| 步骤 | 状态 | 说明 |
+|------|------|------|
+| 1 · 出牌循环 | ✅ 完成 | 状态机 + `TrickArea` + `PlayBar`，全托管可跑完 25 墩 |
+| 2 · Undo | ✅ 完成 | 埋底 / 出牌均可撤销，逐级回退，托管不会「秒回」 |
+| 3 · binlog 式日志 | ⏸ 后置 | 设计已定（事件溯源），**尚未实现** |
+| 4 · 跟牌合法性 | ✅ 完成 | 含**甩牌合法性 + 自动出小 + 失败折叠框**（详见步骤 4） |
+| 5 · 大小判断 | ✅ 完成 | `trick.ts`；20 条用例 + 整轮模拟通过 |
+| 6 · 计分 | ✅ 完成 | `scoring.ts` + `ScoreBoard`，分数守恒已验证 |
+| 7 · 底牌计分（抠底） | ⬜ **待实现** | **下一 session 从这里开始** |
+| 8 · 升级 / 上台 / 开下一局 | ⬜ **待实现** | 依赖步骤 7；接入前先校对 `rank.ts::calculateUpgrade` |
+
+**未纳入步骤、但已知待办**
+- `DEFAULT_GAME_CONFIG.allowThrow` 至今**未被任何代码引用**（第 4 步的甩牌规则已改用 `throwFallback` 实现开关语义可后续补）。
+- **未安装测试框架**（`vitest`）——目前靠浏览器内直接调 core 模块做断言；仍是最建议补的基建。
+- `PLAN.md` 里设想的 `core/ai.ts` 未单独建文件：托管 AI 现在 `hand.ts`（`chooseLead`/`chooseFollow`）+ `play.ts`（`aiChoosePlay`）。
+- 步骤 4~7 **未**按事件溯源实现（见步骤 3），将来接日志时需要回填事件。
+
+---
+
 ## 一、总览
 
 ### 现状盘点
@@ -15,9 +36,14 @@
 | `core/trump.ts` | `isTrump` / `getTrumpRank`（**已验证大小次序正确**）/ `canCardBeat`（部分可用） |
 | `core/card.ts` | `groupCardsForDisplay`（**门**的定义）、`sortCards`、`sameRank` / `sameSuit` / `isTrumpCard` |
 | `core/deck.ts` / `bidding.ts` / `bury.ts` / `rank.ts` | 发牌 / 叫主 / 埋底 / 升级判定 |
-| `App.tsx` | `GamePhase.Playing` 已存在，但目前只显示手牌 |
+| `core/hand.ts` | ✅ 门 / 门内次序 / 牌型 / 校验 / 托管选牌 / `throwFallback`（步骤 4） |
+| `core/trick.ts` | ✅ 墩大小比较 / 定胜负（步骤 5） |
+| `core/scoring.ts` | ✅ 墩分统计与累计（步骤 6）；⬜ 抠底部分待做（步骤 7） |
+| `core/play.ts` | ✅ 出牌状态机（含 `resolveLead` 自动出小） |
+| `App.tsx` | ✅ 出牌阶段已完整接入（出牌区 / 控制栏 / 计分板 / 撤销 / 托管驱动） |
 
-**尚缺**：`hand.ts`、`trick.ts`、`scoring.ts`、`ai.ts`；无测试框架；无出牌 UI。
+**尚缺**：抠底（步骤 7）、升级上台与下一局（步骤 8）、binlog 日志（步骤 3）、测试框架。
+（`core/ai.ts` / `components/GameLog.tsx` 均未建立。）
 
 ### 「门」的定义（贯穿全阶段）
 
@@ -25,44 +51,49 @@
 - **副牌门** = 其余各花色各成一门；
 - 即 `groupCardsForDisplay()` 的分组就是「门」。
 
-### 目标数据结构
+### 目标数据结构（已实现后的真实形状）
 
 ```ts
-type DoorKind = Suit | 'trump'
-
 interface TrickState {
   leadPlayer: PlayerPosition
-  leadDoor: DoorKind          // 首出的门
-  leadType: HandType          // 首出牌型
+  leadDoor: DoorKind | null   // 首出的门
   leadCount: number           // 首出张数
+  leadType: HandType          // 首出牌型
+  leadPairs: number           // 首出对子数
+  leadTractor: number         // 首出拖拉机长度（对数）
   plays: PlayedCards[]        // 按出牌顺序
+  complete: boolean           // 四家已出完、等待收墩
   winner: PlayerPosition | null
-  points: number              // 本墩分数
+  throwBlocked: boolean       // 甩牌被拦（出牌后判定）
+  throwAttempt: Card[]        // 原本想甩的牌（本墩展示用）
 }
 
 interface PlayState {
+  banker: PlayerPosition      // 区分闲家 / 庄家队
   turn: PlayerPosition
   trick: TrickState
-  tricks: Trick[]             // 已收的墩
+  tricks: Trick[]             // 已收的墩（`Trick.points` 在收墩时算）
   defendingPoints: number     // 闲家（进攻方）得分
   bankerPoints: number        // 庄家（防守方）逃分
-  bottomPoints: number        // 底牌分（最后结算）
 }
 ```
 
+> `bottomPoints`（底牌分）尚未实现，属步骤 7。
+
 ### 文件规划
 
-| 文件 | 作用 | 引入步骤 |
-|------|------|----------|
-| `core/play.ts` | 出牌状态机（纯函数：开局/出牌/收墩/下一家） | 1 |
-| `components/TrickArea.tsx` | 牌桌中央出牌区 | 1 |
-| `core/hand.ts` | 牌型检测 + 合法出牌生成 | 4 |
-| `core/trick.ts` | 墩大小比较 / 定胜负 | 5 |
-| `core/scoring.ts` | 分牌统计 / 得分累计 / 抠底 | 6、7 |
-| `core/ai.ts` | 托管出牌策略 | 1 起逐步增强 |
-| `components/GameLog.tsx` | 日志面板 | 3 |
-| `components/ScoreBoard.tsx` | 计分板 | 6 |
-| `vitest` | 核心逻辑单测 | 1 |
+| 文件 | 作用 | 引入步骤 | 状态 |
+|------|------|----------|------|
+| `core/play.ts` | 出牌状态机（纯函数：开局/出牌/收墩/下一家） | 1 | ✅ |
+| `components/TrickArea.tsx` | 牌桌中央出牌区 | 1 | ✅ |
+| `components/PlayBar.tsx` | 出牌控制栏 | 1 | ✅ |
+| `core/hand.ts` | 牌型检测 + 合法出牌校验 + 托管选牌 + 甩牌「自动出小」 | 4 | ✅ |
+| `core/trick.ts` | 墩大小比较 / 定胜负 | 5 | ✅ |
+| `core/scoring.ts` | 分牌统计 / 得分累计（⬜ 抠底待做） | 6、7 | 部分 ✅ |
+| `components/ScoreBoard.tsx` | 计分板 | 6 | ✅ |
+| `core/ai.ts` | 托管出牌策略 | 1 起 | ⬜ 未建（并入 hand/play） |
+| `components/GameLog.tsx` | 日志面板 | 3 | ⬜ 未建 |
+| `vitest` | 核心逻辑单测 | 1 | ⬜ 未安装 |
 
 ---
 
@@ -252,7 +283,10 @@ interface PlayState {
 
 ---
 
-### 步骤 7 · 底牌计分（抠底）
+### 步骤 7 · 底牌计分（抠底）⬜ 待实现
+
+> **下一步从这里开始**。当前状态：`RoundEnd` 只停在「本局结束 · 共 N 墩」，没有抠底与结算面板；
+> `PlayState` 里也没有底牌分字段（`bottomPoints`）。
 
 **范围**
 - 最后一墩若**闲家赢** → **抠底**：`闲家得分 += 底牌分 × 倍数`。
@@ -268,7 +302,7 @@ interface PlayState {
 
 ---
 
-### 步骤 8（收尾）· 升级 / 上台 / 开下一局
+### 步骤 8（收尾）· 升级 / 上台 / 开下一局 ⬜ 待实现
 
 - 用 `rank.ts` 的 `RankManager` + `calculateUpgrade` 结算升级级数与庄家。
 - ⚠️ 现有 `calculateUpgrade` 的 `isDefenderBanker` 分支逻辑较绕，**接入前先按选定规则校对/重写**。
@@ -286,9 +320,10 @@ interface PlayState {
 - 中央区域改为**出牌区**（东南西北四手牌），此前已刻意为它腾出空间。
 - 底部沿用现有手牌点选交互；Undo / 日志 / 计分板布置在中央面板或角落。
 
-**测试（强烈建议）**
+**测试（强烈建议，⬜ 尚未做）**
 - 引入 `vitest`，对 `hand.ts` / `trick.ts` / `scoring.ts` 做单测。
 - 这几处规则分支最多、最容易出错；先有测试再调 UI 提示。
+- 目前只能靠在浏览器里 `import('/src/core/xxx.ts?v=...')` 直接调 core 做断言（见仓库记忆）。
 
 ---
 
@@ -296,11 +331,15 @@ interface PlayState {
 
 ```
 步骤 1（循环）✅ → 2（Undo）✅
-        → 4（合法性，配足单测） → 5（大小）
-        → 6（计分） → 7（抠底） → 8（升级/下一局）
-        → 3（binlog 式日志：事件层可提前随 4/5 一并铺垫）
+        → 4（合法性）✅ → 5（大小）✅
+        → 6（计分）✅ → 7（抠底）⬜ ← 下一步
+        → 8（升级/下一局）⬜ → 3（binlog 日志）⏸
 ```
 
-- 步骤 3（日志）**后置**，但建议在做 4/5 时就把"事件层"建起来（便宜且不用回头改）。
+**给下一个 session 的接续提示**
+- 规则细节与踩过的坑都记在仓库记忆 `/memories/repo/notes.md`（含「门」/牌型分解、甩牌「自动出小」、DOM 自动化验证技巧）。
+- 新增/修改后务必 `sed -i 's/\r$//'` 统一 LF，再 `npx tsc -b` 自检。
+- 步骤 3（日志）仍**后置**：步骤 4~7 是在**没有事件层**的情况下完成的，将来补 binlog 时需要回填事件；
+  也就是说 4~7 目前的验收只覆盖「状态」，不覆盖「事件流」。
 - 4、5 是核心且互相依赖（共享"牌型检测"），建议连续完成。
 - 每步结束时：`tsc` 通过 + 单测全绿 + 浏览器可演示。
