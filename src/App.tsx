@@ -526,6 +526,22 @@ function App() {
   /** 最近一次可撤销的操作类型（用于按钮提示） */
   const lastUndoKind = history[history.length - 1]?.kind ?? null
 
+  function renderPlayBar(compact = false) {
+    if (!turnIsManual || !playingTurn || !playState) return null
+    return (
+      <PlayBar
+        player={playingTurn}
+        isLeading={isLeading(playState)}
+        requiredCount={isLeading(playState) ? null : playState.trick.leadCount}
+        selectedCount={selectedIndices.size}
+        reason={selectedPlayCards.length > 0 ? (playValidation?.reason ?? null) : null}
+        onPlay={commitPlay}
+        onClear={() => setSelectedIndices(new Set())}
+        compact={compact}
+      />
+    )
+  }
+
   return (
     <div style={{
       display: 'flex',
@@ -538,6 +554,8 @@ function App() {
       {/* ---- 顶部：北家 ---- */}
       <div style={{
         display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
         justifyContent: 'center',
         paddingTop: 12,
         position: 'relative',
@@ -559,6 +577,11 @@ function App() {
             ? toggleCard
             : undefined}
         />
+        {playingTurn === PlayerPosition.North && (
+          <div style={{ marginTop: 4 }}>
+            {renderPlayBar()}
+          </div>
+        )}
       </div>
 
       {/* ---- 中部：西家 + 牌桌 + 东家 ---- */}
@@ -590,6 +613,11 @@ function App() {
               ? toggleCard
               : undefined}
           />
+          {playingTurn === PlayerPosition.West && (
+            <div style={{ marginTop: 8 }}>
+              {renderPlayBar(true)}
+            </div>
+          )}
         </div>
 
         {/* 牌桌中心 */}
@@ -865,6 +893,11 @@ function App() {
               ? toggleCard
               : undefined}
           />
+          {playingTurn === PlayerPosition.East && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+              {renderPlayBar(true)}
+            </div>
+          )}
         </div>
       </div>
 
@@ -924,17 +957,9 @@ function App() {
         )}
 
         {/* 出牌控制栏 */}
-        {isPlaying && turnIsManual && playingTurn && playState && (
+        {isPlaying && turnIsManual && playingTurn === PlayerPosition.South && playState && (
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
-            <PlayBar
-              player={playingTurn}
-              isLeading={isLeading(playState)}
-              requiredCount={isLeading(playState) ? null : playState.trick.leadCount}
-              selectedCount={selectedIndices.size}
-              reason={selectedPlayCards.length > 0 ? (playValidation?.reason ?? null) : null}
-              onPlay={commitPlay}
-              onClear={() => setSelectedIndices(new Set())}
-            />
+            {renderPlayBar()}
           </div>
         )}
 

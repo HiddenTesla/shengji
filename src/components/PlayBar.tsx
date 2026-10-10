@@ -22,6 +22,7 @@ interface PlayBarProps {
   onPlay: () => void
   /** 清空选择 */
   onClear: () => void
+  compact?: boolean
 }
 
 export default function PlayBar({
@@ -32,6 +33,7 @@ export default function PlayBar({
   reason,
   onPlay,
   onClear,
+  compact = false,
 }: PlayBarProps) {
   const canPlay = selectedCount > 0 && reason === null
 
@@ -39,22 +41,23 @@ export default function PlayBar({
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      gap: 14,
-      padding: '8px 16px',
+      gap: compact ? 8 : 14,
+      padding: compact ? '6px 8px' : '8px 16px',
       borderRadius: 12,
       background: 'rgba(255,255,255,0.93)',
       border: '1px solid rgba(0,0,0,0.15)',
       boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+      maxWidth: compact ? 300 : undefined,
     }}>
-      <div style={{ fontSize: 24, lineHeight: 1 }}>🃏</div>
+      <div style={{ fontSize: compact ? 18 : 24, lineHeight: 1 }}>🃏</div>
 
       {/* 说明 / 校验提示 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+        <div style={{ fontSize: compact ? 13 : 15, fontWeight: 700, color: '#1a1a1a' }}>
           {POSITION_NAME_ZH[player]}家出牌
         </div>
         <div style={{
-          fontSize: 13,
+          fontSize: compact ? 11 : 13,
           color: reason ? '#c62828' : '#666',
         }}>
           {reason
@@ -67,7 +70,7 @@ export default function PlayBar({
       {/* 已选张数 */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
         <span style={{
-          fontSize: 24,
+          fontSize: compact ? 20 : 24,
           fontWeight: 800,
           lineHeight: 1,
           color: canPlay ? '#2e7d32' : '#c62828',
@@ -85,8 +88,8 @@ export default function PlayBar({
           onClick={onClear}
           disabled={selectedCount === 0}
           style={{
-            padding: '7px 16px',
-            fontSize: 14,
+            padding: compact ? '5px 9px' : '7px 16px',
+            fontSize: compact ? 12 : 14,
             fontWeight: 600,
             cursor: selectedCount === 0 ? 'not-allowed' : 'pointer',
             border: '1.5px solid #bbb',
@@ -101,8 +104,8 @@ export default function PlayBar({
           onClick={onPlay}
           disabled={!canPlay}
           style={{
-            padding: '7px 22px',
-            fontSize: 14,
+            padding: compact ? '5px 11px' : '7px 22px',
+            fontSize: compact ? 12 : 14,
             fontWeight: 700,
             cursor: canPlay ? 'pointer' : 'not-allowed',
             border: 'none',
