@@ -3,6 +3,7 @@
 // 布局：北在上、南在下、西在左、东在右，中央为墩信息
 // ============================================================
 
+import { useState } from 'react'
 import {
   type Card,
   PlayerPosition,
@@ -38,6 +39,8 @@ export default function TrickArea({ state }: TrickAreaProps) {
   const trickNo = state.tricks.length + 1
   const leadLabel = trick.leadDoor ? doorLabel(trick.leadDoor) : null
   const curPoints = trickPoints(trick.plays.flatMap(p => p.cards))
+  // 折叠框：记录「当前展开的是哪一墩」，换墩后自然回到收起
+  const [openTrick, setOpenTrick] = useState<number | null>(null)
 
   return (
     <div style={{
@@ -54,11 +57,15 @@ export default function TrickArea({ state }: TrickAreaProps) {
     }}>
       {SLOTS.map(slot => {
         const play = trick.plays.find(p => p.player === slot.player)
+        const isLeadSlot = play && play.player === trick.leadPlayer
         return (
           <div key={slot.player} style={{ gridColumn: slot.col, gridRow: slot.row }}>
             <PlaySlot
               player={slot.player}
               cards={play?.cards ?? []}
+              attempt={isLeadSlot ? trick.throwAttempt : []}
+              attemptOpen={openTrick === trickNo}
+              onToggleAttempt={() => setOpenTrick(openTrick === trickNo ? null : trickNo)}
               isWinner={trick.complete && trick.winner === slot.player}
               isLead={trick.leadPlayer === slot.player}
             />
@@ -102,17 +109,28 @@ export default function TrickArea({ state }: TrickAreaProps) {
 function PlaySlot({
   player,
   cards,
+  attempt,
+  attemptOpen,
+  onToggleAttempt,
   isWinner,
   isLead,
 }: {
   player: PlayerPosition
   cards: Card[]
+  /** 甩牌失败时「原本想甩的牌」（本墩内展示在实际出牌旁） */
+  attempt: Card[]
+  /** 「欲甩的牌」折叠框是否展开 */
+  attemptOpen: boolean
+  onToggleAttempt: () => void
   isWinner: boolean
   isLead: boolean
 }) {
   const n = cards.length
   const step = n > 1 ? Math.min(STEP_MAX, (SLOT_W - CARD_W) / (n - 1)) : 0
   const cardsWidth = n > 0 ? (n - 1) * step + CARD_W : CARD_W
+
+  // 折叠框浮层：往牌桌外侧展开（西家向左，其余向右），不影响布局
+  const sideLeft = player === PlayerPosition.West
 
   return (
     <div style={{
@@ -157,6 +175,63 @@ function PlaySlot({
               <CardComponent card={c} faceUp small scale={CARD_SCALE} />
             </div>
           ))}
+
+          {/* 甩牌失败：折叠框展示「欲甩的牌」（收起时只留一个标签） */}
+          {attempt.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: sideLeft ? 'flex-end' : 'flex-start',
+              gap: 4,
+              zIndex: 30,
+              ...(sideLeft ? { right: cardsWidth + 6 } : { left: cardsWidth + 6 }),
+            }}>
+              <button
+                onClick={onToggleAttempt}
+                style={{
+                  padding: '2px 8px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  color: '#ff8a80',
+                  borderRadius: 999,
+                  background: 'rgba(120,20,20,0.9)',
+                  border: '1px solid rgba(255,138,128,0.65)',
+                }}
+              >
+                ✗ 甩牌失败 · 欲甩 {attempt.length} 张 {attemptOpen ? '▾' : '▸'}
+              </button>
+              {attemptOpen && (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  padding: 6,
+                  borderRadius: 8,
+                  background: 'rgba(18,12,12,0.96)',
+                  border: '1px solid rgba(255,138,128,0.5)',
+                  boxShadow: '0 6px 18px rgba(0,0,0,0.55)',
+                }}>
+                  <div style={{ fontSize: 11, color: '#ff8a80', fontWeight: 700 }}>
+                    欲甩的牌（被拦，已改出最小的一组）
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 3,
+                    maxWidth: 4 * (CARD_W + 3),
+                  }}>
+                    {attempt.map(c => (
+                      <CardComponent key={c.id} card={c} faceUp small scale={CARD_SCALE} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

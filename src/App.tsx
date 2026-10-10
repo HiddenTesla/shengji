@@ -934,7 +934,7 @@ function App() {
           boxShadow: '0 4px 14px rgba(0,0,0,0.45)',
           pointerEvents: 'none',
         }}>
-          ⛔ 甩牌被拦了
+          ⛔ 甩牌被拦了，已自动出小
         </div>
       )}
     </div>

@@ -26,9 +26,9 @@ import {
   analyzeShape,
   chooseFollow,
   chooseLead,
+  throwFallback,
   validateFollow,
   validateLead,
-  validateThrowLegality,
 } from './hand.ts'
 import { judgePlays } from './trick.ts'
 import { accumulate, trickPoints } from './scoring.ts'
@@ -54,8 +54,10 @@ export interface TrickState {
   leadPairs: number
   /** 首出拖拉机长度（对数，0 = 非拖拉机） */
   leadTractor: number
-  /** 首出为甩牌且已被三家管住（**出牌之后**判定；对局中只告知出牌者「被拦」） */
+  /** 首出为甩牌且已被三家管住（**出牌之后**判定；此时已按「自动出小」改出） */
   throwBlocked: boolean
+  /** 甩牌失败时，原本想甩的牌（本墩内展示用；空数组 = 未失败） */
+  throwAttempt: Card[]
   /** 本墩出牌记录（按顺序） */
   plays: PlayedCards[]
   /** 四家是否已出完（等待收墩） */
@@ -101,6 +103,7 @@ function emptyTrick(leadPlayer: PlayerPosition): TrickState {
     leadPairs: 0,
     leadTractor: 0,
     throwBlocked: false,
+    throwAttempt: [],
     plays: [],
     complete: false,
     winner: null,
@@ -127,22 +130,6 @@ export function isLeading(state: PlayState): boolean {
 /** 取某一家的其余三家手牌（甩牌合法性判定用） */
 export function otherHands(hands: Hands, player: PlayerPosition): Card[][] {
   return ALL_POSITIONS.filter(p => p !== player).map(p => hands[p])
-}
-
-/**
- * 甩牌合法性（**出牌后**判定）：其余三家「要不上」才成立
- *
- * 之所以放在出牌后：出牌前判定会向出牌者泄露其余三家手牌。
- * 返回值只用于内部记录 / 日志，**不得**直接展示给玩家。
- */
-export function judgeLeadThrow(
-  cards: Card[],
-  hands: Hands,
-  leader: PlayerPosition,
-  trumpSuit: Suit | null,
-  levelRank: Rank,
-): boolean {
-  return validateThrowLegality(cards, otherHands(hands, leader), trumpSuit, levelRank).ok
 }
 
 /**
@@ -203,6 +190,28 @@ export function judgeTrick(
 // 出牌 / 收墩
 // ------------------------------------------------------------
 
+/**
+ * 领出解析：甩牌被三家管住时**自动出小**——改为出「最小的被拦组」
+ * （单张 → 对子 → 拖拉机，见 `hand.ts::throwFallback`），其余牌留在手上。
+ * 未被拦则按原牌出。
+ */
+function resolveLead(
+  hands: Hands,
+  player: PlayerPosition,
+  cards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): { cards: Card[]; throwBlocked: boolean; throwAttempt: Card[] } {
+  const shape = analyzeShape(cards, trumpSuit, levelRank)
+  if (shape.type !== HandType.Throw) {
+    return { cards, throwBlocked: false, throwAttempt: [] }
+  }
+  const fb = throwFallback(cards, otherHands(hands, player), trumpSuit, levelRank)
+  return fb
+    ? { cards: fb.cards, throwBlocked: true, throwAttempt: cards }
+    : { cards, throwBlocked: false, throwAttempt: [] }
+}
+
 /** 从手牌中移除已出的牌 */
 function removeCards(hand: Card[], cards: Card[]): Card[] {
   const ids = new Set(cards.map(c => c.id))
@@ -222,29 +231,35 @@ export function applyPlay(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): PlayResult {
+  // 领出且是甩牌 → 被拦则自动出小（实际出的牌换成最小的被拦组）
+  const resolved = isLeading(state)
+    ? resolveLead(hands, player, cards, trumpSuit, levelRank)
+    : null
+  const played = resolved ? resolved.cards : cards
+
   const newHands: Hands = {
     ...hands,
-    [player]: removeCards(hands[player], cards),
+    [player]: removeCards(hands[player], played),
   }
 
   const play: PlayedCards = {
     player,
-    cards,
-    handType: analyzeShape(cards, trumpSuit, levelRank).type,
+    cards: played,
+    handType: analyzeShape(played, trumpSuit, levelRank).type,
   }
   const trick: TrickState = { ...state.trick, plays: [...state.trick.plays, play] }
 
   // 首家出牌 → 记录首出信息
   if (trick.leadDoor === null) {
-    const shape = analyzeShape(cards, trumpSuit, levelRank)
+    const shape = analyzeShape(played, trumpSuit, levelRank)
     trick.leadDoor = shape.door
-    trick.leadCount = cards.length
+    trick.leadCount = played.length
     trick.leadType = shape.type
     trick.leadPairs = shape.pairs
     trick.leadTractor = shape.tractor
-    // 甩牌合法性：在牌已经打出**之后**判定（不拦出牌，只记录是否被三家管住）
-    trick.throwBlocked = shape.type === HandType.Throw
-      && !judgeLeadThrow(cards, hands, player, trumpSuit, levelRank)
+    // 甩牌合法性：在牌已经打出**之后**判定；被拦则已按「自动出小」改出
+    trick.throwBlocked = resolved?.throwBlocked ?? false
+    trick.throwAttempt = resolved?.throwAttempt ?? []
   }
 
   // 四家出完 → 等待收墩
