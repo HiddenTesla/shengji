@@ -20,8 +20,8 @@ import { createDecks, shuffleCards, dealCards } from './core/deck.ts'
 import {
   type Declaration,
   type BidState,
+  BidStrength,
   createBidState,
-  declarationLabel,
   decisiveBottomIndex,
   determineTrumpFromBottom,
 } from './core/bidding.ts'
@@ -70,6 +70,13 @@ const FIRST_BID_MIN_REMAINING_SECONDS = 5
 /** 底牌张数（= 庄家埋底张数） */
 const BOTTOM_COUNT = 8
 const SPEED_MULTIPLIERS = [2.0, 1.2, 0.7, 0.4, 0.2] as const
+const TRUMP_COLORS: Record<Suit, string> = {
+  [Suit.Spade]: '#111111',
+  [Suit.Heart]: '#c62828',
+  [Suit.Club]: '#1b5e20',
+  [Suit.Diamond]: '#e65100',
+  [Suit.Joker]: '#7c3aed',
+}
 
 function App() {
   // ---- 游戏状态 ----
@@ -687,8 +694,27 @@ function App() {
               打 <b style={{ color: '#ffd700' }}>{RANK_NAME[levelRank]}</b>
             </div>
             {isDealing && (
-              <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 14,
+                color: 'rgba(255,255,255,0.7)',
+              }}>
                 发牌中… 可抢亮
+                {bidState.current && (
+                  <span style={{ color: 'rgba(255,255,255,0.85)' }}>
+                    · 当前主牌：
+                    <b style={{
+                      color: trumpSuit ? TRUMP_COLORS[trumpSuit] : 'inherit',
+                      background: trumpSuit ? 'rgba(255,255,255,0.9)' : undefined,
+                      borderRadius: 4,
+                      padding: trumpSuit ? '1px 5px' : undefined,
+                    }}>
+                      {trumpSuit ? SUIT_SYMBOL[trumpSuit] : '无主'}
+                    </b>
+                  </span>
+                )}
               </div>
             )}
             {isBidding && (
@@ -700,8 +726,24 @@ function App() {
                       叫主倒计时 <b style={{ color: '#ffd700' }}>{bidSeconds}</b> 秒
                       {bidState.current
                         ? (
-                          <span style={{ color: '#7ee787', marginLeft: 6 }}>
-                            （当前 {POSITION_NAME_ZH[bidState.current.player]}家 {declarationLabel(bidState.current)}）
+                          <span style={{ color: 'rgba(255,255,255,0.85)', marginLeft: 6 }}>
+                            （当前 {POSITION_NAME_ZH[bidState.current.player]}家：
+                            <b style={{
+                              color: bidState.current.suit
+                                ? TRUMP_COLORS[bidState.current.suit]
+                                : 'inherit',
+                              background: bidState.current.suit
+                                ? 'rgba(255,255,255,0.9)'
+                                : undefined,
+                              borderRadius: 4,
+                              padding: bidState.current.suit ? '1px 5px' : undefined,
+                              marginLeft: 3,
+                            }}>
+                              {bidState.current.suit
+                                ? SUIT_SYMBOL[bidState.current.suit]
+                                : '无主'}
+                            </b>
+                            {' '}{bidState.current.strength === BidStrength.Pair ? '反主' : '亮主'}）
                           </span>
                         )
                         : (
@@ -713,7 +755,12 @@ function App() {
             )}
             {!isDealing && !isBidding && (
               <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>
-                主牌：<b style={{ color: '#ffd700' }}>
+                主牌：<b style={{
+                  color: trumpSuit ? TRUMP_COLORS[trumpSuit] : 'inherit',
+                  background: trumpSuit ? 'rgba(255,255,255,0.9)' : undefined,
+                  borderRadius: 4,
+                  padding: trumpSuit ? '1px 5px' : undefined,
+                }}>
                   {trumpSuit ? `主 ${SUIT_SYMBOL[trumpSuit]}` : '无主'}
                 </b>
                 {bottomTrump && (

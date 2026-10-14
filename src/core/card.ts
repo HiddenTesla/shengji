@@ -205,4 +205,3 @@ export function isTrumpCard(
   if (card.suit === trumpSuit) return true
   return false
 }
-
