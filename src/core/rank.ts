@@ -9,6 +9,7 @@ import {
   Team,
   nextPlayer,
   oppositeTeam,
+  partnerOf,
   teamOf,
 } from './types.ts'
 
@@ -197,7 +198,11 @@ export interface LevelSettlement extends LevelChange {
   actualSteps: number
   /** 是否通关（升过 A） */
   gameWon: boolean
-  /** 下一局庄家（换庄时为原庄家的**下家**，否则不变） */
+  /**
+   * 下一局庄家：
+   *   - **连庄**（庄家方获胜）→ 换到原庄的**对家**（同队两人轮流坐庄）
+   *   - **换庄**（闲家上台）  → 原庄的**下家**（座位顺序的下一家，必属上台方）
+   */
   nextBanker: PlayerPosition
 }
 
@@ -227,7 +232,7 @@ export function settleLevel(
     toLevel: level,
     actualSteps,
     gameWon,
-    nextBanker: change.switchBanker ? nextPlayer(banker) : banker,
+    nextBanker: change.switchBanker ? nextPlayer(banker) : partnerOf(banker),
   }
 }
 

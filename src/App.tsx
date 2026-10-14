@@ -132,7 +132,7 @@ function App() {
   const [history, setHistory] = useState<UndoSnapshot[]>([])
 
   /** 两队各自的级牌（标准双升：本局打庄家队的级牌） */
-  const [levels] = useState<LevelBoard>(() => initialLevelBoard())
+  const [levels, setLevels] = useState<LevelBoard>(() => initialLevelBoard())
 
   // 本局打的级牌 = **庄家队**的级牌（首局未定庄时按南家队；两队都从 2 打起）
   const levelRank = levels[teamOf(banker ?? PlayerPosition.South)]
@@ -156,8 +156,16 @@ function App() {
   const buriedCardsRef = useRef<Card[]>([])
   buriedCardsRef.current = buriedCards
 
-  // ---- 新一局 ----
-  function startNewGame() {
+  // 本局**预定庄家**（「下一局」预设）：在 dealRound 里**同步**写入，
+  // 与 React 渲染时序无关，因此不可能出现「预设丢了 → 退化成东家」的情况。
+  // null = 本局庄家由叫主（亮主者）决定（首局 / 新游戏）。
+  const presetBankerRef = useRef<PlayerPosition | null>(null)
+
+  // ---- 重新发牌 ----
+  // presetBanker 非空时以它为庄家（用于「下一局」：庄家由升级规则预定，叫主只定主花色）；
+  // 为空时庄家仍由叫主（亮主者）决定（用于首局 / 新游戏）。
+  function dealRound(presetBanker: PlayerPosition | null) {
+    presetBankerRef.current = presetBanker
     const deck = createDecks()
     shuffleCards(deck)
     const result = dealCards(deck, BOTTOM_COUNT)
@@ -175,7 +183,7 @@ function App() {
     setRevealed(0)
     setSelectedIndices(new Set())
     setTrumpSuit(null)
-    setBanker(null)
+    setBanker(presetBanker)
     setBottomTrump(false)
     setBidSeconds(BID_WINDOW_SECONDS)
     setFlipping(false)
@@ -187,6 +195,12 @@ function App() {
     setHistory([])
     setBidState(createBidState(0))
     setPhase(GamePhase.Dealing)
+  }
+
+  // ---- 新游戏：等级回到 2，庄家重新由叫主决定 ----
+  function startNewGame() {
+    setLevels(initialLevelBoard())
+    dealRound(null)
   }
 
   // ---- 逐张发牌动画 ----
@@ -265,16 +279,18 @@ function App() {
       )
     }
     setTrumpSuit(decl.suit)
-    setBanker(decl.player)
+    // 已有预定庄家（「下一局」预设）时，叫主只定主花色，**绝不动庄家**
+    if (presetBankerRef.current === null) setBanker(decl.player)
   }
 
   // ---- 结束叫主 ----
   function finishBidding(state: BidState) {
+    const presetBanker = presetBankerRef.current
     if (state.current) {
       // 有人报主：以最终声明定主
       setTrumpSuit(state.current.suit)
       setBottomTrump(false)
-      startBurying(state.current.player)
+      startBurying(presetBanker ?? state.current.player)
     }
     else {
       // 无人报主：逐张翻底牌定主（此后不可再反主）
@@ -352,7 +368,8 @@ function App() {
       setTrumpSuit(suit)
       setBottomTrump(true)
       setFlipping(false)
-      startBurying(ALL_POSITIONS[0])
+      // 翻底定主：庄家仍取预定庄家（「下一局」），否则取东家
+      startBurying(presetBankerRef.current ?? ALL_POSITIONS[0])
     }, gameDelay(3000))
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -508,6 +525,17 @@ function App() {
   const levelSettlement = isRoundEnd && playState && banker
     ? settleLevel(playState.defendingPoints, banker, levels)
     : null
+
+  // ---- 下一局：应用升级结果（新级牌 / 新庄家）后重新发牌 ----
+  // 该局打「新庄家方」的级牌（两队等级可不同）。
+  function startNextRound() {
+    if (!levelSettlement) return
+    setLevels(prev => ({
+      ...prev,
+      [levelSettlement.upgradingTeam]: levelSettlement.toLevel,
+    }))
+    dealRound(levelSettlement.nextBanker)
+  }
 
   // 南家报主栏：发牌/叫主阶段显示（仅南家为手动时），窗口内始终可操作
   const southManual = playerModes[PlayerPosition.South] === PlayerMode.Manual
@@ -849,6 +877,8 @@ function App() {
               banker={banker}
               levels={levels}
               levelSettlement={levelSettlement}
+              onNextRound={startNextRound}
+              onRestart={startNewGame}
             />
           )}
 
@@ -1081,6 +1111,18 @@ function App() {
               canAct={barCanAct}
               onBid={applyDeclare}
             />
+          )}
+          {/* 南家非手动时不显示报主栏：给出原因（否则容易以为「报主框消失了」） */}
+          {!isBurying && !showBar && !southManual && (isDealing || isBidding) && (
+            <div style={{
+              fontSize: 12,
+              color: 'rgba(255,255,255,0.55)',
+              padding: '6px 14px',
+              border: '1px dashed rgba(255,255,255,0.28)',
+              borderRadius: 9,
+            }}>
+              南家当前为托管，不参与亮主 → 本局将翻底定主
+            </div>
           )}
         </div>
 

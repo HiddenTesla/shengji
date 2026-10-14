@@ -6,11 +6,12 @@
 //   以及按闲家得分判定的等级变化（升几级 / 换庄 / 下一局庄家）
 // ============================================================
 
+import { type CSSProperties } from 'react'
 import { type BottomSettlement } from '../core/scoring.ts'
 import { type LevelBoard, type LevelSettlement } from '../core/rank.ts'
 import {
   type Card,
-  type PlayerPosition,
+  PlayerPosition,
   POSITION_NAME_ZH,
   RANK_NAME,
   Team,
@@ -35,6 +36,21 @@ interface RoundSettlementProps {
   levels: LevelBoard
   /** 等级结算（升几级 / 换庄） */
   levelSettlement: LevelSettlement | null
+  /** 点击「下一局」 */
+  onNextRound: () => void
+  /** 点击「重新开始」（通关后） */
+  onRestart: () => void
+}
+
+const BUTTON_STYLE: CSSProperties = {
+  padding: '7px 20px',
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: 'pointer',
+  border: '1px solid rgba(255,215,0,0.6)',
+  borderRadius: 7,
+  background: 'rgba(255,215,0,0.16)',
+  color: '#ffd700',
 }
 
 export default function RoundSettlement({
@@ -46,9 +62,21 @@ export default function RoundSettlement({
   banker,
   levels,
   levelSettlement,
+  onNextRound,
+  onRestart,
 }: RoundSettlementProps) {
   const total = defendingPoints + bankerPoints
   const taken = bottom?.taken ?? false
+  // 升级后的级牌（用于展示「下一局」会打几）
+  const nextBoard: LevelBoard = levelSettlement
+    ? { ...levels, [levelSettlement.upgradingTeam]: levelSettlement.toLevel }
+    : levels
+  const nextTeamName = levelSettlement
+    ? TEAM_NAME_ZH[levelSettlement.upgradingTeam]
+    : '—'
+  const nextLevelName = levelSettlement
+    ? RANK_NAME[levelSettlement.toLevel]
+    : '—'
   const tractorLabel = bottom
     ? bottom.tractorLength === 0
       ? '无对子'
@@ -171,13 +199,38 @@ export default function RoundSettlement({
               {levelSettlement.gameWon && ' · 🏆 通关！'}
             </div>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
-              两队级牌：南北 打{RANK_NAME[levels[Team.NS]]} · 东西 打{RANK_NAME[levels[Team.EW]]}
+              升级后级牌：南北 打{RANK_NAME[nextBoard[Team.NS]]} · 东西 打{RANK_NAME[nextBoard[Team.EW]]}
               ｜下一局庄家：{POSITION_NAME_ZH[levelSettlement.nextBanker]}家
               （本局 {banker ? `${POSITION_NAME_ZH[banker]}家` : '—'}）
             </div>
           </div>
         </>
       )}
+
+      {/* 操作按钮 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {levelSettlement?.gameWon ? (
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#ffd700' }}>
+            🏆 {TEAM_NAME_ZH[levelSettlement.upgradingTeam]}队通关！
+          </span>
+        ) : (
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+            下一局打「{nextTeamName}队」的级牌（{nextLevelName}）
+          </span>
+        )}
+        <span style={{ flex: 1 }} />
+        {levelSettlement?.gameWon ? (
+          <button onClick={onRestart} style={BUTTON_STYLE}>🔄 重新开始</button>
+        ) : (
+          <button
+            onClick={onNextRound}
+            disabled={!levelSettlement}
+            style={{ ...BUTTON_STYLE, opacity: levelSettlement ? 1 : 0.5 }}
+          >
+            ▶ 下一局
+          </button>
+        )}
+      </div>
     </div>
   )
 }
