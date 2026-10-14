@@ -64,10 +64,12 @@ interface UndoSnapshot {
 
 /** 发牌结束后的叫主窗口时长（秒） */
 const BID_WINDOW_SECONDS = 8
+/** 倒计时期间首次报主时，至少保留的叫主时间 */
+const FIRST_BID_MIN_REMAINING_SECONDS = 5
 
 /** 底牌张数（= 庄家埋底张数） */
 const BOTTOM_COUNT = 8
-const SPEED_MULTIPLIERS = [2, 1.2, 0.7, 0.4, 0.2] as const
+const SPEED_MULTIPLIERS = [2.0, 1.2, 0.7, 0.4, 0.2] as const
 
 function App() {
   // ---- 游戏状态 ----
@@ -235,6 +237,13 @@ function App() {
   function applyDeclare(decl: Declaration) {
     const prev = bidStateRef.current
     setBidState({ ...prev, current: decl, history: [...prev.history, decl] })
+    if (phase === GamePhase.BiddingTrump) {
+      setBidSeconds(seconds =>
+        seconds < FIRST_BID_MIN_REMAINING_SECONDS
+          ? FIRST_BID_MIN_REMAINING_SECONDS
+          : seconds,
+      )
+    }
     setTrumpSuit(decl.suit)
     setBanker(decl.player)
   }
