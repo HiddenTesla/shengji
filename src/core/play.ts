@@ -31,7 +31,12 @@ import {
   validateLead,
 } from './hand.ts'
 import { beats, judgePlays } from './trick.ts'
-import { accumulate, trickPoints } from './scoring.ts'
+import {
+  type BottomSettlement,
+  accumulate,
+  settleBottom,
+  trickPoints,
+} from './scoring.ts'
 
 /** 四家手牌 */
 export type Hands = Record<PlayerPosition, Card[]>
@@ -76,10 +81,12 @@ export interface PlayState {
   trick: TrickState
   /** 已收的墩 */
   tricks: Trick[]
-  /** 闲家（进攻方）得分 */
+  /** 闲家（进攻方）得分（收墩所得；若抠底，末墩结算时已加上「底牌分 × 倍数」） */
   defendingPoints: number
   /** 庄家（防守方）逃分 */
   bankerPoints: number
+  /** 底牌结算（最后一墩收完后才有值；未结束为 null） */
+  bottom: BottomSettlement | null
 }
 
 /** 出牌结果 */
@@ -119,6 +126,7 @@ export function createPlayState(banker: PlayerPosition): PlayState {
     tricks: [],
     defendingPoints: 0,
     bankerPoints: 0,
+    bottom: null,
   }
 }
 
@@ -315,8 +323,14 @@ export function applyPlay(
   }
 }
 
-/** 收墩：结算赢家与分数，开始下一墩；若手牌已空则本局结束 */
-export function collectTrick(hands: Hands, state: PlayState): PlayResult {
+/** 收墩：结算赢家与分数，开始下一墩；若手牌已空则本局结束（并结算抠底） */
+export function collectTrick(
+  hands: Hands,
+  state: PlayState,
+  bottomCards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): PlayResult {
   const winner = state.trick.winner ?? state.trick.leadPlayer
   const cards = state.trick.plays.flatMap(p => p.cards)
   const points = trickPoints(cards)
@@ -339,6 +353,12 @@ export function collectTrick(hands: Hands, state: PlayState): PlayResult {
     state.banker,
   )
 
+  // 最后一墩：结算抠底（闲家赢 → 底牌分 × 倍数 计入闲家得分）
+  const bottom = roundOver
+    ? settleBottom(collected, bottomCards, state.banker, trumpSuit, levelRank)
+    : null
+  const defendingPoints = score.defendingPoints + (bottom?.points ?? 0)
+
   return {
     hands,
     state: {
@@ -346,7 +366,9 @@ export function collectTrick(hands: Hands, state: PlayState): PlayResult {
       turn: winner,
       trick: emptyTrick(winner),
       tricks: [...state.tricks, collected],
-      ...score,
+      defendingPoints,
+      bankerPoints: score.bankerPoints,
+      bottom,
     },
     roundOver,
   }

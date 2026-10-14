@@ -15,8 +15,8 @@
 | 4 · 跟牌合法性 | ✅ 完成 | 含**甩牌合法性 + 自动出小 + 失败折叠框**（详见步骤 4） |
 | 5 · 大小判断 | ✅ 完成 | `trick.ts`；20 条用例 + 整轮模拟通过 |
 | 6 · 计分 | ✅ 完成 | `scoring.ts` + `ScoreBoard`，分数守恒已验证 |
-| 7 · 底牌计分（抠底） | ⬜ **待实现** | **下一 session 从这里开始** |
-| 8 · 升级 / 上台 / 开下一局 | ⬜ **待实现** | 依赖步骤 7；接入前先校对 `rank.ts::calculateUpgrade` |
+| 7 · 底牌计分（抠底） | ✅ 完成 | `scoring.ts` 抠底函数 + `play.ts` 末墩结算 + `RoundSettlement` 面板 |
+| 8 · 升级 / 上台 / 开下一局 | ⬜ **待实现** | **下一步从这里开始**；接入前先校对 `rank.ts::calculateUpgrade` |
 
 **未纳入步骤、但已知待办**
 - `DEFAULT_GAME_CONFIG.allowThrow` 至今**未被任何代码引用**（第 4 步的甩牌规则已改用 `throwFallback` 实现开关语义可后续补）。
@@ -38,11 +38,11 @@
 | `core/deck.ts` / `bidding.ts` / `bury.ts` / `rank.ts` | 发牌 / 叫主 / 埋底 / 升级判定 |
 | `core/hand.ts` | ✅ 门 / 门内次序 / 牌型 / 校验 / 托管选牌 / `throwFallback`（步骤 4） |
 | `core/trick.ts` | ✅ 墩大小比较 / 定胜负（步骤 5） |
-| `core/scoring.ts` | ✅ 墩分统计与累计（步骤 6）；⬜ 抠底部分待做（步骤 7） |
+| `core/scoring.ts` | ✅ 墩分统计与累计（步骤 6）+ 抠底倍数与结算（步骤 7） |
 | `core/play.ts` | ✅ 出牌状态机（含 `resolveLead` 自动出小） |
 | `App.tsx` | ✅ 出牌阶段已完整接入（出牌区 / 控制栏 / 计分板 / 撤销 / 托管驱动） |
 
-**尚缺**：抠底（步骤 7）、升级上台与下一局（步骤 8）、binlog 日志（步骤 3）、测试框架。
+**尚缺**：升级上台与下一局（步骤 8）、binlog 日志（步骤 3）、测试框架。
 （`core/ai.ts` / `components/GameLog.tsx` 均未建立。）
 
 ### 「门」的定义（贯穿全阶段）
@@ -89,8 +89,9 @@ interface PlayState {
 | `components/PlayBar.tsx` | 出牌控制栏 | 1 | ✅ |
 | `core/hand.ts` | 牌型检测 + 合法出牌校验 + 托管选牌 + 甩牌「自动出小」 | 4 | ✅ |
 | `core/trick.ts` | 墩大小比较 / 定胜负 | 5 | ✅ |
-| `core/scoring.ts` | 分牌统计 / 得分累计（⬜ 抠底待做） | 6、7 | 部分 ✅ |
+| `core/scoring.ts` | 分牌统计 / 得分累计 / 抠底 | 6、7 | ✅ |
 | `components/ScoreBoard.tsx` | 计分板 | 6 | ✅ |
+| `components/RoundSettlement.tsx` | 本局结算面板（得分 + 底牌 + 抠底明细） | 7 | ✅ |
 | `core/ai.ts` | 托管出牌策略 | 1 起 | ⬜ 未建（并入 hand/play） |
 | `components/GameLog.tsx` | 日志面板 | 3 | ⬜ 未建 |
 | `vitest` | 核心逻辑单测 | 1 | ⬜ 未安装 |
@@ -283,22 +284,45 @@ interface PlayState {
 
 ---
 
-### 步骤 7 · 底牌计分（抠底）⬜ 待实现
+### 步骤 7 · 底牌计分（抠底）✅
 
-> **下一步从这里开始**。当前状态：`RoundEnd` 只停在「本局结束 · 共 N 墩」，没有抠底与结算面板；
-> `PlayState` 里也没有底牌分字段（`bottomPoints`）。
+> **已完成**。新增 `scoring.ts::bottomTractorLength` / `bottomMultiplier` / `settleBottom`；
+> `play.ts::collectTrick` 在**最后一墩**收墩时结算（签名增加 `bottomCards`/`trumpSuit`/`levelRank`），
+> `PlayState` 增 `bottom: BottomSettlement | null`；新增 `components/RoundSettlement.tsx` 面板。
+>
+> 实测：4 条用户用例（单张 / 单对 / 不相连两对 / 拖2+单对）倍数全对；
+> 「领出 vs 大出」用例（领出 KQ、闲家一对大王毙牌）仍按**领出**的单张算 ×2；
+> 未抠底（含庄家对家大出）一律 **×0 / +0 分**；
+> 12 轮整轮模拟（人为制造非零底分）`墩分守恒 OK`、`非法=0`、`墩=25`，
+> 闲家赢末墩时 `闲家得分 += 底牌分 × 倍数`，未抠底时底分不计。
 
-**范围**
-- 最后一墩若**闲家赢** → **抠底**：`闲家得分 += 底牌分 × 倍数`。
-- 倍数按**最后一墩牌型**：单张 ×2、对子 ×4、拖拉机 ×8，每多一对再 ×2（沿用 `DEFAULT_GAME_CONFIG` 的 4 个倍数字段）。
-- 未抠底 → 底牌分不计。
-- 展示：翻开底牌 + 倍数 + 抠底结果。
+**规则（用户确认）**
+- **末墩由闲家方赢** → 抠底计分；否则 **0 倍、不得分**（`multiplier = 0`、`points = 0`）。
+  - 「闲家赢」按**队伍**判定（`isDefender` / `teamOf`）：庄家与其**对家同队**，
+    庄家对家大出即视为**庄家方大出** → 同样 0 倍。
+  - **领出者是谁不影响是否抠底**（庄家方 / 闲家皆可），只影响倍数里的牌型。
+- 倍数 `= 2^(n+1)`，其中 **n = 末墩「拖拉机长度」**，按**末墩领出者所出的牌**计算：
+  - ⚠️ **以领出者为准，不是最终大出的那家**。例：领出甩 `♠K♠Q`，另一家以**一对大王**毙牌大出
+    → 仍只按单张算 ×2（而非按赢家的对子算 ×4）。
+  - 无对子 → n = 0 → ×2
+  - 1 个对子 → n = 1 → ×4（**对子视为长度 1 的拖拉机**）
+  - 有对子但不相连（如 `99QQ`）→ 各段长度均为 1 → n = 1 → ×4
+  - 长度 2 的拖拉机（如 `8899`）→ n = 2 → ×8（即使同时还夹着别的单对，仍取**最长段**）
+- 分牌：5 = 5 分，10 / K = 10 分（沿用 `trickPoints`）。
 
 **实现**
-- `core/scoring.ts`：`bottomMultiplier(handType, pairCount)`、`settleBottom(...)`。
-- 复用 `BottomReveal` 的弹窗样式展示底牌。
+- `hand.ts`：新增导出 `maxPairRunLength`（门内最长连续对子段，单对记 1、无对记 0）；`maxTractorLength` 改为复用它。
+- `scoring.ts`：`bottomTractorLength(cards, trumpSuit, levelRank)`（按门分别算后取最大，兼容甩牌被拦后换牌）、
+  `bottomMultiplier(n) = 2^(n+1)`、`settleBottom(lastTrick, bottomCards, banker, trumpSuit, levelRank)` → `BottomSettlement`。
+  `settleBottom` 取 **`lastTrick.leadPlayer` 的那一手**（而非 `winner`）算牌型。
+- `play.ts`：`collectTrick(...)` 在 `roundOver` 时结算，抠底分计入 `defendingPoints`；`PlayState.bottom` 供 UI 展示。
+- `components/RoundSettlement.tsx`：展示墩数 / 闲家得分（含抠底）/ 庄家逃分 / 合计，翻开底牌 + 底分 + n + 倍数 + 抠底结果。
 
-**验收**：单测单/对/拖各倍数、未抠底、总分结算。
+**验收**：✅ 单/对/不相连两对/拖2 各倍数、**未抠底 ×0**、**庄家对家大出 ×0**、单张末墩、
+领出者≠赢家（以领出为准）、领出者敌我无关、整轮结算全部通过。
+
+> ⚠️ 注意：抠底后 `闲家得分 + 庄家逃分` 会**大于 200**（抠底分 = 底牌分 × 倍数，可超过底牌面值）。
+> 不含抠底的墩分守恒仍为 `闲家墩分 + 庄家墩分 = 200 − 底牌分`。步骤 8 的升级判定用**含抠底**的 `defendingPoints`。
 
 ---
 
@@ -332,11 +356,15 @@ interface PlayState {
 ```
 步骤 1（循环）✅ → 2（Undo）✅
         → 4（合法性）✅ → 5（大小）✅
-        → 6（计分）✅ → 7（抠底）⬜ ← 下一步
-        → 8（升级/下一局）⬜ → 3（binlog 日志）⏸
+        → 6（计分）✅ → 7（抠底）✅
+        → 8（升级/下一局）⬜ ← 下一步 → 3（binlog 日志）⏸
 ```
 
 **给下一个 session 的接续提示**
+- **下一步是步骤 8**：校对 / 重写 `rank.ts::calculateUpgrade`（`isDefenderBanker` 分支较绕），
+  用**含抠底**的 `PlayState.defendingPoints` 结算升级级数与庄家，再在 `RoundSettlement` 面板加
+  「下一局」按钮（新级牌 / 新庄家 / 重新发牌）。
+- 步骤 7 的抠底分**已计入** `PlayState.defendingPoints`，因此升级判定直接用它即可（无需再加底分）。
 - 规则细节与踩过的坑都记在仓库记忆 `/memories/repo/notes.md`（含「门」/牌型分解、甩牌「自动出小」、DOM 自动化验证技巧）。
 - 新增/修改后务必 `sed -i 's/\r$//'` 统一 LF，再 `npx tsc -b` 自检。
 - 步骤 3（日志）仍**后置**：步骤 4~7 是在**没有事件层**的情况下完成的，将来补 binlog 时需要回填事件；

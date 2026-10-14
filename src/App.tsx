@@ -45,6 +45,7 @@ import BottomReveal from './components/BottomReveal.tsx'
 import TrickArea from './components/TrickArea.tsx'
 import PlayBar from './components/PlayBar.tsx'
 import ScoreBoard from './components/ScoreBoard.tsx'
+import RoundSettlement from './components/RoundSettlement.tsx'
 import CardComponent from './components/CardComponent.tsx'
 
 type Hands = Record<PlayerPosition, Card[]>
@@ -142,6 +143,10 @@ function App() {
   // 用 ref 持有最新出牌状态，避免 AI 出牌 / 收墩时的闭包陷阱
   const playStateRef = useRef<PlayState | null>(null)
   playStateRef.current = playState
+
+  // 用 ref 持有最新底牌，避免收墩结算抠底时的闭包陷阱
+  const buriedCardsRef = useRef<Card[]>([])
+  buriedCardsRef.current = buriedCards
 
   // ---- 新一局 ----
   function startNewGame() {
@@ -428,7 +433,9 @@ function App() {
       const cur = playStateRef.current
       const hs = handsRef.current
       if (!cur || !hs || !cur.trick.complete) return
-      const res = collectTrick(hs, cur)
+      const res = collectTrick(
+        hs, cur, buriedCardsRef.current, trumpSuitRef.current, levelRank,
+      )
       setHands(res.hands)
       setPlayState(res.state)
       if (res.roundOver) setPhase(GamePhase.RoundEnd)
@@ -818,11 +825,15 @@ function App() {
             />
           )}
 
-          {/* 本局结束 */}
-          {isRoundEnd && (
-            <div style={{ fontSize: 15, color: '#ffd700' }}>
-              本局结束 · 共 {playState?.tricks.length ?? 0} 墩
-            </div>
+          {/* 本局结束 · 结算（含抠底） */}
+          {isRoundEnd && playState && (
+            <RoundSettlement
+              trickCount={playState.tricks.length}
+              defendingPoints={playState.defendingPoints}
+              bankerPoints={playState.bankerPoints}
+              bottom={playState.bottom}
+              bottomCards={buriedCards}
+            />
           )}
 
           {/* 底牌查看（弹窗，仅南家为庄；桌中央留给出牌区） */}

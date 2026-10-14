@@ -169,8 +169,12 @@ function findTractorRun(units: PairUnit[], length: number): PairUnit[] | null {
   return null
 }
 
-/** 该门手牌里最长的拖拉机长度（对数）；不足 2 返回 0 */
-export function maxTractorLength(
+/**
+ * 该门手牌里最长的「连续对子段」长度（对数）：
+ *   单个对子记 1；无对子记 0；≥2 即为拖拉机。
+ * 同槽位的不同花色副级牌只算一个（不连续），与拖拉机判定一致。
+ */
+export function maxPairRunLength(
   cards: Card[],
   trumpSuit: Suit | null,
   levelRank: Rank,
@@ -183,6 +187,16 @@ export function maxTractorLength(
     cur = (i > 0 && slots[i] === slots[i - 1] + 1) ? cur + 1 : 1
     if (cur > best) best = cur
   }
+  return best
+}
+
+/** 该门手牌里最长的拖拉机长度（对数）；不足 2 返回 0 */
+export function maxTractorLength(
+  cards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  const best = maxPairRunLength(cards, trumpSuit, levelRank)
   return best >= 2 ? best : 0
 }
 
