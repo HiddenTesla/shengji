@@ -16,7 +16,7 @@
 | 5 · 大小判断 | ✅ 完成 | `trick.ts`；20 条用例 + 整轮模拟通过 |
 | 6 · 计分 | ✅ 完成 | `scoring.ts` + `ScoreBoard`，分数守恒已验证 |
 | 7 · 底牌计分（抠底） | ✅ 完成 | `scoring.ts` 抠底函数 + `play.ts` 末墩结算 + `RoundSettlement` 面板 |
-| 8 · 升级 / 上台 / 开下一局 | ⬜ **待实现** | **下一步从这里开始**；接入前先校对 `rank.ts::calculateUpgrade` |
+| 8 · 升级 / 上台 / 开下一局 | 🔶 部分完成 | 规则 + 结算展示 ✅；「下一局」接线 ⬜ |
 
 **未纳入步骤、但已知待办**
 - `DEFAULT_GAME_CONFIG.allowThrow` 至今**未被任何代码引用**（第 4 步的甩牌规则已改用 `throwFallback` 实现开关语义可后续补）。
@@ -35,14 +35,14 @@
 | `core/types.ts` | 已含 `HandType`(Single/Pair/Tractor/Throw)、`PlayedCards`、`Trick`、`RoundScore`、`GameConfig`（含抠底倍数） |
 | `core/trump.ts` | `isTrump` / `getTrumpRank`（**已验证大小次序正确**）/ `canCardBeat`（部分可用） |
 | `core/card.ts` | `groupCardsForDisplay`（**门**的定义）、`sortCards`、`sameRank` / `sameSuit` / `isTrumpCard` |
-| `core/deck.ts` / `bidding.ts` / `bury.ts` / `rank.ts` | 发牌 / 叫主 / 埋底 / 升级判定 |
+| `core/deck.ts` / `bidding.ts` / `bury.ts` / `rank.ts` | 发牌 / 叫主 / 埋底 / 升级判定（✅ 已按「闲家得分」重写） |
 | `core/hand.ts` | ✅ 门 / 门内次序 / 牌型 / 校验 / 托管选牌 / `throwFallback`（步骤 4） |
 | `core/trick.ts` | ✅ 墩大小比较 / 定胜负（步骤 5） |
 | `core/scoring.ts` | ✅ 墩分统计与累计（步骤 6）+ 抠底倍数与结算（步骤 7） |
 | `core/play.ts` | ✅ 出牌状态机（含 `resolveLead` 自动出小） |
 | `App.tsx` | ✅ 出牌阶段已完整接入（出牌区 / 控制栏 / 计分板 / 撤销 / 托管驱动） |
 
-**尚缺**：升级上台与下一局（步骤 8）、binlog 日志（步骤 3）、测试框架。
+**尚缺**：升级后的「下一局」接线（步骤 8 剩余）、binlog 日志（步骤 3）、测试框架。
 （`core/ai.ts` / `components/GameLog.tsx` 均未建立。）
 
 ### 「门」的定义（贯穿全阶段）
@@ -326,11 +326,40 @@ interface PlayState {
 
 ---
 
-### 步骤 8（收尾）· 升级 / 上台 / 开下一局 ⬜ 待实现
+### 步骤 8（收尾）· 升级 / 上台 / 开下一局 🔶 部分完成
 
-- 用 `rank.ts` 的 `RankManager` + `calculateUpgrade` 结算升级级数与庄家。
-- ⚠️ 现有 `calculateUpgrade` 的 `isDefenderBanker` 分支逻辑较绕，**接入前先按选定规则校对/重写**。
-- 结算面板 → 下一局：新级牌、新庄家、重新发牌。
+> **已完成（规则 + 展示）**：
+> `rank.ts` 删除旧的 `calculateUpgrade`/`simpleUpgrade`（`isDefenderBanker` 分支太绕），
+> 改为**纯函数**：`calculateLevelChange(闲家得分)` → `{ side, switchBanker, steps }`，
+> `advanceLevel(级牌, 级数)` → `{ level, actualSteps, gameWon }`，
+> `settleLevel(闲家得分, 庄家, 两级牌)` → `LevelSettlement`（含升级方、旧/新级牌、下一局庄家）。
+>
+> **两队各自记级（标准双升）**：`LevelBoard = Record<Team, Rank>`，`initialLevelBoard()` 两队都从 2 起；
+> 本局打的级牌 = **庄家队的级牌**（`App.tsx`：`levels[teamOf(banker)]`）。
+>
+> **规则（按闲家得分）**：
+> | 闲家得分 | 结果 |
+> |---|---|
+> | 0 | 庄家连庄，升 3 级 |
+> | 5 – 35 | 庄家连庄，升 2 级 |
+> | 40 – 75 | 庄家连庄，升 1 级 |
+> | 80 – 115 | **换庄**，不升级 |
+> | 120 – 155 | **换庄**，闲家升 1 级 |
+> | ≥ 160 | **换庄**，闲家每多 40 分再升 1 级（`floor((得分−80)/40)`，上不封顶）|
+>
+> 换庄时新庄家 = 原庄家的**下家**（`nextPlayer`；座位东南西北与队伍交替，故必为对方队伍）；
+> 不换庄则庄家不变。级牌封顶 A，升过 A 即 `gameWon`（通关）。
+>
+> 展示：`components/RoundSettlement.tsx` 增「📈 升级判定」区（庄家连庄/闲家上台、升几级→新级牌、
+> 两队级牌、下一局庄家）。实测 15 条分档用例 + 换庄/通关/边界用例全过。
+>
+> ⚠️ **未接线**：`levels` 目前是只读常量（`useState` 不取 setter），**没有**「下一局」按钮，
+> 也不重新发牌。
+
+**剩余工作（下一 session）**
+- 在 `RoundSettlement` 加「下一局」按钮：`setLevels(升级后的 board)`、`setBanker(nextBanker)`、重新发牌 → `Dealing`。
+- 需把 `levels` 改成可写的 state，并留意发牌/叫主/埋底各 `useEffect` 的依赖（`levelRank` 会随之变化）。
+- 通关（`gameWon`）→ `GamePhase.GameEnd` 的界面。
 
 ---
 
@@ -356,14 +385,16 @@ interface PlayState {
 ```
 步骤 1（循环）✅ → 2（Undo）✅
         → 4（合法性）✅ → 5（大小）✅
-        → 6（计分）✅ → 7（抠底）✅
-        → 8（升级/下一局）⬜ ← 下一步 → 3（binlog 日志）⏸
+        → 6（计分）✅ → 7（抠底）✅ → 8a（升级规则+展示）✅
+        → 8b（下一局接线）⬜ ← 下一步 → 3（binlog 日志）⏸
 ```
 
 **给下一个 session 的接续提示**
-- **下一步是步骤 8**：校对 / 重写 `rank.ts::calculateUpgrade`（`isDefenderBanker` 分支较绕），
-  用**含抠底**的 `PlayState.defendingPoints` 结算升级级数与庄家，再在 `RoundSettlement` 面板加
-  「下一局」按钮（新级牌 / 新庄家 / 重新发牌）。
+- **下一步是步骤 8b（下一局接线）**：`rank.ts` 的升级规则已重写完成（`calculateLevelChange` / `advanceLevel` /
+  `settleLevel`，两队各自记级），`RoundSettlement` 也已展示判定结果；剩下的是把 `levels` 变成可写 state，
+  加「下一局」按钮 → 应用新级牌 / 新庄家 / 重新发牌（`Dealing`），并处理 `gameWon` → `GameEnd`。
+- 因为本局打的级牌 = `levels[teamOf(banker)]`，**开新局时 `levelRank` 会变**，需留意发牌/叫主/埋底
+  `useEffect` 的依赖与 `trumpSuitRef`/`banker` 的重置顺序。
 - 步骤 7 的抠底分**已计入** `PlayState.defendingPoints`，因此升级判定直接用它即可（无需再加底分）。
 - 规则细节与踩过的坑都记在仓库记忆 `/memories/repo/notes.md`（含「门」/牌型分解、甩牌「自动出小」、DOM 自动化验证技巧）。
 - 新增/修改后务必 `sed -i 's/\r$//'` 统一 LF，再 `npx tsc -b` 自检。

@@ -9,11 +9,11 @@ import {
   POSITION_NAME_ZH,
   PlayerMode,
   GamePhase,
-  Rank,
   Suit,
   ALL_POSITIONS,
   SUIT_SYMBOL,
   RANK_NAME,
+  teamOf,
 } from './core/types.ts'
 import { groupCardsForDisplay } from './core/card.ts'
 import { createDecks, shuffleCards, dealCards } from './core/deck.ts'
@@ -26,6 +26,11 @@ import {
   determineTrumpFromBottom,
 } from './core/bidding.ts'
 import { aiChooseBury, countPoints } from './core/bury.ts'
+import {
+  type LevelBoard,
+  initialLevelBoard,
+  settleLevel,
+} from './core/rank.ts'
 import {
   type PlayState,
   aiChoosePlay,
@@ -126,10 +131,13 @@ function App() {
   /** 撤销栈（仅记录「玩家」出牌前的状态；托管出牌不压栈） */
   const [history, setHistory] = useState<UndoSnapshot[]>([])
 
-  const levelRank = Rank.Two
+  /** 两队各自的级牌（标准双升：本局打庄家队的级牌） */
+  const [levels] = useState<LevelBoard>(() => initialLevelBoard())
+
+  // 本局打的级牌 = **庄家队**的级牌（首局未定庄时按南家队；两队都从 2 打起）
+  const levelRank = levels[teamOf(banker ?? PlayerPosition.South)]
   const gameDelay = (baseMs: number) =>
     Math.round(baseMs * SPEED_MULTIPLIERS[gameSpeed - 1])
-
   // 用 ref 持有最新 bidState，避免闭包陷阱
   const bidStateRef = useRef(bidState)
   bidStateRef.current = bidState
@@ -496,6 +504,11 @@ function App() {
   const isPlaying = phase === GamePhase.Playing
   const isRoundEnd = phase === GamePhase.RoundEnd
 
+  // 本局等级结算（仅展示；「下一局」的接线留待后续）
+  const levelSettlement = isRoundEnd && playState && banker
+    ? settleLevel(playState.defendingPoints, banker, levels)
+    : null
+
   // 南家报主栏：发牌/叫主阶段显示（仅南家为手动时），窗口内始终可操作
   const southManual = playerModes[PlayerPosition.South] === PlayerMode.Manual
   const showBar = southManual && (isDealing || (isBidding && !flipping))
@@ -825,7 +838,7 @@ function App() {
             />
           )}
 
-          {/* 本局结束 · 结算（含抠底） */}
+          {/* 本局结束 · 结算（含抠底与升级） */}
           {isRoundEnd && playState && (
             <RoundSettlement
               trickCount={playState.tricks.length}
@@ -833,6 +846,9 @@ function App() {
               bankerPoints={playState.bankerPoints}
               bottom={playState.bottom}
               bottomCards={buriedCards}
+              banker={banker}
+              levels={levels}
+              levelSettlement={levelSettlement}
             />
           )}
 

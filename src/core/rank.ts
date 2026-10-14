@@ -3,8 +3,13 @@
 // ============================================================
 
 import {
+  type PlayerPosition,
   Rank,
   RANK_NAME,
+  Team,
+  nextPlayer,
+  oppositeTeam,
+  teamOf,
 } from './types.ts'
 
 /** 可打的等级列表（从小到大） */
@@ -102,130 +107,127 @@ export class RankManager {
   }
 }
 
-// ---- 升级判定 ----
+// ============================================================
+// 升级判定（按「闲家得分」决定等级变化）
+//
+//   标准双升：**两队各自记级**，本局打「庄家队的级牌」。
+//     - 庄家守住（闲家得分 < 80） → 庄家队连庄并升级
+//     - 闲家上台（闲家得分 ≥ 80） → 换庄，闲家队升级
+// ============================================================
 
-export interface UpgradeResult {
-  /** 是否换庄 */
+/** 每队各自的级牌（标准双升：本局打庄家队的级牌） */
+export type LevelBoard = Record<Team, Rank>
+
+/** 初始级牌：两队都从 2 打起 */
+export function initialLevelBoard(): LevelBoard {
+  return { [Team.NS]: Rank.Two, [Team.EW]: Rank.Two }
+}
+
+/** 某队当前的级牌 */
+export function levelOf(board: LevelBoard, team: Team): Rank {
+  return board[team]
+}
+
+/** 升级结果（纯规则，不含「谁升」） */
+export interface LevelChange {
+  /** 升级方：'banker' = 庄家连庄升级；'defender' = 闲家上台升级 */
+  side: 'banker' | 'defender'
+  /** 是否换庄（闲家方成为下局庄家方） */
   switchBanker: boolean
-  /** 庄家升级级数（0=不升级） */
-  upgradeSteps: number
-  /** 是否通关 */
-  gameWon: boolean
+  /** 升级方升几级（0 = 只换庄、不升级） */
+  steps: number
 }
 
 /**
- * 根据防守方得分判定升级结果
+ * 按「闲家（防守方）得分」判定等级变化（最常见规则）：
  *
- * 计分规则：
- *   防守方得分 < 40   → 庄家连升 3 级
- *   40 ≤ 得分 < 80    → 庄家连升 2 级
- *   80 ≤ 得分 < 120   → 庄家升 1 级（换庄）
- *   120 ≤ 得分 < 160  → 防守方上台（不升级）
- *   160 ≤ 得分 < 200  → 防守方升 1 级
- *   200 ≤ 得分        → 防守方升 2 级
+ *   0 分            → 庄家连庄，升 3 级
+ *   5 – 35 分       → 庄家连庄，升 2 级
+ *   40 – 75 分      → 庄家连庄，升 1 级
+ *   80 – 115 分     → 换庄，不升级
+ *   120 – 155 分    → 换庄，闲家升 1 级
+ *   ≥ 160 分        → 换庄，每多 40 分闲家再升 1 级（上不封顶）：
+ *                     升级级数 = floor((得分 − 80) / 40)
  *
- * @param defendingPoints 防守方总得分（含底牌分）
- * @param isDefenderBanker 防守方是否为庄家
- * @param manager 等级管理器
+ * （得分必为 5 的倍数，故 35/40 与 75/80 的边界不产生歧义）
  */
-export function calculateUpgrade(
-  defendingPoints: number,
-  isDefenderBanker: boolean,
-  manager: RankManager,
-): UpgradeResult {
-  let upgradeSteps: number
-  let switchBanker: boolean
-
+export function calculateLevelChange(defendingPoints: number): LevelChange {
+  if (defendingPoints <= 0) {
+    return { side: 'banker', switchBanker: false, steps: 3 }
+  }
   if (defendingPoints < 40) {
-    upgradeSteps = 3
-    switchBanker = false // 庄家继续坐庄
+    return { side: 'banker', switchBanker: false, steps: 2 }
   }
-  else if (defendingPoints < 80) {
-    upgradeSteps = 2
-    switchBanker = false
+  if (defendingPoints < 80) {
+    return { side: 'banker', switchBanker: false, steps: 1 }
   }
-  else if (defendingPoints < 120) {
-    upgradeSteps = 1
-    switchBanker = true // 换庄
-  }
-  else if (defendingPoints < 160) {
-    upgradeSteps = 0
-    switchBanker = true // 防守方上台
-  }
-  else if (defendingPoints < 200) {
-    upgradeSteps = 1
-    switchBanker = true
-  }
-  else {
-    upgradeSteps = 2
-    switchBanker = true
-  }
-
-  // 如果不是防守方坐庄，则升级是对庄家而言
-  // 如果防守方不是庄家（即庄家是进攻方），防守方得分高 → 进攻方升级
-
-  let gameWon = false
-
-  if (!isDefenderBanker) {
-    // 庄家是进攻方，防守方得分低 → 庄家升级
-    if (upgradeSteps > 0 && !switchBanker) {
-      const actual = manager.upgrade(upgradeSteps)
-      gameWon = manager.isGameWon
-      upgradeSteps = actual
-    }
-    else {
-      // 换庄
-      switchBanker = true
-    }
-  }
-  else {
-    // 庄家是防守方，防守方得分高 → 庄家升级
-    if (switchBanker && upgradeSteps > 0) {
-      // 防守方作为庄家升级
-      const actual = manager.upgrade(upgradeSteps)
-      gameWon = manager.isGameWon
-      upgradeSteps = actual
-      switchBanker = true // 继续坐庄
-    }
-    else if (!switchBanker && upgradeSteps > 0) {
-      // 防守方得分低但防守方是庄家 ? 实际上 defense < 80 时 switchBanker=false
-      // 说明庄家（防守方）保庄，升级
-      const actual = manager.upgrade(upgradeSteps)
-      gameWon = manager.isGameWon
-      upgradeSteps = actual
-    }
-    else {
-      // 进攻方上台
-      switchBanker = true
-      upgradeSteps = 0
-    }
-  }
-
   return {
-    switchBanker,
-    upgradeSteps,
-    gameWon,
+    side: 'defender',
+    switchBanker: true,
+    steps: Math.floor((defendingPoints - 80) / 40),
   }
 }
 
-/**
- * 简化版升级判定
- * @param bankerTeamPoints 庄家队伍得分
- * @param defenderTeamPoints 防守队伍得分
- * @param isBankerAttacker 庄家是否为进攻方（即是否叫主成功那方）
- */
-export function simpleUpgrade(
-  bankerTeamPoints: number,
-  defenderTeamPoints: number,
-  isBankerAttacker: boolean,
-  manager: RankManager,
-): UpgradeResult {
-  // 如果庄家是进攻方，防守方得分是关键
-  // 如果庄家是防守方，则庄家自己的得分是关键
-  const keyPoints = isBankerAttacker
-    ? defenderTeamPoints
-    : bankerTeamPoints
+/** 某队升级后的级牌（封顶 A；升过 A 即通关） */
+export function advanceLevel(
+  current: Rank,
+  steps: number,
+): { level: Rank; actualSteps: number; gameWon: boolean } {
+  const from = LEVEL_INDEX_MAP.get(current) ?? 0
+  const to = from + steps
+  if (to >= LEVEL_RANKS.length) {
+    return {
+      level: Rank.Ace,
+      actualSteps: LEVEL_RANKS.length - from,
+      gameWon: true,
+    }
+  }
+  return { level: LEVEL_RANKS[to], actualSteps: Math.max(0, steps), gameWon: false }
+}
 
-  return calculateUpgrade(keyPoints, !isBankerAttacker, manager)
+/** 一局的等级结算（含升级方、新级牌、下一局庄家） */
+export interface LevelSettlement extends LevelChange {
+  /** 升级方（队伍） */
+  upgradingTeam: Team
+  /** 升级前的级牌 */
+  fromLevel: Rank
+  /** 升级后的级牌 */
+  toLevel: Rank
+  /** 实际升了几级（到达 A 后封顶） */
+  actualSteps: number
+  /** 是否通关（升过 A） */
+  gameWon: boolean
+  /** 下一局庄家（换庄时为原庄家的**下家**，否则不变） */
+  nextBanker: PlayerPosition
+}
+
+/**
+ * 结算一局的等级变化。
+ *
+ * @param defendingPoints 闲家（防守方）本局总得分（**含抠底**）
+ * @param banker 本局庄家
+ * @param board 两队当前级牌
+ */
+export function settleLevel(
+  defendingPoints: number,
+  banker: PlayerPosition,
+  board: LevelBoard,
+): LevelSettlement {
+  const change = calculateLevelChange(defendingPoints)
+  const bankerTeam = teamOf(banker)
+  const upgradingTeam = change.side === 'banker'
+    ? bankerTeam
+    : oppositeTeam(bankerTeam)
+  const fromLevel = board[upgradingTeam]
+  const { level, actualSteps, gameWon } = advanceLevel(fromLevel, change.steps)
+  return {
+    ...change,
+    upgradingTeam,
+    fromLevel,
+    toLevel: level,
+    actualSteps,
+    gameWon,
+    nextBanker: change.switchBanker ? nextPlayer(banker) : banker,
+  }
 }
 
