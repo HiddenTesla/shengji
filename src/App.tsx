@@ -67,7 +67,7 @@ const BID_WINDOW_SECONDS = 8
 
 /** 底牌张数（= 庄家埋底张数） */
 const BOTTOM_COUNT = 8
-const SPEED_MULTIPLIERS = [2, 1.5, 1, 0.75, 0.5] as const
+const SPEED_MULTIPLIERS = [2, 1.2, 0.7, 0.4, 0.2] as const
 
 function App() {
   // ---- 游戏状态 ----
