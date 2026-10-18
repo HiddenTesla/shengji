@@ -160,6 +160,8 @@ function App() {
   const [bidState, setBidState] = useState<BidState>(createBidState(0))
   const [trumpSuit, setTrumpSuit] = useState<Suit | null>(null)
   const [banker, setBanker] = useState<PlayerPosition | null>(null)
+  /** 当前报主所用的牌（公开信息，保留快照以便整局展示在桌面） */
+  const [declaredCards, setDeclaredCards] = useState<Card[]>([])
 
   // ---- 发牌状态（逐张发牌） ----
   const fullHandsRef = useRef<Hands | null>(null)
@@ -268,6 +270,7 @@ function App() {
     setPlayState(null)
     setHistory([])
     setAutoPaused(false)
+    setDeclaredCards([])
     setBidState(createBidState(0))
     setPhase(GamePhase.Dealing)
   }
@@ -366,6 +369,16 @@ function App() {
   function applyDeclare(decl: Declaration) {
     const prev = bidStateRef.current
     setBidState({ ...prev, current: decl, history: [...prev.history, decl] })
+    // 记录报主所用的牌（从当前/完整手牌里取回 Card 对象，此后整局展示在桌上）
+    const handNow = handsRef.current?.[decl.player] ?? []
+    const handFull = fullHandsRef.current?.[decl.player] ?? []
+    const byId = new Map<string, Card>()
+    for (const card of [...handFull, ...handNow]) byId.set(card.id, card)
+    setDeclaredCards(
+      decl.cardIds
+        .map(id => byId.get(id))
+        .filter((card): card is Card => card !== undefined),
+    )
     if (phase === GamePhase.BiddingTrump) {
       setBidSeconds(seconds =>
         seconds < FIRST_BID_MIN_REMAINING_SECONDS
@@ -792,6 +805,36 @@ function App() {
     )
   }
 
+  /** 报主牌：只在该玩家报主时显示，放在其座位与桌心之间 */
+  function renderDeclaredCards(pos: PlayerPosition) {
+    if (declaredCards.length === 0) return null
+    if (bidState.current?.player !== pos) return null
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '3px 8px',
+        borderRadius: 8,
+        background: 'rgba(0,0,0,0.3)',
+        border: '1px solid rgba(255,255,255,0.12)',
+      }}>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+          报主
+        </span>
+        {declaredCards.map(card => (
+          <CardComponent
+            key={card.id}
+            card={card}
+            faceUp
+            small
+            scale={0.7}
+          />
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div style={{
       display: 'flex',
@@ -897,6 +940,13 @@ function App() {
         paddingTop: 12,
         position: 'relative',
       }}>
+        {/* 西家 / 东家报主牌：显示在其座位上方（顶栏左右角） */}
+        <div style={{ position: 'absolute', left: 16, bottom: 0 }}>
+          {renderDeclaredCards(PlayerPosition.West)}
+        </div>
+        <div style={{ position: 'absolute', right: 16, bottom: 0 }}>
+          {renderDeclaredCards(PlayerPosition.East)}
+        </div>
         <OpponentHand
           position={PlayerPosition.North}
           cards={hands.N}
@@ -916,6 +966,7 @@ function App() {
           onToggleCard={canSelectPosition(PlayerPosition.North)
             ? toggleCard
             : undefined}
+          labelExtra={renderDeclaredCards(PlayerPosition.North)}
         />
         {playingTurn === PlayerPosition.North && (
           <div style={{ marginTop: 4 }}>
@@ -1361,6 +1412,8 @@ function App() {
               mode={playerModes[PlayerPosition.South]}
               onToggle={() => toggleMode(PlayerPosition.South)}
             />
+            {/* 南家报主牌：显示在「南家」右侧 */}
+            {renderDeclaredCards(PlayerPosition.South)}
           </div>
           <span style={{
             fontSize: 16,
@@ -1425,6 +1478,8 @@ function App() {
         <div style={{
           display: 'flex',
           justifyContent: 'center',
+          alignItems: 'center',
+          gap: 12,
         }}>
           {isBurying && bankerIsAuto ? (
             <div style={{
