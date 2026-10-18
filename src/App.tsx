@@ -13,6 +13,7 @@ import {
   ALL_POSITIONS,
   SUIT_SYMBOL,
   RANK_NAME,
+  partnerOf,
   teamOf,
 } from './core/types.ts'
 import { groupCardsForDisplay } from './core/card.ts'
@@ -446,9 +447,18 @@ function App() {
     if (playerModes[banker] !== PlayerMode.Auto) return
 
     const t = setTimeout(() => {
-      const hand = handsRef.current?.[banker]
-      if (!hand) return
-      const buried = aiChooseBury(hand, BOTTOM_COUNT, trumpSuitRef.current, levelRank)
+      const hs = handsRef.current
+      const hand = hs?.[banker]
+      if (!hs || !hand) return
+      // 埋底分风格暂时固定为 0（正常）；后续再接入设置 UI
+      const buried = aiChooseBury(
+        hand,
+        BOTTOM_COUNT,
+        trumpSuitRef.current,
+        levelRank,
+        0,
+        { partnerHand: hs[partnerOf(banker)] },
+      )
       applyBury(banker, buried)
     }, gameDelay(900))
     return () => clearTimeout(t)
