@@ -19,6 +19,7 @@ import {
   chooseLead,
   doorOf,
   slotOf,
+  throwFallback,
   validateFollow,
 } from './hand.ts'
 import { judgePlays } from './trick.ts'
@@ -81,9 +82,281 @@ function safePointLeadBonus(
   return SAFE_POINT_LEAD_BONUS
 }
 
+/**
+ * 钓主（ruff bait）评价：
+ * 主动领出对手可毙的副牌组合，用少量送分换取对手主牌的消耗。
+ * 每钓出 1 张主牌按 1 墩估值；但组合本身每张主牌最多允许送 5 分，
+ * 超过则不值得（如一对 5 = 10 分 / 2 张主牌，值得；K1010 = 30 分 / 3 张，不值得）。
+ */
+const TRUMP_DRAW_VALUE = TRICK_WIN_VALUE
+const RUFF_BAIT_POINT_PER_TRUMP = 5
+const RUFF_BAIT_MAX_BONUS = 2 * TRICK_WIN_VALUE
+const RUFF_BAIT_OVER_POINT_PENALTY = 2
+const MAX_THROW_LEAD_CARDS = 5
+const MAX_THROW_LEAD_CANDIDATES = 20
+
 function cardCost(card: Card, trumpSuit: Suit | null, levelRank: Rank): number {
   const slot = slotOf(card, trumpSuit, levelRank)
   return doorOf(card, trumpSuit, levelRank) === 'trump' ? 20 + slot : slot
+}
+
+interface LeadPairUnit {
+  slot: number
+  cards: Card[]
+}
+
+/** 把一门手牌拆成对子单元（用于生成领出候选 / 判断能否毙牌） */
+function leadPairUnits(
+  cards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): LeadPairUnit[] {
+  const byKey = new Map<string, Card[]>()
+  for (const card of cards) {
+    const key = `${card.suit}|${card.rank}`
+    const arr = byKey.get(key) ?? []
+    arr.push(card)
+    byKey.set(key, arr)
+  }
+  const units: LeadPairUnit[] = []
+  for (const arr of byKey.values()) {
+    if (arr.length >= 2) {
+      units.push({ slot: slotOf(arr[0], trumpSuit, levelRank), cards: arr.slice(0, 2) })
+    }
+  }
+  return units
+}
+
+/** 是否存在指定长度的连续对子段（拖拉机） */
+function hasConsecutivePairRun(units: LeadPairUnit[], length: number): boolean {
+  if (length < 2 || units.length < length) return false
+  const sorted = [...units].sort((a, b) => a.slot - b.slot)
+  for (let i = 0; i + length <= sorted.length; i++) {
+    let ok = true
+    for (let j = 1; j < length; j++) {
+      if (sorted[i + j].slot !== sorted[i + j - 1].slot + 1) {
+        ok = false
+        break
+      }
+    }
+    if (ok) return true
+  }
+  return false
+}
+
+/**
+ * 判断某家能否用主牌毙掉这手副牌领出（只判断合法性与形态，不比较大小）。
+ * 与 validateFollow 的「全主牌补牌」约束保持一致。
+ */
+function canRuffWithTrump(
+  hand: Card[],
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  if (lead.door === null || lead.door === 'trump') return false
+  if (hand.some(c => doorOf(c, trumpSuit, levelRank) === lead.door)) return false
+
+  const trumps = hand.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump')
+  if (trumps.length < lead.count) return false
+
+  if (lead.tractor >= 2) {
+    return hasConsecutivePairRun(
+      leadPairUnits(trumps, trumpSuit, levelRank),
+      lead.tractor,
+    )
+  }
+  if (lead.pairs > 0) {
+    const needPairs = Math.min(lead.pairs, Math.floor(lead.count / 2))
+    return leadPairUnits(trumps, trumpSuit, levelRank).length >= needPairs
+  }
+  return true
+}
+
+/** 预估毙牌方需要消耗的主牌力（取最便宜的若干张主牌） */
+function cheapestRuffCost(
+  hand: Card[],
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  const trumps = hand
+    .filter(c => doorOf(c, trumpSuit, levelRank) === 'trump')
+    .sort((a, b) =>
+      cardCost(a, trumpSuit, levelRank) - cardCost(b, trumpSuit, levelRank),
+    )
+  return trumps
+    .slice(0, lead.count)
+    .reduce((sum, c) => sum + cardCost(c, trumpSuit, levelRank), 0)
+}
+
+/** 从 leader 开始的四家出牌顺序 */
+function turnOrderFrom(player: PlayerPosition): PlayerPosition[] {
+  const order: PlayerPosition[] = [player]
+  let current = player
+  for (let i = 0; i < 3; i++) {
+    current = nextPlayer(current)
+    order.push(current)
+  }
+  return order
+}
+
+/** 生成同门内的所有拖拉机领出候选（长度 ≥ 2 对，含子段） */
+function generateTractorLeadCandidates(
+  doorCards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[][] {
+  const units = leadPairUnits(doorCards, trumpSuit, levelRank)
+    .sort((a, b) => a.slot - b.slot)
+  const runs: LeadPairUnit[][] = []
+  let current: LeadPairUnit[] = []
+  for (const unit of units) {
+    if (current.length === 0
+      || unit.slot === current[current.length - 1].slot + 1) {
+      current.push(unit)
+    }
+    else {
+      if (current.length >= 2) runs.push(current)
+      current = [unit]
+    }
+  }
+  if (current.length >= 2) runs.push(current)
+
+  const candidates: Card[][] = []
+  for (const run of runs) {
+    for (let length = 2; length <= run.length; length++) {
+      for (let start = 0; start + length <= run.length; start++) {
+        candidates.push(
+          run.slice(start, start + length).flatMap(unit => unit.cards),
+        )
+      }
+    }
+  }
+  return candidates
+}
+
+/** 生成同门内的甩牌候选（最多 5 张，保留点数最低的若干组） */
+function generateThrowLeadCandidates(
+  doorCards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[][] {
+  const candidates: Card[][] = []
+  const maxSize = Math.min(MAX_THROW_LEAD_CARDS, doorCards.length)
+  for (let size = 3; size <= maxSize; size++) {
+    const combo: Card[] = []
+    const walk = (start: number) => {
+      if (combo.length === size) {
+        const shape = analyzeShape(combo, trumpSuit, levelRank)
+        if (shape.type === HandType.Throw && shape.door !== null) {
+          candidates.push([...combo])
+        }
+        return
+      }
+      for (let i = start; i < doorCards.length; i++) {
+        combo.push(doorCards[i])
+        walk(i + 1)
+        combo.pop()
+      }
+    }
+    walk(0)
+  }
+  candidates.sort((a, b) => trickPoints(a) - trickPoints(b))
+  return candidates.slice(0, MAX_THROW_LEAD_CANDIDATES)
+}
+
+/**
+ * 评估「钓主」领出：领出对手可毙的副牌组合，主动消耗对手主牌。
+ *
+ * 只有同时满足下面条件才返回分数（否则返回 null，不进入候选）：
+ *   1. 至少一名对手对该门缺门，且能用主牌合法毙掉这个牌型；
+ *   2. 对家不在该对手之后形成反毙（否则结果不确定）。
+ *
+ * 分数 = 输掉本墩的基础分 + 对手主牌力 - 自己牌力 + 钓主加成。
+ * 送分超过阈值时，额外按超出点数降权（如 K1010）。
+ */
+function scoreRuffBaitLead(
+  cards: Card[],
+  lead: HandShape,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number | null {
+  if (lead.door === null || lead.door === 'trump') return null
+
+  const order = turnOrderFrom(player)
+  const partner = order.find(
+    pos => pos !== player && teamOf(pos) === teamOf(player),
+  )
+  if (!partner) return null
+  const partnerIndex = order.indexOf(partner)
+
+  let ruffingOpponent: PlayerPosition | null = null
+  for (let i = 1; i < order.length; i++) {
+    const pos = order[i]
+    if (teamOf(pos) === teamOf(player)) continue
+    if (!canRuffWithTrump(hands[pos], lead, trumpSuit, levelRank)) continue
+
+    // 对家在这家之后、也能用主牌毙 → 结果不确定，不按「必被毙」估值
+    if (i < partnerIndex
+      && canRuffWithTrump(hands[partner], lead, trumpSuit, levelRank)) {
+      return null
+    }
+    ruffingOpponent = pos
+    break
+  }
+  if (!ruffingOpponent) return null
+
+  const leadPoints = trickPoints(cards)
+  const trumpsSpent = cards.length
+  const ownCost = cards.reduce(
+    (sum, card) => sum + cardCost(card, trumpSuit, levelRank),
+    0,
+  )
+  const opponentCost = cheapestRuffCost(
+    hands[ruffingOpponent], lead, trumpSuit, levelRank,
+  )
+  let score = -TRICK_WIN_VALUE - leadPoints - ownCost + opponentCost
+  const limit = trumpsSpent * RUFF_BAIT_POINT_PER_TRUMP
+  if (leadPoints <= limit) {
+    score += Math.min(trumpsSpent * TRUMP_DRAW_VALUE, RUFF_BAIT_MAX_BONUS)
+  }
+  else {
+    // 送分过高：不仅不给钓主加成，还要额外降权（K1010 这类组合）
+    score -= (leadPoints - limit) * RUFF_BAIT_OVER_POINT_PENALTY
+  }
+  return score
+}
+
+/**
+ * 单张搜索中的钓主加成：本方领出的副牌被对手用主牌毙掉并大出时，
+ * 按领出牌的点数 / 张数给予奖励。只在 ruffBait=true（本方领出）时调用。
+ */
+function ruffBaitBonus(
+  plays: PlayState['trick']['plays'],
+  winner: PlayerPosition,
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  if (lead.door === null || lead.door === 'trump') return 0
+
+  const winnerPlay = plays.find(play => play.player === winner)
+  if (!winnerPlay) return 0
+  if (!winnerPlay.cards.every(c => doorOf(c, trumpSuit, levelRank) === 'trump')) {
+    return 0
+  }
+
+  const leadCards = plays[0].cards
+  const leadPoints = trickPoints(leadCards)
+  const trumpsSpent = leadCards.length
+  const limit = trumpsSpent * RUFF_BAIT_POINT_PER_TRUMP
+  if (leadPoints <= limit) {
+    return Math.min(trumpsSpent * TRUMP_DRAW_VALUE, RUFF_BAIT_MAX_BONUS)
+  }
+  return -(leadPoints - limit) * RUFF_BAIT_OVER_POINT_PENALTY
 }
 
 function utility(
@@ -93,6 +366,7 @@ function utility(
   trumpSuit: Suit | null,
   levelRank: Rank,
   leadBonus: number,
+  ruffBait: boolean,
 ): number {
   const winner = judgePlays(plays, lead, trumpSuit, levelRank)
   const points = trickPoints(plays.flatMap(play => play.cards))
@@ -106,8 +380,10 @@ function utility(
   }, 0)
 
   const base = (won ? TRICK_WIN_VALUE + points : -TRICK_WIN_VALUE - points) + cardEconomy
-  // 安全 K 的加成只在真的赢下本墩时兑现
-  return base + (won ? leadBonus : 0)
+  if (won) return base + leadBonus
+  return base + (ruffBait
+    ? ruffBaitBonus(plays, winner, lead, trumpSuit, levelRank)
+    : 0)
 }
 
 function searchTrick(
@@ -119,11 +395,12 @@ function searchTrick(
   trumpSuit: Suit | null,
   levelRank: Rank,
   leadBonus: number,
+  ruffBait: boolean,
   alpha: number,
   beta: number,
 ): number {
   if (plays.length === 4) {
-    return utility(plays, lead, rootTeam, trumpSuit, levelRank, leadBonus)
+    return utility(plays, lead, rootTeam, trumpSuit, levelRank, leadBonus, ruffBait)
   }
 
   const available = hands[turn]
@@ -151,6 +428,7 @@ function searchTrick(
       trumpSuit,
       levelRank,
       leadBonus,
+      ruffBait,
       alpha,
       beta,
     )
@@ -170,10 +448,10 @@ function searchTrick(
 }
 
 /**
- * 选择单张墩的完美信息着法。
+ * 选择着法。
  *
- * 每一队都按当前墩收益最优地配合；先比较能否拿下当前墩及其分数，
- * 再比较各队为此消耗的牌力。多张墩仍使用基础合法策略。
+ * 单张墩使用完美信息搜索；多张领出会额外评估「钓主」候选
+ * （对手可毙的对子 / 拖拉机 / 甩牌）。多张跟牌仍使用基础合法策略。
  */
 export function aiChoosePlay(
   state: PlayState,
@@ -185,7 +463,7 @@ export function aiChoosePlay(
   const hand = hands[player]
 
   if (!state.trick.leadDoor && state.trick.plays.length === 0) {
-    let bestCard: Card | null = null
+    let bestCards: Card[] | null = null
     let bestScore = -Infinity
     const rootTeam = teamOf(player)
 
@@ -210,15 +488,64 @@ export function aiChoosePlay(
         trumpSuit,
         levelRank,
         leadBonus,
+        true,
         bestScore,
         Infinity,
       )
       if (score > bestScore) {
         bestScore = score
-        bestCard = card
+        bestCards = [card]
       }
     }
-    return bestCard ? [bestCard] : chooseLead(hand, trumpSuit, levelRank)
+
+    // 多张钓主候选：对子 / 拖拉机 / 甩牌。
+    // 只有在对手能用主牌毙掉、且对家不能反毙时才进入评分。
+    const otherHands = ALL_POSITIONS
+      .filter(pos => pos !== player)
+      .map(pos => hands[pos])
+    const sideDoors = new Set<Suit>()
+    for (const card of hand) {
+      const door = doorOf(card, trumpSuit, levelRank)
+      if (door !== 'trump') sideDoors.add(door)
+    }
+
+    const seen = new Set<string>()
+    for (const door of sideDoors) {
+      const doorCards = hand.filter(
+        card => doorOf(card, trumpSuit, levelRank) === door,
+      )
+      const candidates: Card[][] = [
+        ...leadPairUnits(doorCards, trumpSuit, levelRank)
+          .map(unit => unit.cards),
+        ...generateTractorLeadCandidates(doorCards, trumpSuit, levelRank),
+        ...generateThrowLeadCandidates(doorCards, trumpSuit, levelRank),
+      ]
+
+      for (const cards of candidates) {
+        const key = cards.map(card => card.id).sort().join('|')
+        if (seen.has(key)) continue
+        seen.add(key)
+
+        const lead = analyzeShape(cards, trumpSuit, levelRank)
+        if (lead.door === null) continue
+        // 甩牌会被三家拦住时自动出小，不作为钓主候选
+        if (lead.type === HandType.Throw
+          && throwFallback(cards, otherHands, trumpSuit, levelRank) !== null) {
+          continue
+        }
+
+        const score = scoreRuffBaitLead(
+          cards, lead, hands, player, trumpSuit, levelRank,
+        )
+        if (score === null) continue
+        if (score > bestScore) {
+          bestScore = score
+          bestCards = cards
+        }
+      }
+    }
+
+    return bestCards ?? chooseLead(hand, trumpSuit, levelRank)
   }
 
   if (state.trick.leadCount === 1) {
@@ -254,6 +581,7 @@ export function aiChoosePlay(
         trumpSuit,
         levelRank,
         0,
+        false,
         bestScore,
         Infinity,
       )
