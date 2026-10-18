@@ -60,6 +60,11 @@ function safePointLeadBonus(
   const door = doorOf(card, trumpSuit, levelRank)
   if (door === 'trump') return 0
 
+  // 手里有同门同点数的另一张 → 优先按对子整体出，不奖励拆单张
+  const hasPairMate = hands[player].some(c =>
+    c.id !== card.id && c.suit === card.suit && c.rank === card.rank)
+  if (hasPairMate) return 0
+
   const slot = slotOf(card, trumpSuit, levelRank)
   const opponents = ALL_POSITIONS.filter(pos => teamOf(pos) !== teamOf(player))
   for (const pos of opponents) {
@@ -94,6 +99,12 @@ const RUFF_BAIT_MAX_BONUS = 2 * TRICK_WIN_VALUE
 const RUFF_BAIT_OVER_POINT_PENALTY = 2
 const MAX_THROW_LEAD_CARDS = 5
 const MAX_THROW_LEAD_CANDIDATES = 20
+/** AK 甩牌把某对手该门仅剩的 2 张全部抓获时，额外加成 */
+const AK_CAPTURE_BONUS = 60
+/** 安全 KK 对子（外面无 AA）的领出加成 */
+const SAFE_PAIR_LEAD_BONUS = 60
+/** 对手的 AA 是其该门唯一对子时，拆 KK 领单张 K 的加成 */
+const SPLIT_KING_BONUS = 60
 
 function cardCost(card: Card, trumpSuit: Suit | null, levelRank: Rank): number {
   const slot = slotOf(card, trumpSuit, levelRank)
@@ -199,6 +210,39 @@ function turnOrderFrom(player: PlayerPosition): PlayerPosition[] {
     order.push(current)
   }
   return order
+}
+
+/**
+ * 拆 KK 领单张 K 的加成：
+ * 对手持有该门 AA，且 AA 是其在该门唯一的对子。
+ * 此时若领 KK，对手可以用 AA 作为对子直接管上；拆成单张 K 则迫使对手要么拆掉唯一的对子，
+ * 要么放掉这一墩。
+ */
+function splitKingLeadBonus(
+  card: Card,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  if (card.rank !== Rank.King || card.rank === levelRank) return 0
+  const door = doorOf(card, trumpSuit, levelRank)
+  if (door === 'trump') return 0
+
+  const hasPairMate = hands[player].some(c =>
+    c.id !== card.id && c.suit === card.suit && c.rank === Rank.King)
+  if (!hasPairMate) return 0
+
+  const opponents = ALL_POSITIONS.filter(pos => teamOf(pos) !== teamOf(player))
+  for (const pos of opponents) {
+    const oppDoorCards = hands[pos].filter(
+      c => doorOf(c, trumpSuit, levelRank) === door,
+    )
+    const pairs = leadPairUnits(oppDoorCards, trumpSuit, levelRank)
+    const hasAces = pairs.some(unit => unit.cards[0].rank === Rank.Ace)
+    if (hasAces && pairs.length === 1) return SPLIT_KING_BONUS
+  }
+  return 0
 }
 
 /** 生成同门内的所有拖拉机领出候选（长度 ≥ 2 对，含子段） */
@@ -331,6 +375,96 @@ function scoreRuffBaitLead(
 }
 
 /**
+ * 评估「必胜的多张领出」：
+ *   - 对子：没有对手持有更大的同门对子（典型：KK，外面无 AA）；
+ *   - A+K 甩牌：A 是该门最大牌，外面最多只有另一张 A 打平（先出者赢）。
+ * 要求对手都不能用主牌毙。后三家使用 chooseFollow 估算；
+ * 领先时他们无法改变赢家，只会影响本墩分数与牌力消耗。
+ */
+function scoreWinningMultiLead(
+  cards: Card[],
+  lead: HandShape,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number | null {
+  if (lead.door === null || lead.door === 'trump') return null
+
+  const opponents = ALL_POSITIONS.filter(pos => teamOf(pos) !== teamOf(player))
+  if (opponents.some(pos =>
+    canRuffWithTrump(hands[pos], lead, trumpSuit, levelRank))) {
+    return null
+  }
+
+  const isAkThrow = lead.count === 2
+    && cards.some(c => c.rank === Rank.Ace)
+    && cards.some(c => c.rank === Rank.King)
+
+  if (lead.type === HandType.Pair) {
+    const slot = slotOf(cards[0], trumpSuit, levelRank)
+    for (const pos of opponents) {
+      const oppDoorCards = hands[pos].filter(
+        c => doorOf(c, trumpSuit, levelRank) === lead.door,
+      )
+      const hasHigherPair = leadPairUnits(oppDoorCards, trumpSuit, levelRank)
+        .some(unit => unit.slot > slot)
+      if (hasHigherPair) return null
+    }
+  }
+  else if (!isAkThrow) {
+    return null
+  }
+
+  const captureBonus = isAkThrow && opponents.some(pos =>
+    hands[pos].filter(c => doorOf(c, trumpSuit, levelRank) === lead.door).length === 2,
+  )
+    ? AK_CAPTURE_BONUS
+    : 0
+
+  const plays: PlayState['trick']['plays'] = [{
+    player,
+    cards,
+    handType: lead.type,
+  }]
+  const simHands: Hands = {
+    ...hands,
+    [player]: hands[player].filter(c => !cards.some(p => p.id === c.id)),
+  }
+  let turn = nextPlayer(player)
+  for (let i = 0; i < 3; i++) {
+    const follow = chooseFollow(simHands[turn], lead, trumpSuit, levelRank)
+    if (follow.length !== lead.count) return null
+    plays.push({
+      player: turn,
+      cards: follow,
+      handType: analyzeShape(follow, trumpSuit, levelRank).type,
+    })
+    simHands[turn] = simHands[turn].filter(
+      c => !follow.some(p => p.id === c.id),
+    )
+    turn = nextPlayer(turn)
+  }
+
+  const winner = judgePlays(plays, lead, trumpSuit, levelRank)
+  if (teamOf(winner) !== teamOf(player)) return null
+
+  const points = trickPoints(plays.flatMap(play => play.cards))
+  const cardEconomy = plays.reduce((value, play) => {
+    const cost = play.cards.reduce(
+      (sum, card) => sum + cardCost(card, trumpSuit, levelRank),
+      0,
+    )
+    return value + (teamOf(play.player) === teamOf(player) ? -cost : cost)
+  }, 0)
+  const isKingPair = lead.type === HandType.Pair
+    && cards.length === 2
+    && cards.every(c => c.rank === Rank.King)
+  const pairBonus = isKingPair ? SAFE_PAIR_LEAD_BONUS : 0
+  return TRICK_WIN_VALUE + points + cardEconomy + captureBonus + pairBonus
+}
+
+/**
  * 单张搜索中的钓主加成：本方领出的副牌被对手用主牌毙掉并大出时，
  * 按领出牌的点数 / 张数给予奖励。只在 ruffBait=true（本方领出）时调用。
  */
@@ -367,6 +501,7 @@ function utility(
   levelRank: Rank,
   leadBonus: number,
   ruffBait: boolean,
+  strategicBonus: number,
 ): number {
   const winner = judgePlays(plays, lead, trumpSuit, levelRank)
   const points = trickPoints(plays.flatMap(play => play.cards))
@@ -380,10 +515,10 @@ function utility(
   }, 0)
 
   const base = (won ? TRICK_WIN_VALUE + points : -TRICK_WIN_VALUE - points) + cardEconomy
-  if (won) return base + leadBonus
-  return base + (ruffBait
-    ? ruffBaitBonus(plays, winner, lead, trumpSuit, levelRank)
-    : 0)
+  let score = base + strategicBonus
+  if (won) score += leadBonus
+  else if (ruffBait) score += ruffBaitBonus(plays, winner, lead, trumpSuit, levelRank)
+  return score
 }
 
 function searchTrick(
@@ -396,11 +531,14 @@ function searchTrick(
   levelRank: Rank,
   leadBonus: number,
   ruffBait: boolean,
+  strategicBonus: number,
   alpha: number,
   beta: number,
 ): number {
   if (plays.length === 4) {
-    return utility(plays, lead, rootTeam, trumpSuit, levelRank, leadBonus, ruffBait)
+    return utility(
+      plays, lead, rootTeam, trumpSuit, levelRank, leadBonus, ruffBait, strategicBonus,
+    )
   }
 
   const available = hands[turn]
@@ -429,6 +567,7 @@ function searchTrick(
       levelRank,
       leadBonus,
       ruffBait,
+      strategicBonus,
       alpha,
       beta,
     )
@@ -479,6 +618,7 @@ export function aiChoosePlay(
         [player]: hand.filter(candidate => candidate.id !== card.id),
       }
       const leadBonus = safePointLeadBonus(card, hands, player, trumpSuit, levelRank)
+      const splitBonus = splitKingLeadBonus(card, hands, player, trumpSuit, levelRank)
       const score = searchTrick(
         remainingHands,
         nextPlayer(player),
@@ -489,6 +629,7 @@ export function aiChoosePlay(
         levelRank,
         leadBonus,
         true,
+        splitBonus,
         bestScore,
         Infinity,
       )
@@ -514,11 +655,20 @@ export function aiChoosePlay(
       const doorCards = hand.filter(
         card => doorOf(card, trumpSuit, levelRank) === door,
       )
+      const akThrows: Card[][] = []
+      const aces = doorCards.filter(card => card.rank === Rank.Ace)
+      const kings = doorCards.filter(card => card.rank === Rank.King)
+      for (const ace of aces) {
+        for (const king of kings) {
+          akThrows.push([ace, king])
+        }
+      }
       const candidates: Card[][] = [
         ...leadPairUnits(doorCards, trumpSuit, levelRank)
           .map(unit => unit.cards),
         ...generateTractorLeadCandidates(doorCards, trumpSuit, levelRank),
         ...generateThrowLeadCandidates(doorCards, trumpSuit, levelRank),
+        ...akThrows,
       ]
 
       for (const cards of candidates) {
@@ -535,6 +685,8 @@ export function aiChoosePlay(
         }
 
         const score = scoreRuffBaitLead(
+          cards, lead, hands, player, trumpSuit, levelRank,
+        ) ?? scoreWinningMultiLead(
           cards, lead, hands, player, trumpSuit, levelRank,
         )
         if (score === null) continue
@@ -582,6 +734,7 @@ export function aiChoosePlay(
         levelRank,
         0,
         false,
+        0,
         bestScore,
         Infinity,
       )
