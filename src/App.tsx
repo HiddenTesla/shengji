@@ -5,6 +5,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   type Card,
+  type Rank,
   PlayerPosition,
   POSITION_NAME_ZH,
   PlayerMode,
@@ -36,6 +37,7 @@ import {
 } from './core/rank.ts'
 import {
   type PlayState,
+  type TrickState,
   applyPlay,
   canBeatCurrentPlay,
   collectTrick,
@@ -43,6 +45,7 @@ import {
   isLeading,
   validatePlay,
 } from './core/play.ts'
+import { type HandShape, mandatoryFollowCards } from './core/hand.ts'
 import { aiChoosePlay } from './core/ai.ts'
 import PlayerHand from './components/PlayerHand.tsx'
 import OpponentHand from './components/OpponentHand.tsx'
@@ -57,6 +60,40 @@ import RoundSettlement from './components/RoundSettlement.tsx'
 import CardComponent from './components/CardComponent.tsx'
 
 type Hands = Record<PlayerPosition, Card[]>
+
+/**
+ * 跟牌「必出牌」→ 在 `groupCardsForDisplay(...).flatMap(g => g.cards)` 中的下标。
+ * UI 的选中态就是这套下标（南家 / 北家 / 东家 / 西家共用同一顺序）。
+ */
+function forcedFollowIndicesOf(
+  hand: Card[],
+  trick: TrickState,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Set<number> {
+  const result = new Set<number>()
+  if (trick.complete || trick.leadDoor === null || trick.leadCount <= 0) {
+    return result
+  }
+
+  const lead: HandShape = {
+    type: trick.leadType,
+    door: trick.leadDoor,
+    count: trick.leadCount,
+    pairs: trick.leadPairs,
+    tractor: trick.leadTractor,
+  }
+  const forced = mandatoryFollowCards(hand, lead, trumpSuit, levelRank)
+  if (forced.length === 0) return result
+
+  const ids = new Set(forced.map(c => c.id))
+  const flat = groupCardsForDisplay(hand, trumpSuit, levelRank)
+    .flatMap(g => g.cards)
+  flat.forEach((card, index) => {
+    if (ids.has(card.id)) result.add(index)
+  })
+  return result
+}
 
 /** 撤销快照：记录「玩家决策前」的完整状态 */
 interface UndoSnapshot {
@@ -233,11 +270,30 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, revealed])
 
+  // ---- 跟牌必出牌（自动选中，且不可取消） ----
+  function currentForcedIndices(): Set<number> {
+    const ps = playStateRef.current
+    const hs = handsRef.current
+    if (phase !== GamePhase.Playing || !ps || !hs) return new Set()
+    if (ps.trick.complete) return new Set()
+    if (playerModes[ps.turn] !== PlayerMode.Manual) return new Set()
+    return forcedFollowIndicesOf(
+      hs[ps.turn],
+      ps.trick,
+      trumpSuitRef.current,
+      levelRank,
+    )
+  }
+
   // ---- 选中/取消 ----
   function toggleCard(index: number) {
     setSelectedIndices(prev => {
+      const forced = currentForcedIndices()
+      // 必出的牌始终算作已选，且点击不能取消
       const next = new Set(prev)
+      for (const i of forced) next.add(i)
       if (next.has(index)) {
+        if (forced.has(index)) return prev
         next.delete(index)
       }
       else {
@@ -525,7 +581,17 @@ function App() {
     if (!playState || !hands) return
     const flat = groupCardsForDisplay(hands[playState.turn], trumpSuit, levelRank)
       .flatMap(g => g.cards)
-    const cards = flat.filter((_, i) => selectedIndices.has(i))
+    // 必出的牌与 UI 的自动选中一致：即使 state 里没有，也要计入本次出牌
+    const chosen = new Set(selectedIndices)
+    for (const i of forcedFollowIndicesOf(
+      hands[playState.turn],
+      playState.trick,
+      trumpSuit,
+      levelRank,
+    )) {
+      chosen.add(i)
+    }
+    const cards = flat.filter((_, i) => chosen.has(i))
     const v = validatePlay(playState, hands[playState.turn], cards, trumpSuit, levelRank)
     if (!v.ok) return
     // 压入撤销点（玩家出牌前的状态）
@@ -627,7 +693,7 @@ function App() {
     buryFlat.filter((_, i) => selectedIndices.has(i)),
   )
 
-  // 出牌：已选牌 + 合法性
+  // 出牌：已选牌（含自动选中的必出牌）+ 合法性
   const playFlat = isPlaying
     ? groupCardsForDisplay(
       playState && playingTurn ? hands[playingTurn] : [],
@@ -635,7 +701,14 @@ function App() {
       levelRank,
     ).flatMap(g => g.cards)
     : []
-  const selectedPlayCards = playFlat.filter((_, i) => selectedIndices.has(i))
+  const forcedPlayIndices = isPlaying && playState && turnIsManual
+    && !playState.trick.complete
+    ? forcedFollowIndicesOf(hands[playState.turn], playState.trick, trumpSuit, levelRank)
+    : new Set<number>()
+  const effectiveSelectedIndices = forcedPlayIndices.size === 0
+    ? selectedIndices
+    : new Set([...selectedIndices, ...forcedPlayIndices])
+  const selectedPlayCards = playFlat.filter((_, i) => effectiveSelectedIndices.has(i))
   const playValidation = isPlaying && playState
     ? validatePlay(playState, hands[playState.turn], selectedPlayCards, trumpSuit, levelRank)
     : null
@@ -655,7 +728,7 @@ function App() {
         player={playingTurn}
         isLeading={isLeading(playState)}
         requiredCount={isLeading(playState) ? null : playState.trick.leadCount}
-        selectedCount={selectedIndices.size}
+        selectedCount={effectiveSelectedIndices.size}
         reason={selectedPlayCards.length > 0 ? (playValidation?.reason ?? null) : null}
         onPlay={commitPlay}
         onClear={() => setSelectedIndices(new Set())}
@@ -697,7 +770,7 @@ function App() {
             ? bottomOriginIds
             : undefined}
           selectedIndices={canSelectPosition(PlayerPosition.North)
-            ? selectedIndices
+            ? effectiveSelectedIndices
             : undefined}
           onToggleCard={canSelectPosition(PlayerPosition.North)
             ? toggleCard
@@ -736,7 +809,7 @@ function App() {
               ? bottomOriginIds
               : undefined}
             selectedIndices={canSelectPosition(PlayerPosition.West)
-              ? selectedIndices
+              ? effectiveSelectedIndices
               : undefined}
             onToggleCard={canSelectPosition(PlayerPosition.West)
               ? toggleCard
@@ -1077,7 +1150,7 @@ function App() {
               ? bottomOriginIds
               : undefined}
             selectedIndices={canSelectPosition(PlayerPosition.East)
-              ? selectedIndices
+              ? effectiveSelectedIndices
               : undefined}
             onToggleCard={canSelectPosition(PlayerPosition.East)
               ? toggleCard
@@ -1197,7 +1270,7 @@ function App() {
           ) : (
             <PlayerHand
               groups={groupCardsForDisplay(handForDisplay, trumpSuit, levelRank)}
-              selectedIndices={canSelectHand ? selectedIndices : undefined}
+              selectedIndices={canSelectHand ? effectiveSelectedIndices : undefined}
               onToggleCard={canSelectHand ? toggleCard : undefined}
               sourceCardIds={buryingManualBanker && banker === PlayerPosition.South
                 ? bottomOriginIds

@@ -490,6 +490,108 @@ export function validateFollow(
 }
 
 // ------------------------------------------------------------
+// 跟牌「必出牌」（UI 自动选中）
+// ------------------------------------------------------------
+
+/** 该门内全部长度为 length 的连续对子段（滑动窗口） */
+function tractorWindows(units: PairUnit[], length: number): PairUnit[][] {
+  if (length < 2) return []
+  const bySlot = new Map<number, PairUnit>()
+  for (const u of units) {
+    if (!bySlot.has(u.slot)) bySlot.set(u.slot, u)
+  }
+  const slots = [...bySlot.keys()].sort((a, b) => a - b)
+  const windows: PairUnit[][] = []
+  for (let i = 0; i + length <= slots.length; i++) {
+    let ok = true
+    for (let j = 1; j < length; j++) {
+      if (slots[i + j] !== slots[i + j - 1] + 1) {
+        ok = false
+        break
+      }
+    }
+    if (ok) {
+      windows.push(slots.slice(i, i + length).map(sl => bySlot.get(sl)!))
+    }
+  }
+  return windows
+}
+
+/**
+ * 跟牌时**必须**打出的牌（供 UI 自动选中）。
+ *
+ * 只返回「无论怎么选都必须包含」的牌（宁少勿多）：
+ *   1. 手上牌数正好等于首出张数（最后一手）→ 全部必出（即使不是同一门）；
+ *   2. 该门不足 / 正好够 → 该门所有牌必出；
+ *   3. 必须跟的对子数 = 可用对子数 → 这些对子必出（唯一的对子）；
+ *   4. 必须跟的拖拉机：所有可行窗口的公共牌必出（只有一种时即整个拖拉机）；
+ *   5. 该门不足、且其余牌全为主牌（只能毙牌）→ 主牌部分同样套用 3、4。
+ *
+ * 领出（lead.door === null）或张数非法时返回空数组。
+ */
+export function mandatoryFollowCards(
+  hand: Card[],
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[] {
+  if (lead.door === null || lead.count <= 0) return []
+  const need = lead.count
+
+  // 最后一手：出完即空手 → 手上所有牌都必须出（即使不属同一门）
+  if (hand.length === need) return [...hand]
+
+  const door = lead.door
+  const handInDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
+  const forced = new Map<string, Card>()
+  const add = (cards: Card[]) => {
+    for (const c of cards) forced.set(c.id, c)
+  }
+
+  /** 对「某一组可用牌」推导唯一对子 / 唯一拖拉机（与 validateFollow 的 checkGroup 一致） */
+  const addGroupForced = (available: Card[], groupNeed: number) => {
+    const units = pairUnits(available, trumpSuit, levelRank)
+    const needPairs = Math.min(lead.pairs, units.length, Math.floor(groupNeed / 2))
+    if (needPairs > 0 && units.length === needPairs) {
+      add(units.flatMap(u => u.cards))
+    }
+    if (lead.tractor >= 2 && groupNeed >= lead.tractor * 2) {
+      // 多个可选拖拉机窗口时，取所有窗口的交集（重叠部分必出）
+      const windows = tractorWindows(units, lead.tractor)
+      if (windows.length > 0) {
+        const commonIds = new Set(windows[0].flatMap(u => u.cards.map(c => c.id)))
+        for (const id of [...commonIds]) {
+          const inAll = windows.every(win =>
+            win.some(u => u.cards.some(c => c.id === id)))
+          if (!inAll) commonIds.delete(id)
+        }
+        add(windows[0]
+          .flatMap(u => u.cards)
+          .filter(c => commonIds.has(c.id)))
+      }
+    }
+  }
+
+  // 该门不足或正好够：该门所有牌都必须打掉
+  if (handInDoor.length <= need) {
+    add(handInDoor)
+
+    // 该门不足且其余牌全为主牌 → 只能毙牌，主牌部分同样要满足对子/拖拉机
+    const restNeed = need - handInDoor.length
+    if (restNeed > 0) {
+      const outDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) !== door)
+      const allTrump = outDoor.every(c => doorOf(c, trumpSuit, levelRank) === 'trump')
+      if (allTrump) addGroupForced(outDoor, restNeed)
+    }
+    return [...forced.values()]
+  }
+
+  // 该门够：只有「唯一对子 / 唯一拖拉机」是必出的
+  addGroupForced(handInDoor, need)
+  return [...forced.values()]
+}
+
+// ------------------------------------------------------------
 // 托管 AI：构造合法出牌
 // ------------------------------------------------------------
 
