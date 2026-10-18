@@ -28,41 +28,49 @@ import type { Hands, PlayState } from './play.ts'
 const TRICK_WIN_VALUE = 1000
 
 /**
- * 「安全 K」领出加成。
+ * 「安全 10 分牌」领出加成。
  *
- * 副牌 K（且不是级牌）在满足下面两点时，实际上是该门最高牌：
- *   1. 两名对手都没有该门的 A；
- *   2. 没有「该门缺门且手里有主牌」的对手（否则 K 可能被毙）。
+ * 适用于副牌里的 K 和 10（且不是级牌）。只要两名对手都没有比它更大的同门牌，
+ * 它就是安全的：领它可以稳收 10 分，同时把更大的控制牌留在手里。
  *
- * 此时领 K 可以稳收 10 分，同时把无分的 A 留在手里继续控制该门。
+ * 这自然覆盖了两种情形：
+ *   - A 已走掉 / 在底里，K 成为该门最高牌；
+ *   - A、K、Q、J 都已走掉 / 在底里，J 成为新的 A，10 成为新的 K。
+ *
+ * 另外要求没有「该门缺门且手里有主牌」的对手，否则可能被毙。
  * 加成只在真的赢下本墩时兑现（见 utility）。
  *
  * 60 足以压过单张墩内最多约 40 分的分差，但远小于赢 / 输墩的 ±1000，
  * 因此只会改变「都能赢时先出哪张」的排序，不会去抢赢不了的墩。
  */
-const SAFE_KING_LEAD_BONUS = 60
+const SAFE_POINT_LEAD_BONUS = 60
 
-function safeKingLeadBonus(
+function safePointLeadBonus(
   card: Card,
   hands: Hands,
   player: PlayerPosition,
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  // K 为级牌时是主牌，本技巧不适用
-  if (card.rank !== Rank.King || card.rank === levelRank) return 0
+  // 只处理 10 分牌；该牌为级牌时是主牌，本技巧不适用
+  if (card.rank !== Rank.King && card.rank !== Rank.Ten) return 0
+  if (card.rank === levelRank) return 0
 
   const door = doorOf(card, trumpSuit, levelRank)
   if (door === 'trump') return 0
 
+  const slot = slotOf(card, trumpSuit, levelRank)
   const opponents = ALL_POSITIONS.filter(pos => teamOf(pos) !== teamOf(player))
   for (const pos of opponents) {
     const hand = hands[pos]
-    // 对手手里有该门 A → K 不是最高牌
-    if (hand.some(c => doorOf(c, trumpSuit, levelRank) === door && c.rank === Rank.Ace)) {
+    // 对手手里有更大的同门牌 → 这张 10 分牌不是最高牌
+    if (hand.some(c =>
+      doorOf(c, trumpSuit, levelRank) === door
+      && slotOf(c, trumpSuit, levelRank) > slot
+    )) {
       return 0
     }
-    // 对手该门缺门且手里还有主牌 → 可能直接毙掉 K
+    // 对手该门缺门且手里还有主牌 → 可能直接毙掉
     const hasDoor = hand.some(c => doorOf(c, trumpSuit, levelRank) === door)
     const canRuff = hand.some(c => doorOf(c, trumpSuit, levelRank) === 'trump')
     if (!hasDoor && canRuff) {
@@ -70,7 +78,7 @@ function safeKingLeadBonus(
     }
   }
 
-  return SAFE_KING_LEAD_BONUS
+  return SAFE_POINT_LEAD_BONUS
 }
 
 function cardCost(card: Card, trumpSuit: Suit | null, levelRank: Rank): number {
@@ -192,7 +200,7 @@ export function aiChoosePlay(
         ...hands,
         [player]: hand.filter(candidate => candidate.id !== card.id),
       }
-      const leadBonus = safeKingLeadBonus(card, hands, player, trumpSuit, levelRank)
+      const leadBonus = safePointLeadBonus(card, hands, player, trumpSuit, levelRank)
       const score = searchTrick(
         remainingHands,
         nextPlayer(player),
