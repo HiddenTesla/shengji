@@ -4,8 +4,8 @@
 
 import {
   type Card,
-  type Rank,
   type PlayerPosition,
+  Rank,
   Suit,
   SUIT_SYMBOL,
 } from '../core/types.ts'
@@ -67,16 +67,28 @@ export default function BiddingBar({
   canAct,
   onBid,
 }: BiddingBarProps) {
-  // 无主（对王）
-  const jokers = hand.filter(c => c.suit === Suit.Joker)
-  const jokerDecl: Declaration | null = jokers.length >= 2
+  // 无主（对小王 / 对大王；必须同大小，优先用更强的对大王）
+  const smallJokers = hand.filter(
+    c => c.suit === Suit.Joker && c.rank === Rank.SmallJoker,
+  )
+  const bigJokers = hand.filter(
+    c => c.suit === Suit.Joker && c.rank === Rank.BigJoker,
+  )
+  const jokerDecl: Declaration | null = bigJokers.length >= 2
     ? {
         player,
         suit: null,
-        strength: BidStrength.JokerPair,
-        cardIds: [jokers[0].id, jokers[1].id],
+        strength: BidStrength.BigJokerPair,
+        cardIds: [bigJokers[0].id, bigJokers[1].id],
       }
-    : null
+    : smallJokers.length >= 2
+      ? {
+          player,
+          suit: null,
+          strength: BidStrength.SmallJokerPair,
+          cardIds: [smallJokers[0].id, smallJokers[1].id],
+        }
+      : null
 
   return (
     <div style={{

@@ -916,10 +916,10 @@ function App() {
                                 ? SUIT_SYMBOL[bidState.current.suit]
                                 : '无主'}
                             </b>
-                            {' '}{bidState.current.strength === BidStrength.Pair
-                              ? '反主'
-                              : bidState.current.strength === BidStrength.JokerPair
-                                ? ''
+                            {' '}{bidState.current.suit === null
+                              ? ''
+                              : bidState.current.strength === BidStrength.Pair
+                                ? '反主'
                                 : '亮主'}）
                           </span>
                         )
