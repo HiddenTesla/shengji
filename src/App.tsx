@@ -14,6 +14,8 @@ import {
   ALL_POSITIONS,
   SUIT_SYMBOL,
   RANK_NAME,
+  Team,
+  TEAM_NAME_ZH,
   partnerOf,
   teamOf,
 } from './core/types.ts'
@@ -122,6 +124,15 @@ const TRUMP_COLORS: Record<Suit, string> = {
   [Suit.Club]: '#1b5e20',
   [Suit.Diamond]: '#e65100',
   [Suit.Joker]: '#7c3aed',
+}
+
+/** 深色背景上的主花色文字颜色（黑桃用白色，否则看不清） */
+const TRUMP_TEXT_COLORS: Record<Suit, string> = {
+  [Suit.Spade]: '#ffffff',
+  [Suit.Heart]: '#ff6b6b',
+  [Suit.Club]: '#7bd88f',
+  [Suit.Diamond]: '#ffb74d',
+  [Suit.Joker]: '#d0a0ff',
 }
 
 function App() {
@@ -721,6 +732,17 @@ function App() {
   /** 最近一次可撤销的操作类型（用于按钮提示） */
   const lastUndoKind = history[history.length - 1]?.kind ?? null
 
+  // 本局主牌：已亮主 / 翻底定主后才有值（null 且未定 → 显示「未定」）
+  const trumpDecided = trumpSuit !== null
+    || (bidState.current !== null && bidState.current.suit === null)
+    || bottomTrump
+  const trumpText = trumpSuit !== null
+    ? SUIT_SYMBOL[trumpSuit]
+    : trumpDecided ? '无主' : '未定'
+  const trumpTextColor = trumpSuit === null
+    ? TRUMP_TEXT_COLORS[Suit.Joker]
+    : TRUMP_TEXT_COLORS[trumpSuit]
+
   function renderPlayBar(compact = false) {
     if (!turnIsManual || !playingTurn || !playState) return null
     return (
@@ -745,8 +767,95 @@ function App() {
       height: '100vh',
       background: 'linear-gradient(135deg, #1a5c2a 0%, #0d3b1a 100%)',
       overflow: 'hidden',
+      position: 'relative',
       fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
     }}>
+      {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
+      <div style={{
+        position: 'absolute',
+        top: 10,
+        left: 12,
+        zIndex: 20,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        padding: '8px 12px',
+        borderRadius: 8,
+        background: 'rgba(0,0,0,0.32)',
+        border: '1px solid rgba(255,255,255,0.14)',
+        color: 'rgba(255,255,255,0.85)',
+        fontSize: 16,
+        pointerEvents: 'none',
+      }}>
+        <div style={{
+          fontSize: 12,
+          letterSpacing: 2,
+          color: 'rgba(255,255,255,0.5)',
+        }}>
+          等级
+        </div>
+        {[Team.NS, Team.EW].map(team => {
+          const isCurrent = banker !== null && teamOf(banker) === team
+          return (
+            <div
+              key={team}
+              style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 8,
+                fontWeight: isCurrent ? 700 : 500,
+              }}
+            >
+              <span style={{
+                minWidth: 36,
+                color: 'rgba(255,255,255,0.6)',
+              }}>
+                {TEAM_NAME_ZH[team]}
+              </span>
+              <span style={{
+                color: isCurrent ? '#ffd700' : 'rgba(255,255,255,0.9)',
+              }}>
+                打 {RANK_NAME[levels[team]]}
+              </span>
+              {isCurrent && (
+                <span style={{
+                  fontSize: 11,
+                  lineHeight: '16px',
+                  padding: '0 5px',
+                  borderRadius: 3,
+                  background: 'rgba(255,215,0,0.2)',
+                  color: '#ffd700',
+                }}>
+                  本局
+                </span>
+              )}
+            </div>
+          )
+        })}
+        <div style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 8,
+          marginTop: 2,
+          paddingTop: 5,
+          borderTop: '1px solid rgba(255,255,255,0.15)',
+        }}>
+          <span style={{
+            minWidth: 36,
+            color: 'rgba(255,255,255,0.6)',
+          }}>
+            主
+          </span>
+          <b style={{
+            fontSize: 19,
+            lineHeight: 1.1,
+            color: trumpTextColor,
+          }}>
+            {trumpText}
+          </b>
+        </div>
+      </div>
+
       {/* ---- 顶部：北家 ---- */}
       <div style={{
         display: 'flex',
