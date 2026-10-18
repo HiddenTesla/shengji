@@ -21,6 +21,8 @@ import {
   type Declaration,
   type BidState,
   BidStrength,
+  aiChooseDeclare,
+  canOverride,
   createBidState,
   decisiveBottomIndex,
   determineTrumpFromBottom,
@@ -398,6 +400,45 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, bidSeconds])
 
+  // ---- 托管玩家：AI 自动报主 ----
+  // 发牌阶段按「当前已翻开的牌」评估，牌每翻一张都会重新评估；
+  // 叫主阶段每次当前声明变化后重新评估，因此可以连续出现「亮主 → 反主 → 无主」。
+  useEffect(() => {
+    if (phase !== GamePhase.Dealing && phase !== GamePhase.BiddingTrump) return
+    if (flipping) return
+    const hs = handsRef.current
+    if (!hs) return
+
+    const current = bidState.current
+    let chosen: Declaration | null = null
+    for (const pos of ALL_POSITIONS) {
+      if (playerModes[pos] !== PlayerMode.Auto) continue
+      // 叫主阶段不要自己反自己；发牌阶段允许随新牌升级自己的声明
+      if (current?.player === pos && phase !== GamePhase.Dealing) continue
+      const decl = aiChooseDeclare(hs[pos], levelRank, current, pos)
+      if (decl && canOverride(decl, current)) {
+        chosen = decl
+        break
+      }
+    }
+    if (!chosen) return
+
+    const decl = chosen
+    // 发牌期间：直接亮主。若用延迟，下一次翻牌的 effect 会清掉定时器，导致永远报不出来。
+    if (phase === GamePhase.Dealing) {
+      if (canOverride(decl, bidStateRef.current.current)) applyDeclare(decl)
+      return
+    }
+
+    const timer = setTimeout(() => {
+      // 延迟期间可能已有南家 / 其他 AI 叫了更高的主
+      if (!canOverride(decl, bidStateRef.current.current)) return
+      applyDeclare(decl)
+    }, gameDelay(800))
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, bidState, playerModes, flipping, levelRank, hands])
+
   // ---- 托管庄家：AI 自动埋底 ----
   useEffect(() => {
     if (phase !== GamePhase.Burying) return
@@ -761,6 +802,7 @@ function App() {
                     }}>
                       {trumpSuit ? SUIT_SYMBOL[trumpSuit] : '无主'}
                     </b>
+                    （{POSITION_NAME_ZH[bidState.current.player]}）
                   </span>
                 )}
               </div>
@@ -791,7 +833,11 @@ function App() {
                                 ? SUIT_SYMBOL[bidState.current.suit]
                                 : '无主'}
                             </b>
-                            {' '}{bidState.current.strength === BidStrength.Pair ? '反主' : '亮主'}）
+                            {' '}{bidState.current.strength === BidStrength.Pair
+                              ? '反主'
+                              : bidState.current.strength === BidStrength.JokerPair
+                                ? ''
+                                : '亮主'}）
                           </span>
                         )
                         : (
@@ -1121,7 +1167,7 @@ function App() {
               border: '1px dashed rgba(255,255,255,0.28)',
               borderRadius: 9,
             }}>
-              南家当前为托管，不参与亮主 → 本局将翻底定主
+              南家当前为托管，AI 将自动参与亮主
             </div>
           )}
         </div>
