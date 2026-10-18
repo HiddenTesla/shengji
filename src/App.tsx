@@ -97,10 +97,12 @@ function forcedFollowIndicesOf(
   return result
 }
 
-/** 撤销快照：记录「玩家决策前」的完整状态 */
+/** 撤销快照：记录一次动作前的完整状态（玩家与托管动作均记录） */
 interface UndoSnapshot {
   /** 该快照对应的动作（用于按钮提示） */
   kind: 'bury' | 'play'
+  /** 是否由玩家（手动）做出；false = 托管 AI 动作 */
+  manual: boolean
   hands: Hands
   playState: PlayState | null
   phase: GamePhase
@@ -179,8 +181,10 @@ function App() {
   const [buriedCards, setBuriedCards] = useState<Card[]>([])
   /** 出牌阶段状态 */
   const [playState, setPlayState] = useState<PlayState | null>(null)
-  /** 撤销栈（仅记录「玩家」出牌前的状态；托管出牌不压栈） */
+  /** 撤销栈（玩家与托管的埋底 / 出牌都会压栈） */
   const [history, setHistory] = useState<UndoSnapshot[]>([])
+  /** 撤销后暂停托管：避免 AI 立即把刚撤销的动作重做一遍 */
+  const [autoPaused, setAutoPaused] = useState(false)
 
   /** 两队各自的级牌（标准双升：本局打庄家队的级牌） */
   const [levels, setLevels] = useState<LevelBoard>(() => initialLevelBoard())
@@ -211,6 +215,25 @@ function App() {
   // 与 React 渲染时序无关，因此不可能出现「预设丢了 → 退化成东家」的情况。
   // null = 本局庄家由叫主（亮主者）决定（首局 / 新游戏）。
   const presetBankerRef = useRef<PlayerPosition | null>(null)
+
+  /** 记录一次动作前的状态（玩家 / 托管的埋底、出牌都记录） */
+  function pushSnapshot(
+    kind: 'bury' | 'play',
+    manual: boolean,
+    snapHands: Hands,
+    snapPlayState: PlayState | null,
+    snapPhase: GamePhase,
+  ) {
+    setHistory(prev => [...prev, {
+      kind,
+      manual,
+      hands: snapHands,
+      playState: snapPlayState,
+      phase: snapPhase,
+      buriedCards: buriedCardsRef.current,
+      bottom: bottomRef.current,
+    }])
+  }
 
   // ---- 重新发牌 ----
   // presetBanker 非空时以它为庄家（用于「下一局」：庄家由升级规则预定，叫主只定主花色）；
@@ -244,6 +267,7 @@ function App() {
     setBuriedCards([])
     setPlayState(null)
     setHistory([])
+    setAutoPaused(false)
     setBidState(createBidState(0))
     setPhase(GamePhase.Dealing)
   }
@@ -323,6 +347,7 @@ function App() {
 
   // ---- 切换玩家模式 ----
   function toggleMode(pos: PlayerPosition) {
+    setAutoPaused(false)
     setPlayerModes(prev => ({
       ...prev,
       [pos]: prev[pos] === PlayerMode.Manual ? PlayerMode.Auto : PlayerMode.Manual,
@@ -397,6 +422,7 @@ function App() {
     bottomRef.current = buried
     setBuriedCards(buried)
     setSelectedIndices(new Set())
+    setAutoPaused(false)
     setPhase(GamePhase.Playing)
   }
 
@@ -408,14 +434,7 @@ function App() {
     const buried = flat.filter((_, i) => selectedIndices.has(i))
     if (buried.length !== BOTTOM_COUNT) return
     // 压入撤销点（埋底前的状态：庄家 33 张、底牌未变）
-    setHistory(prev => [...prev, {
-      kind: 'bury',
-      hands,
-      playState,
-      phase,
-      buriedCards,
-      bottom: bottomRef.current,
-    }])
+    pushSnapshot('bury', true, hands, playState, phase)
     applyBury(banker, buried)
   }
 
@@ -510,6 +529,7 @@ function App() {
   // ---- 托管庄家：AI 自动埋底 ----
   useEffect(() => {
     if (phase !== GamePhase.Burying) return
+    if (autoPaused) return
     if (!banker) return
     if (playerModes[banker] !== PlayerMode.Auto) return
 
@@ -526,11 +546,12 @@ function App() {
         0,
         { partnerHand: hs[partnerOf(banker)] },
       )
+      pushSnapshot('bury', false, hs, playStateRef.current, GamePhase.Burying)
       applyBury(banker, buried)
     }, gameDelay(900))
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, banker])
+  }, [phase, banker, autoPaused])
 
   // ---- 出牌阶段：进入后由庄家领出 ----
   useEffect(() => {
@@ -543,6 +564,7 @@ function App() {
   // ---- 托管玩家：AI 自动出牌 ----
   useEffect(() => {
     if (phase !== GamePhase.Playing) return
+    if (autoPaused) return
     const ps = playState
     if (!ps || ps.trick.complete) return
     if (playerModes[ps.turn] !== PlayerMode.Auto) return
@@ -559,13 +581,14 @@ function App() {
       if (!chk.ok) {
         console.warn('[AI] 非法出牌：', chk.reason, cards)
       }
+      pushSnapshot('play', false, hs, cur, GamePhase.Playing)
       const res = applyPlay(hs, cur, cur.turn, cards, trumpSuitRef.current, levelRank)
       setHands(res.hands)
       setPlayState(res.state)
     }, gameDelay(800))
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, playState, playerModes])
+  }, [phase, playState, playerModes, autoPaused])
 
   // ---- 四家出满 → 收墩，赢家继续领出 ----
   useEffect(() => {
@@ -606,33 +629,42 @@ function App() {
     const v = validatePlay(playState, hands[playState.turn], cards, trumpSuit, levelRank)
     if (!v.ok) return
     // 压入撤销点（玩家出牌前的状态）
-    setHistory(prev => [...prev, {
-      kind: 'play',
-      hands,
-      playState,
-      phase,
-      buriedCards,
-      bottom: bottomRef.current,
-    }])
+    pushSnapshot('play', true, hands, playState, phase)
     const res = applyPlay(hands, playState, playState.turn, cards, trumpSuit, levelRank)
     setHands(res.hands)
     setPlayState(res.state)
     setSelectedIndices(new Set())
+    setAutoPaused(false)
   }
 
-  // ---- 撤销：回到「上一次玩家决策之前」（埋底 / 出牌均适用）
-  // 快照之后的所有托管出牌（含收墩、甚至结束本局）一并回退，
-  // 恢复后轮到的是原手动玩家（或回到埋底阶段），因此不会出现 AI 「秒回」。
+  // ---- 撤销：优先回到「上一次玩家决策之前」；
+  // 若本局还没有玩家决策（全托管），则只退一步（AI 动作），
+  // 并在恢复点仍由托管行动时暂停托管，避免 AI 立即重做。
   function undo() {
-    const snap = history[history.length - 1]
+    if (history.length === 0) return
+    let idx = history.length - 1
+    while (idx >= 0 && !history[idx].manual) idx--
+    if (idx < 0) idx = history.length - 1
+    const snap = history[idx]
     if (!snap) return
-    setHistory(prev => prev.slice(0, -1))
+    setHistory(prev => prev.slice(0, idx))
     setHands(snap.hands)
     setPlayState(snap.playState)
     setPhase(snap.phase)
     setBuriedCards(snap.buriedCards)
     bottomRef.current = snap.bottom
     setSelectedIndices(new Set())
+
+    const autoWouldAct = (
+      snap.phase === GamePhase.Burying
+      && banker !== null
+      && playerModes[banker] === PlayerMode.Auto
+    ) || (
+      snap.phase === GamePhase.Playing
+      && snap.playState !== null
+      && playerModes[snap.playState.turn] === PlayerMode.Auto
+    )
+    setAutoPaused(autoWouldAct)
   }
 
   // ---- 初始发牌 ----
@@ -1075,7 +1107,9 @@ function App() {
             {isBurying && (
               <div style={{ fontSize: 13, color: '#ffd700' }}>
                 {bankerIsAuto
-                  ? '庄家托管，自动埋底中…'
+                  ? autoPaused
+                    ? '庄家托管（已暂停，点「继续托管」恢复）'
+                    : '庄家托管，自动埋底中…'
                   : `请选 ${BOTTOM_COUNT} 张埋入底牌（已选 ${selectedIndices.size} 张）`}
               </div>
             )}
@@ -1083,6 +1117,11 @@ function App() {
               <div style={{ fontSize: 13, color: '#ffd700' }}>
                 轮到 {POSITION_NAME_ZH[playState.turn]}家
                 （{playerModes[playState.turn] === PlayerMode.Manual ? '手动' : '托管'}）
+              </div>
+            )}
+            {autoPaused && (
+              <div style={{ fontSize: 13, color: '#ffd700' }}>
+                ⏸ 已撤销 · 托管已暂停
               </div>
             )}
           </div>
@@ -1186,8 +1225,8 @@ function App() {
               onClick={undo}
               disabled={!canUndo}
               title={canUndo
-                ? `撤销${lastUndoKind === 'bury' ? '埋底' : '出牌'}（共 ${history.length} 步）`
-                : '暂无可撤销的玩家操作'}
+                ? `撤销${lastUndoKind === 'bury' ? '埋底' : '出牌'}（共 ${history.length} 步；撤销后托管暂停）`
+                : '暂无可撤销的操作'}
               style={{
                 padding: '10px 22px',
                 fontSize: 17,
@@ -1201,6 +1240,24 @@ function App() {
             >
               ↩ 撤销{canUndo ? `（${history.length}）` : ''}
             </button>
+            {autoPaused && (
+              <button
+                onClick={() => setAutoPaused(false)}
+                title="恢复托管：让 AI 继续自动埋底 / 出牌"
+                style={{
+                  padding: '10px 22px',
+                  fontSize: 17,
+                  cursor: 'pointer',
+                  border: '1px solid rgba(126,231,135,0.5)',
+                  borderRadius: 6,
+                  background: 'rgba(126,231,135,0.16)',
+                  color: '#7ee787',
+                  fontWeight: 600,
+                }}
+              >
+                ▶ 继续托管
+              </button>
+            )}
           </div>
 
           <div style={{
@@ -1319,6 +1376,7 @@ function App() {
             <BottomCards
               banker={banker}
               auto={bankerIsAuto}
+              paused={autoPaused}
               selectedCount={selectedIndices.size}
               requiredCount={BOTTOM_COUNT}
               buriedPoints={selectedBuriedPoints}
@@ -1374,7 +1432,9 @@ function App() {
               fontSize: 16,
               color: 'rgba(255,255,255,0.65)',
             }}>
-              🤖 {banker ? `${POSITION_NAME_ZH[banker]}家` : ''}托管埋底中…
+              {autoPaused
+                ? '⏸ 托管已暂停（点「继续托管」或把庄家切为手动）'
+                : `🤖 ${banker ? `${POSITION_NAME_ZH[banker]}家` : ''}托管埋底中…`}
             </div>
           ) : (
             <PlayerHand

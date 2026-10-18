@@ -12,6 +12,8 @@ interface BottomCardsProps {
   banker: PlayerPosition
   /** 是否托管（AI 自动埋底，无需玩家操作） */
   auto: boolean
+  /** 托管是否因撤销而暂停 */
+  paused?: boolean
   /** 已选张数 */
   selectedCount: number
   /** 需选张数 */
@@ -27,6 +29,7 @@ interface BottomCardsProps {
 export default function BottomCards({
   banker,
   auto,
+  paused = false,
   selectedCount,
   requiredCount,
   buriedPoints,
@@ -56,7 +59,9 @@ export default function BottomCards({
         </div>
         <div style={{ fontSize: 13, color: '#666' }}>
           {auto
-            ? '托管中，AI 正在自动扣底…'
+            ? paused
+              ? '托管已暂停（点「继续托管」恢复）'
+              : '托管中，AI 正在自动扣底…'
             : `从手牌中选 ${requiredCount} 张埋入底牌（任意牌）`}
         </div>
       </div>
