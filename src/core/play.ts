@@ -24,8 +24,6 @@ import {
   type HandShape,
   type PlayValidation,
   analyzeShape,
-  chooseFollow,
-  chooseLead,
   throwFallback,
   validateFollow,
   validateLead,
@@ -45,6 +43,7 @@ export type Hands = Record<PlayerPosition, Card[]>
 export { doorOf, doorLabel } from './hand.ts'
 export type { Door } from './hand.ts'
 export type { PlayValidation } from './hand.ts'
+export { aiChoosePlay } from './ai.ts'
 
 /** 本墩出牌状态 */
 export interface TrickState {
@@ -372,34 +371,4 @@ export function collectTrick(
     },
     roundOver,
   }
-}
-
-// ------------------------------------------------------------
-// 托管 AI（步骤 1：最简策略）
-// ------------------------------------------------------------
-
-/**
- * AI 选择出牌
- *   - 领出：优先出副牌中最小的一张
- *   - 跟出：按合法性与最小代价构造（见 hand.ts::chooseFollow）
- */
-export function aiChoosePlay(
-  state: PlayState,
-  hand: Card[],
-  trumpSuit: Suit | null,
-  levelRank: Rank,
-): Card[] {
-  if (isLeading(state)) {
-    return chooseLead(hand, trumpSuit, levelRank)
-  }
-
-  const { trick } = state
-  const lead: HandShape = {
-    type: trick.leadType,
-    door: trick.leadDoor,
-    count: trick.leadCount,
-    pairs: trick.leadPairs,
-    tractor: trick.leadTractor,
-  }
-  return chooseFollow(hand, lead, trumpSuit, levelRank)
 }

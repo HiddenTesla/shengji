@@ -33,7 +33,6 @@ import {
 } from './core/rank.ts'
 import {
   type PlayState,
-  aiChoosePlay,
   applyPlay,
   canBeatCurrentPlay,
   collectTrick,
@@ -41,6 +40,7 @@ import {
   isLeading,
   validatePlay,
 } from './core/play.ts'
+import { aiChoosePlay } from './core/ai.ts'
 import PlayerHand from './components/PlayerHand.tsx'
 import OpponentHand from './components/OpponentHand.tsx'
 import PlayerModeButton from './components/PlayerModeButton.tsx'
@@ -434,7 +434,7 @@ function App() {
       const hs = handsRef.current
       if (!cur || !hs || cur.trick.complete) return
       if (playerModes[cur.turn] !== PlayerMode.Auto) return
-      const cards = aiChoosePlay(cur, hs[cur.turn], trumpSuitRef.current, levelRank)
+      const cards = aiChoosePlay(cur, hs, trumpSuitRef.current, levelRank)
       if (cards.length === 0) return
       // 自检：托管出牌必须合法（规则回归的早期预警）
       const chk = validatePlay(cur, hs[cur.turn], cards, trumpSuitRef.current, levelRank)

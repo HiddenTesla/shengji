@@ -21,7 +21,7 @@
 **未纳入步骤、但已知待办**
 - `DEFAULT_GAME_CONFIG.allowThrow` 至今**未被任何代码引用**（第 4 步的甩牌规则已改用 `throwFallback` 实现开关语义可后续补）。
 - **未安装测试框架**（`vitest`）——目前靠浏览器内直接调 core 模块做断言；仍是最建议补的基建。
-- `PLAN.md` 里设想的 `core/ai.ts` 未单独建文件：托管 AI 现在 `hand.ts`（`chooseLead`/`chooseFollow`）+ `play.ts`（`aiChoosePlay`）。
+- `core/ai.ts` 已接入：单张墩使用四家剩余手牌做完美信息极小化搜索，多张墩暂用 `hand.ts` 的基础合法跟牌策略；目标是当前墩，不是整局穷举。
 - 步骤 4~7 **未**按事件溯源实现（见步骤 3），将来接日志时需要回填事件。
 
 ---
@@ -39,6 +39,7 @@
 | `core/hand.ts` | ✅ 门 / 门内次序 / 牌型 / 校验 / 托管选牌 / `throwFallback`（步骤 4） |
 | `core/trick.ts` | ✅ 墩大小比较 / 定胜负（步骤 5） |
 | `core/scoring.ts` | ✅ 墩分统计与累计（步骤 6）+ 抠底倍数与结算（步骤 7） |
+| `core/ai.ts` | ✅ 单张墩完美信息搜索；多张墩沿用基础策略 |
 | `core/play.ts` | ✅ 出牌状态机（含 `resolveLead` 自动出小） |
 | `App.tsx` | ✅ 出牌阶段已完整接入（出牌区 / 控制栏 / 计分板 / 撤销 / 托管驱动） |
 
