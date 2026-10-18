@@ -5,9 +5,10 @@
 import {
   type Card,
   type PlayerPosition,
-  type Rank,
   type Suit,
   HandType,
+  ALL_POSITIONS,
+  Rank,
   nextPlayer,
   teamOf,
 } from './types.ts'
@@ -26,6 +27,52 @@ import type { Hands, PlayState } from './play.ts'
 
 const TRICK_WIN_VALUE = 1000
 
+/**
+ * 「安全 K」领出加成。
+ *
+ * 副牌 K（且不是级牌）在满足下面两点时，实际上是该门最高牌：
+ *   1. 两名对手都没有该门的 A；
+ *   2. 没有「该门缺门且手里有主牌」的对手（否则 K 可能被毙）。
+ *
+ * 此时领 K 可以稳收 10 分，同时把无分的 A 留在手里继续控制该门。
+ * 加成只在真的赢下本墩时兑现（见 utility）。
+ *
+ * 60 足以压过单张墩内最多约 40 分的分差，但远小于赢 / 输墩的 ±1000，
+ * 因此只会改变「都能赢时先出哪张」的排序，不会去抢赢不了的墩。
+ */
+const SAFE_KING_LEAD_BONUS = 60
+
+function safeKingLeadBonus(
+  card: Card,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  // K 为级牌时是主牌，本技巧不适用
+  if (card.rank !== Rank.King || card.rank === levelRank) return 0
+
+  const door = doorOf(card, trumpSuit, levelRank)
+  if (door === 'trump') return 0
+
+  const opponents = ALL_POSITIONS.filter(pos => teamOf(pos) !== teamOf(player))
+  for (const pos of opponents) {
+    const hand = hands[pos]
+    // 对手手里有该门 A → K 不是最高牌
+    if (hand.some(c => doorOf(c, trumpSuit, levelRank) === door && c.rank === Rank.Ace)) {
+      return 0
+    }
+    // 对手该门缺门且手里还有主牌 → 可能直接毙掉 K
+    const hasDoor = hand.some(c => doorOf(c, trumpSuit, levelRank) === door)
+    const canRuff = hand.some(c => doorOf(c, trumpSuit, levelRank) === 'trump')
+    if (!hasDoor && canRuff) {
+      return 0
+    }
+  }
+
+  return SAFE_KING_LEAD_BONUS
+}
+
 function cardCost(card: Card, trumpSuit: Suit | null, levelRank: Rank): number {
   const slot = slotOf(card, trumpSuit, levelRank)
   return doorOf(card, trumpSuit, levelRank) === 'trump' ? 20 + slot : slot
@@ -37,6 +84,7 @@ function utility(
   rootTeam: ReturnType<typeof teamOf>,
   trumpSuit: Suit | null,
   levelRank: Rank,
+  leadBonus: number,
 ): number {
   const winner = judgePlays(plays, lead, trumpSuit, levelRank)
   const points = trickPoints(plays.flatMap(play => play.cards))
@@ -49,7 +97,9 @@ function utility(
     return value + (teamOf(play.player) === rootTeam ? -cost : cost)
   }, 0)
 
-  return (won ? TRICK_WIN_VALUE + points : -TRICK_WIN_VALUE - points) + cardEconomy
+  const base = (won ? TRICK_WIN_VALUE + points : -TRICK_WIN_VALUE - points) + cardEconomy
+  // 安全 K 的加成只在真的赢下本墩时兑现
+  return base + (won ? leadBonus : 0)
 }
 
 function searchTrick(
@@ -60,11 +110,12 @@ function searchTrick(
   rootTeam: ReturnType<typeof teamOf>,
   trumpSuit: Suit | null,
   levelRank: Rank,
+  leadBonus: number,
   alpha: number,
   beta: number,
 ): number {
   if (plays.length === 4) {
-    return utility(plays, lead, rootTeam, trumpSuit, levelRank)
+    return utility(plays, lead, rootTeam, trumpSuit, levelRank, leadBonus)
   }
 
   const available = hands[turn]
@@ -91,6 +142,7 @@ function searchTrick(
       rootTeam,
       trumpSuit,
       levelRank,
+      leadBonus,
       alpha,
       beta,
     )
@@ -140,6 +192,7 @@ export function aiChoosePlay(
         ...hands,
         [player]: hand.filter(candidate => candidate.id !== card.id),
       }
+      const leadBonus = safeKingLeadBonus(card, hands, player, trumpSuit, levelRank)
       const score = searchTrick(
         remainingHands,
         nextPlayer(player),
@@ -148,6 +201,7 @@ export function aiChoosePlay(
         rootTeam,
         trumpSuit,
         levelRank,
+        leadBonus,
         bestScore,
         Infinity,
       )
@@ -191,6 +245,7 @@ export function aiChoosePlay(
         rootTeam,
         trumpSuit,
         levelRank,
+        0,
         bestScore,
         Infinity,
       )
