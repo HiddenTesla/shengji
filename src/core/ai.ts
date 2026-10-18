@@ -9,6 +9,7 @@ import {
   HandType,
   ALL_POSITIONS,
   Rank,
+  isPointCard,
   nextPlayer,
   teamOf,
 } from './types.ts'
@@ -22,7 +23,7 @@ import {
   throwFallback,
   validateFollow,
 } from './hand.ts'
-import { judgePlays } from './trick.ts'
+import { beats, judgePlays } from './trick.ts'
 import { trickPoints } from './scoring.ts'
 import type { Hands, PlayState } from './play.ts'
 
@@ -105,6 +106,8 @@ const AK_CAPTURE_BONUS = 60
 const SAFE_PAIR_LEAD_BONUS = 60
 /** 对手的 AA 是其该门唯一对子时，拆 KK 领单张 K 的加成 */
 const SPLIT_KING_BONUS = 60
+/** 分牌例外：0 分墩、只有分牌能压、且受益方无法加分时，压牌的惩罚 */
+const PASS_POINT_CARD_PENALTY = 2 * TRICK_WIN_VALUE + 50
 
 function cardCost(card: Card, trumpSuit: Suit | null, levelRank: Rank): number {
   const slot = slotOf(card, trumpSuit, levelRank)
@@ -243,6 +246,101 @@ function splitKingLeadBonus(
     if (hasAces && pairs.length === 1) return SPLIT_KING_BONUS
   }
   return 0
+}
+
+/**
+ * 某家是否还能往这一墩里加分：
+ *   - 有该门牌：必须跟该门，只能看该门内的分牌；
+ *   - 该门缺门：可垫任意牌，也可用分牌毙，手里有分牌就能加分。
+ */
+function canAddPointsToTrick(
+  hand: Card[],
+  door: Suit | 'trump',
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  const hasDoor = hand.some(c => doorOf(c, trumpSuit, levelRank) === door)
+  if (hasDoor) {
+    return hand.some(c =>
+      doorOf(c, trumpSuit, levelRank) === door && isPointCard(c.rank))
+  }
+  return hand.some(c => isPointCard(c.rank))
+}
+
+/**
+ * 「分牌例外」：第 3 家或第 2 家跟单张时，如果：
+ *   - 当前大牌在对手手里；
+ *   - 已出的牌都是 0 分；
+ *   - 自己所有能压过的牌都是分牌；
+ *   - 当前大牌那家的搭档无法再往这墩加分；
+ *   - 自己还有合法的非分牌可以放过；
+ * 则大幅降低分牌压牌的优先级，允许保留分牌。
+ */
+function pointCardPassPenalty(
+  state: PlayState,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+  candidate: Card,
+): number {
+  const trick = state.trick
+  if (trick.leadDoor === null || trick.leadDoor === 'trump') return 0
+  if (trick.leadCount !== 1) return 0
+  if (trick.plays.length < 1 || trick.plays.length > 2) return 0
+
+  const leader = trick.leadPlayer
+  const second = nextPlayer(leader)
+  const third = nextPlayer(second)
+  const fourth = nextPlayer(third)
+  if (player !== second && player !== third) return 0
+
+  const currentHighPlayer = player === third ? second : leader
+  if (teamOf(currentHighPlayer) === teamOf(player)) return 0
+
+  const lead: HandShape = {
+    type: trick.leadType,
+    door: trick.leadDoor,
+    count: trick.leadCount,
+    pairs: trick.leadPairs,
+    tractor: trick.leadTractor,
+  }
+  if (judgePlays(trick.plays, lead, trumpSuit, levelRank) !== currentHighPlayer) {
+    return 0
+  }
+
+  // 第 1、2 家出的都是无分牌
+  if (trickPoints(trick.plays.flatMap(play => play.cards)) !== 0) return 0
+  // 只保护 10 分牌（K / 10）；5 分牌价值较低，不触发此例外
+  if (candidate.rank !== Rank.King && candidate.rank !== Rank.Ten) return 0
+
+  const bestPlay = trick.plays.find(play => play.player === currentHighPlayer)
+  if (!bestPlay) return 0
+
+  // 手里所有能压过当前大牌的牌必须全都是分牌
+  const beatingCards = hands[player].filter(card =>
+    validateFollow(hands[player], lead, [card], trumpSuit, levelRank).ok
+    && beats([card], bestPlay.cards, lead, trumpSuit, levelRank))
+  if (beatingCards.length === 0) return 0
+  if (beatingCards.some(card => !isPointCard(card.rank))) return 0
+
+  // 必须存在一个比这张分牌更便宜的合法非分牌可以「放过」
+  const candidateCost = cardCost(candidate, trumpSuit, levelRank)
+  const canPass = hands[player].some(card =>
+    !isPointCard(card.rank)
+    && cardCost(card, trumpSuit, levelRank) < candidateCost
+    && validateFollow(hands[player], lead, [card], trumpSuit, levelRank).ok)
+  if (!canPass) return 0
+
+  // 当前大牌那一方的搭档（本墩受益者）无法再往这墩加分
+  const beneficiary = player === third ? fourth : third
+  if (canAddPointsToTrick(
+    hands[beneficiary], trick.leadDoor, trumpSuit, levelRank,
+  )) {
+    return 0
+  }
+
+  return -PASS_POINT_CARD_PENALTY
 }
 
 /** 生成同门内的所有拖拉机领出候选（长度 ≥ 2 对，含子段） */
@@ -724,6 +822,9 @@ export function aiChoosePlay(
         ...hands,
         [player]: hand.filter(candidate => candidate.id !== card.id),
       }
+      const strategicBonus = pointCardPassPenalty(
+        state, hands, player, trumpSuit, levelRank, card,
+      )
       const score = searchTrick(
         remainingHands,
         nextPlayer(player),
@@ -734,7 +835,7 @@ export function aiChoosePlay(
         levelRank,
         0,
         false,
-        0,
+        strategicBonus,
         bestScore,
         Infinity,
       )
