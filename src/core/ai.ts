@@ -108,6 +108,9 @@ const SAFE_PAIR_LEAD_BONUS = 60
 const SPLIT_KING_BONUS = 60
 /** 分牌例外：0 分墩、只有分牌能压、且受益方无法加分时，压牌的惩罚 */
 const PASS_POINT_CARD_PENALTY = 2 * TRICK_WIN_VALUE + 50
+/** 跟单张时拆对子 / 拆拖拉机的结构惩罚 */
+const BREAK_PAIR_PENALTY = 6
+const BREAK_TRACTOR_PENALTY = 7
 
 function cardCost(card: Card, trumpSuit: Suit | null, levelRank: Rank): number {
   const slot = slotOf(card, trumpSuit, levelRank)
@@ -246,6 +249,29 @@ function splitKingLeadBonus(
     if (hasAces && pairs.length === 1) return SPLIT_KING_BONUS
   }
   return 0
+}
+
+/**
+ * 跟单张时拆对子 / 拆拖拉机的结构惩罚。
+ * 只是评分偏好：如果拆结构能赢墩或抢到关键分数，+1000 的赢墩价值仍会压过它。
+ */
+function breakStructurePenalty(
+  card: Card,
+  hand: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  const door = doorOf(card, trumpSuit, levelRank)
+  const doorCards = hand.filter(
+    c => doorOf(c, trumpSuit, levelRank) === door,
+  )
+  const units = leadPairUnits(doorCards, trumpSuit, levelRank)
+  const unit = units.find(u => u.cards.some(c => c.id === card.id))
+  if (!unit) return 0
+
+  const slots = new Set(units.map(u => u.slot))
+  const inTractor = slots.has(unit.slot - 1) || slots.has(unit.slot + 1)
+  return inTractor ? BREAK_TRACTOR_PENALTY : BREAK_PAIR_PENALTY
 }
 
 /**
@@ -824,7 +850,7 @@ export function aiChoosePlay(
       }
       const strategicBonus = pointCardPassPenalty(
         state, hands, player, trumpSuit, levelRank, card,
-      )
+      ) - breakStructurePenalty(card, hands[player], trumpSuit, levelRank)
       const score = searchTrick(
         remainingHands,
         nextPlayer(player),
