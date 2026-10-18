@@ -6,8 +6,8 @@
 //   2. 该门足够时，出的牌必须全部来自该门
 //   3. 有对必对：首出含 P 个对子时，该门内对子够就必须出 P 个对（不足则全出）
 //   4. 有拖必拖：首出为长度 L 的拖拉机且该门内有同长度拖拉机时必须出
-//   5. 该门不足：必须先出完该门，剩余用其它门补（垫牌 / 用主牌毙）
-//   6. 毙牌：补牌全部为主牌时，同样受「有对必对 / 有拖必拖」约束
+//   5. 该门不足：必须先出完该门，剩余可任意垫牌 / 用主牌毙
+//   6. 补牌不限牌型；能否赢由大小判定（对子/拖拉机需用同型主牌毙）
 //   7. 甩牌：领出多张组合时必须「其余三家要不上」，否则「自动出小」（见 throwFallback）
 // ============================================================
 
@@ -462,7 +462,7 @@ export function validateFollow(
     return checkGroup(playedInDoor, handInDoor, lead.pairs, lead.tractor, trumpSuit, levelRank, name)
   }
 
-  // ---- 该门不足：必须出完该门，其余补齐 ----
+  // ---- 该门不足：必须出完该门，补牌可任意垫 / 毙 ----
   if (playedInDoor.length !== handInDoor.length) {
     return {
       ok: false,
@@ -470,22 +470,8 @@ export function validateFollow(
     }
   }
 
-  // 补牌全为主牌 → 视为毙牌，同样受对子/拖拉机约束
-  const allTrumpFill = playedOutDoor.length > 0
-    && playedOutDoor.every(c => doorOf(c, trumpSuit, levelRank) === 'trump')
-  if (allTrumpFill) {
-    const handTrump = hand.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump')
-    return checkGroup(
-      playedOutDoor,
-      handTrump,
-      lead.pairs,
-      lead.tractor,
-      trumpSuit,
-      levelRank,
-      '主牌',
-    )
-  }
-
+  // 补牌（其余张数）不限：可垫任意牌，也可用主牌毙。
+  // 是否「毙」成功由 trick.ts 按牌型/大小判定：想大出必须用主牌同型毙。
   return { ok: true }
 }
 
@@ -525,7 +511,7 @@ function tractorWindows(units: PairUnit[], length: number): PairUnit[][] {
  *   2. 该门不足 / 正好够 → 该门所有牌必出；
  *   3. 必须跟的对子数 = 可用对子数 → 这些对子必出（唯一的对子）；
  *   4. 必须跟的拖拉机：所有可行窗口的公共牌必出（只有一种时即整个拖拉机）；
- *   5. 该门不足、且其余牌全为主牌（只能毙牌）→ 主牌部分同样套用 3、4。
+ *   5. 该门不足 / 无此门时的补牌不强制任何牌型（想大出才需要用主牌同型毙）。
  *
  * 领出（lead.door === null）或张数非法时返回空数组。
  */
@@ -548,46 +534,41 @@ export function mandatoryFollowCards(
     for (const c of cards) forced.set(c.id, c)
   }
 
-  /** 对「某一组可用牌」推导唯一对子 / 唯一拖拉机（与 validateFollow 的 checkGroup 一致） */
-  const addGroupForced = (available: Card[], groupNeed: number) => {
+  /** 对「某一组可用牌」推导唯一对子（与 validateFollow 的 checkGroup 一致） */
+  const addPairsForced = (available: Card[], groupNeed: number) => {
     const units = pairUnits(available, trumpSuit, levelRank)
     const needPairs = Math.min(lead.pairs, units.length, Math.floor(groupNeed / 2))
     if (needPairs > 0 && units.length === needPairs) {
       add(units.flatMap(u => u.cards))
     }
-    if (lead.tractor >= 2 && groupNeed >= lead.tractor * 2) {
-      // 多个可选拖拉机窗口时，取所有窗口的交集（重叠部分必出）
-      const windows = tractorWindows(units, lead.tractor)
-      if (windows.length > 0) {
-        const commonIds = new Set(windows[0].flatMap(u => u.cards.map(c => c.id)))
-        for (const id of [...commonIds]) {
-          const inAll = windows.every(win =>
-            win.some(u => u.cards.some(c => c.id === id)))
-          if (!inAll) commonIds.delete(id)
-        }
-        add(windows[0]
-          .flatMap(u => u.cards)
-          .filter(c => commonIds.has(c.id)))
-      }
-    }
   }
 
-  // 该门不足或正好够：该门所有牌都必须打掉
+  /** 对「某一组可用牌」推导必出的拖拉机（多个窗口取交集） */
+  const addTractorForced = (available: Card[], groupNeed: number) => {
+    if (lead.tractor < 2 || groupNeed < lead.tractor * 2) return
+    const units = pairUnits(available, trumpSuit, levelRank)
+    const windows = tractorWindows(units, lead.tractor)
+    if (windows.length === 0) return
+    const commonIds = new Set(windows[0].flatMap(u => u.cards.map(c => c.id)))
+    for (const id of [...commonIds]) {
+      const inAll = windows.every(win =>
+        win.some(u => u.cards.some(c => c.id === id)))
+      if (!inAll) commonIds.delete(id)
+    }
+    add(windows[0]
+      .flatMap(u => u.cards)
+      .filter(c => commonIds.has(c.id)))
+  }
+
+  // 该门不足或正好够：该门所有牌都必须打掉；补牌可任意选
   if (handInDoor.length <= need) {
     add(handInDoor)
-
-    // 该门不足且其余牌全为主牌 → 只能毙牌，主牌部分同样要满足对子/拖拉机
-    const restNeed = need - handInDoor.length
-    if (restNeed > 0) {
-      const outDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) !== door)
-      const allTrump = outDoor.every(c => doorOf(c, trumpSuit, levelRank) === 'trump')
-      if (allTrump) addGroupForced(outDoor, restNeed)
-    }
     return [...forced.values()]
   }
 
   // 该门够：只有「唯一对子 / 唯一拖拉机」是必出的
-  addGroupForced(handInDoor, need)
+  addPairsForced(handInDoor, need)
+  addTractorForced(handInDoor, need)
   return [...forced.values()]
 }
 
@@ -678,7 +659,7 @@ export function chooseFollow(
     )
   }
 
-  // 该门不足：全部出完 + 补齐（优先垫副牌，必要时用主牌毙）
+  // 该门不足：全部出完 + 补齐（补齐优先垫副牌，想大出再用主牌毙）
   const picked = [...handInDoor]
   const restNeed = need - handInDoor.length
   const outDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) !== door)
@@ -740,4 +721,5 @@ export function cardsLabel(cards: Card[]): string {
 //    **被拦处理**：不拦出牌，改为「自动出小」（throwFallback）——按 单张 → 对子 →
 //    拖拉机 顺序，取第一个有被拦组的类型里最小的被拦组来出，其余牌留在手上。
 //    纯 Single / Pair / Tractor 领出不是甩牌，**不受**此检查（如 4455 可随便领出）。
-// 4. 毙牌：补牌全部为主牌时按主牌门套用「有对必对 / 有拖必拖」。
+// 4. 毙牌 / 垫牌：该门不足时的补牌不限牌型（可任意垫牌，也可用主牌毙）；
+//    想大出必须用主牌同型毙（trick.ts::canCompete 负责判定）。

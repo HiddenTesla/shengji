@@ -90,17 +90,22 @@ export function beats(
   const leadDoor = lead.door
   if (leadDoor === null) return false
 
+  const cs = analyzeShape(candidate, trumpSuit, levelRank)
+  // 不能与首出「同型同长度」→ 不能赢（如：不能拿主牌单张/非对子毙副牌对子）
+  if (!canCompete(cs, lead)) return false
+
   const ct = tierOf(candidate, leadDoor, trumpSuit, levelRank)
-  const bt = tierOf(best, leadDoor, trumpSuit, levelRank)
+
+  const bs = analyzeShape(best, trumpSuit, levelRank)
+  // 当前最大者若本身不能争胜（纯垫牌 / 无效毙牌），按垫牌处理
+  const bt = canCompete(bs, lead)
+    ? tierOf(best, leadDoor, trumpSuit, levelRank)
+    : 0
+
   // 不同层：层级高的赢（主牌毙 > 同门 > 垫牌）
   if (ct !== bt) return ct > bt
   // 同为垫牌：谁也赢不了（先出者保持）
   if (ct === 0) return false
-
-  const cs = analyzeShape(candidate, trumpSuit, levelRank)
-  const bs = analyzeShape(best, trumpSuit, levelRank)
-  if (!canCompete(cs, lead)) return false
-  if (!canCompete(bs, lead)) return false
 
   return strengthOf(candidate, trumpSuit, levelRank)
     > strengthOf(best, trumpSuit, levelRank)

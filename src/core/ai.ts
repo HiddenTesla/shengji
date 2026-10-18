@@ -163,7 +163,8 @@ function hasConsecutivePairRun(units: LeadPairUnit[], length: number): boolean {
 
 /**
  * 判断某家能否用主牌毙掉这手副牌领出（只判断合法性与形态，不比较大小）。
- * 与 validateFollow 的「全主牌补牌」约束保持一致。
+ * 注意：补牌本身不限牌型，但「想大出」必须用同型主牌：
+ * 对子需主牌对子、拖拉机需同长主牌拖拉机（与 trick.ts::canCompete 一致）。
  */
 function canRuffWithTrump(
   hand: Card[],
