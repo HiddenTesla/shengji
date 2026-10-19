@@ -6,8 +6,9 @@
 //   2. 主牌 > 副牌（毙）；主牌之间按主牌次序比大小（盖毙）
 //   3. 同门之间按门内次序比大小
 //   4. 必须与首出「同型」才可争胜：单张 vs 单张、对子 vs 对子、
-//      拖拉机 vs 同长度拖拉机；甩牌按「张数相同 + 最大牌」
-//      （甩牌被拦时已在 play.ts::applyPlay 里「自动出小」改出）
+//      拖拉机 vs 同长度拖拉机；甩牌按「张数相同」比较
+//      （甩牌成立时同门跟牌一律压不过，只有毙牌才可能大过；
+//       被拦的甩牌已在 play.ts::applyPlay 里「自动出小」改出）
 //   5. 同大时先出者赢（使用严格大于比较）
 // ============================================================
 
@@ -70,7 +71,8 @@ export function canCompete(shape: HandShape, lead: HandShape): boolean {
     case HT.Tractor:
       return shape.type === HT.Tractor && shape.tractor === lead.tractor
     default:
-      // 甩牌：按「张数相同」比较，胜负看最大牌（被拦时已在出牌前「自动出小」改出）
+      // 甩牌：按「张数相同」参与比较；甩牌成立时同门跟牌一律压不过（见 beats），
+      // 只有毙牌才可能大过（被拦时已在 play.ts 中「自动出小」改出）
       return shape.count === lead.count
   }
 }
@@ -95,6 +97,10 @@ export function beats(
   if (!canCompete(cs, lead)) return false
 
   const ct = tierOf(candidate, leadDoor, trumpSuit, levelRank)
+
+  // 甩牌成立时：同门跟牌一定小于领出（甩牌本身已保证该门要不上），
+  // 只有主牌毙牌（跨门 tier = 2）才可能大过甩牌；主牌甩牌则无人能大过。
+  if (lead.type === HT.Throw && ct !== 2) return false
 
   const bs = analyzeShape(best, trumpSuit, levelRank)
   // 当前最大者若本身不能争胜（纯垫牌 / 无效毙牌），按垫牌处理
