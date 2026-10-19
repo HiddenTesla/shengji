@@ -24,6 +24,8 @@ interface BottomCardsProps {
   onConfirm: () => void
   /** 清空选择 */
   onClear: () => void
+  /** 提示：由 AI 选出建议埋的牌（只选中，不确认） */
+  onHint: () => void
 }
 
 export default function BottomCards({
@@ -35,6 +37,7 @@ export default function BottomCards({
   buriedPoints,
   onConfirm,
   onClear,
+  onHint,
 }: BottomCardsProps) {
   const full = selectedCount === requiredCount && requiredCount > 0
 
@@ -101,6 +104,22 @@ export default function BottomCards({
 
           {/* 操作按钮 */}
           <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onHint}
+              title="由 AI 选出建议埋的牌（只选中，不确认）"
+              style={{
+                padding: '7px 16px',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                border: '1.5px solid #7e57c2',
+                borderRadius: 6,
+                background: '#f3e9ff',
+                color: '#5e35b1',
+              }}
+            >
+              提示
+            </button>
             <button
               onClick={onClear}
               disabled={selectedCount === 0}

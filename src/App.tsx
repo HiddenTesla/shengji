@@ -650,6 +650,45 @@ function App() {
     setAutoPaused(false)
   }
 
+  // ---- 提示：让 AI 选出建议的牌并选中（不打出 / 不确认） ----
+  /** 把一手牌（Card[]）映射为 UI 选中下标（与 groupCardsForDisplay 顺序一致） */
+  function indicesOfCards(hand: Card[], cards: Card[]): Set<number> {
+    const ids = new Set(cards.map(c => c.id))
+    const flat = groupCardsForDisplay(hand, trumpSuit, levelRank)
+      .flatMap(g => g.cards)
+    const result = new Set<number>()
+    flat.forEach((card, index) => {
+      if (ids.has(card.id)) result.add(index)
+    })
+    return result
+  }
+
+  /** 出牌提示：用与托管完全相同的 AI 决策，只选中不出牌 */
+  function hintPlay() {
+    if (!playState || !hands) return
+    if (playerModes[playState.turn] !== PlayerMode.Manual) return
+    if (playState.trick.complete) return
+    const cards = aiChoosePlay(playState, hands, trumpSuit, levelRank)
+    if (cards.length === 0) return
+    setSelectedIndices(indicesOfCards(hands[playState.turn], cards))
+  }
+
+  /** 埋底提示：用与托管埋底相同的 AI 决策，只选中不确认 */
+  function hintBury() {
+    if (!banker || !hands) return
+    if (playerModes[banker] !== PlayerMode.Manual) return
+    const cards = aiChooseBury(
+      hands[banker],
+      BOTTOM_COUNT,
+      trumpSuit,
+      levelRank,
+      0,
+      { partnerHand: hands[partnerOf(banker)] },
+    )
+    if (cards.length !== BOTTOM_COUNT) return
+    setSelectedIndices(indicesOfCards(hands[banker], cards))
+  }
+
   // ---- 撤销：优先回到「上一次玩家决策之前」；
   // 若本局还没有玩家决策（全托管），则只退一步（AI 动作），
   // 并在恢复点仍由托管行动时暂停托管，避免 AI 立即重做。
@@ -799,6 +838,7 @@ function App() {
         reason={selectedPlayCards.length > 0 ? (playValidation?.reason ?? null) : null}
         onPlay={commitPlay}
         onClear={() => setSelectedIndices(new Set())}
+        onHint={hintPlay}
         compact={compact}
         canBeatCurrent={selectedCanBeatCurrent}
       />
@@ -1435,6 +1475,7 @@ function App() {
               buriedPoints={selectedBuriedPoints}
               onConfirm={confirmBury}
               onClear={() => setSelectedIndices(new Set())}
+              onHint={hintBury}
             />
           </div>
         )}

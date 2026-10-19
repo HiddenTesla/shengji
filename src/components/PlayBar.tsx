@@ -22,6 +22,8 @@ interface PlayBarProps {
   onPlay: () => void
   /** 清空选择 */
   onClear: () => void
+  /** 提示：由 AI 选出建议的牌（只选中，不出牌） */
+  onHint: () => void
   compact?: boolean
   canBeatCurrent?: boolean | null
 }
@@ -34,6 +36,7 @@ export default function PlayBar({
   reason,
   onPlay,
   onClear,
+  onHint,
   compact = false,
   canBeatCurrent = null,
 }: PlayBarProps) {
@@ -99,7 +102,24 @@ export default function PlayBar({
       </div>
 
       {/* 操作 */}
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        <button
+          onClick={onHint}
+          title="由 AI 选出建议的牌（只选中，不出牌）"
+          style={{
+            padding: compact ? '5px 9px' : '7px 16px',
+            fontSize: compact ? 12 : 14,
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+            border: '1.5px solid #7e57c2',
+            borderRadius: 6,
+            background: '#f3e9ff',
+            color: '#5e35b1',
+          }}
+        >
+          提示
+        </button>
         <button
           onClick={onClear}
           disabled={selectedCount === 0}
@@ -107,6 +127,7 @@ export default function PlayBar({
             padding: compact ? '5px 9px' : '7px 16px',
             fontSize: compact ? 12 : 14,
             fontWeight: 600,
+            whiteSpace: 'nowrap',
             cursor: selectedCount === 0 ? 'not-allowed' : 'pointer',
             border: '1.5px solid #bbb',
             borderRadius: 6,
@@ -123,6 +144,7 @@ export default function PlayBar({
             padding: compact ? '5px 11px' : '7px 22px',
             fontSize: compact ? 12 : 14,
             fontWeight: 700,
+            whiteSpace: 'nowrap',
             cursor: canPlay ? 'pointer' : 'not-allowed',
             border: 'none',
             borderRadius: 6,
