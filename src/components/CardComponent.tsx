@@ -13,6 +13,11 @@ interface CardComponentProps {
   badgePosition?: 'top-right' | 'bottom-left'
   /** 额外缩放（1 = 不缩放）；配合 small 可渲染更小的牌（如出牌区） */
   scale?: number
+  /**
+   * 花色 / 王牌标记显示在点数右侧（东西家竖排时只露出牌顶一小条，
+   * 花色在点数下方会看不见）
+   */
+  inlineSuit?: boolean
   onClick?: () => void
   style?: React.CSSProperties
 }
@@ -120,7 +125,11 @@ function CardBack() {
 }
 
 /** Joker 牌面 */
-function JokerFace({ card, small }: { card: Card; small?: boolean }) {
+function JokerFace({ card, small, inlineSuit }: {
+  card: Card
+  small?: boolean
+  inlineSuit?: boolean
+}) {
   const isBig = card.rank === Rank.BigJoker
   const label = isBig ? '大\n王' : '小\n王'
   const color = isBig ? '#c62828' : '#1565c0'
@@ -159,12 +168,37 @@ function JokerFace({ card, small }: { card: Card; small?: boolean }) {
       >
         {isBig ? 'BIG JOKER' : 'SMALL JOKER'}
       </text>
-      <SuitSymbol
-        suit={Suit.Joker}
-        x={small ? 14 : 16}
-        y={small ? 20 : 22}
-        size={small ? 16 : 20}
-      />
+      {inlineSuit
+        ? (
+          <>
+            {/* 紧凑模式：大小王 + 王牌标记同一行，露出牌顶时也能分辨 */}
+            <text
+              x={7}
+              y={small ? 21 : 23}
+              fontSize={small ? 15 : 17}
+              fill={color}
+              textAnchor="start"
+              dominantBaseline="central"
+              fontWeight="bold"
+            >
+              {isBig ? '大王' : '小王'}
+            </text>
+            <SuitSymbol
+              suit={Suit.Joker}
+              x={small ? 53 : 56}
+              y={small ? 21 : 23}
+              size={small ? 15 : 17}
+            />
+          </>
+        )
+        : (
+          <SuitSymbol
+            suit={Suit.Joker}
+            x={small ? 14 : 16}
+            y={small ? 20 : 22}
+            size={small ? 16 : 20}
+          />
+        )}
       <SuitSymbol
         suit={Suit.Joker}
         x={small ? CARD_WIDTH - 14 : CARD_WIDTH - 16}
@@ -176,7 +210,11 @@ function JokerFace({ card, small }: { card: Card; small?: boolean }) {
 }
 
 /** 标准牌面 — 大号点数和花色 */
-function NormalFace({ card, small }: { card: Card; small?: boolean }) {
+function NormalFace({ card, small, inlineSuit }: {
+  card: Card
+  small?: boolean
+  inlineSuit?: boolean
+}) {
   const color = cardColor(card.suit)
   const bg = cardBg(card.suit)
   const rankName = RANK_NAME[card.rank]
@@ -189,6 +227,11 @@ function NormalFace({ card, small }: { card: Card; small?: boolean }) {
   const cornerX = 12
   const rankY = 26
   const suitY = 43
+  // 紧凑模式（花色在点数右侧）
+  const inlineRankSize = small ? 22 : 20
+  const inlineSuitSize = small ? 17 : 15
+  const inlineY = 21
+  const inlineSuitX = rankName.length > 1 ? 45 : 32
 
   return (
     <g>
@@ -203,24 +246,51 @@ function NormalFace({ card, small }: { card: Card; small?: boolean }) {
         stroke="#ccc"
         strokeWidth={1}
       />
-      {/* 左上角点数 */}
-      <text
-        x={cornerX}
-        y={rankY}
-        fontSize={rankSize}
-        fill={color}
-        fontWeight="bold"
-        fontFamily="Arial, sans-serif"
-      >
-        {rankName}
-      </text>
-      {/* 左上角花色 */}
-      <SuitSymbol
-        suit={card.suit}
-        x={cornerX + 8}
-        y={suitY}
-        size={suitCornerSize}
-      />
+      {inlineSuit
+        ? (
+          <>
+            {/* 紧凑模式：点数与花色同一行（东西家竖排只露出牌顶一条） */}
+            <text
+              x={7}
+              y={inlineY}
+              fontSize={inlineRankSize}
+              fill={color}
+              fontWeight="bold"
+              dominantBaseline="central"
+              fontFamily="Arial, sans-serif"
+            >
+              {rankName}
+            </text>
+            <SuitSymbol
+              suit={card.suit}
+              x={inlineSuitX}
+              y={inlineY}
+              size={inlineSuitSize}
+            />
+          </>
+        )
+        : (
+          <>
+            {/* 左上角点数 */}
+            <text
+              x={cornerX}
+              y={rankY}
+              fontSize={rankSize}
+              fill={color}
+              fontWeight="bold"
+              fontFamily="Arial, sans-serif"
+            >
+              {rankName}
+            </text>
+            {/* 左上角花色 */}
+            <SuitSymbol
+              suit={card.suit}
+              x={cornerX + 8}
+              y={suitY}
+              size={suitCornerSize}
+            />
+          </>
+        )}
       {/* 中央大花色 — 几乎占满牌面 */}
       <text
         x={CARD_WIDTH / 2}
@@ -268,6 +338,7 @@ export default function CardComponent({
   badge,
   badgePosition = 'bottom-left',
   scale,
+  inlineSuit = false,
   onClick,
   style,
 }: CardComponentProps) {
@@ -292,8 +363,8 @@ export default function CardComponent({
       {faceUp
         ? (
           card.suit === Suit.Joker
-            ? <JokerFace card={card} small={small} />
-            : <NormalFace card={card} small={small} />
+            ? <JokerFace card={card} small={small} inlineSuit={inlineSuit} />
+            : <NormalFace card={card} small={small} inlineSuit={inlineSuit} />
         )
         : <CardBack />}
       {faceUp && badge && (

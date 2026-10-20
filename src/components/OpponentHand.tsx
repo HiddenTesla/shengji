@@ -318,6 +318,7 @@ function SideGroupColumns({
                             card={card}
                             faceUp
                             small
+                            inlineSuit
                             badge={sourceCardIds?.has(card.id) ? '底' : undefined}
                             badgePosition="top-right"
                             selected={selected}
