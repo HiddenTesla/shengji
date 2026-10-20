@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from 'react'
 interface MenuBarProps {
   /** 点击「新的一局」：只负责发起请求，由 App 弹确认框 */
   onNewGame: () => void
+  /** 点击「查看规则」：由 App 弹出只读的规则选项说明 */
+  onViewRules: () => void
 }
 
 /** 菜单栏下沿的偏移量（供 App 里绝对定位的浮层使用） */
@@ -57,7 +59,7 @@ const MENU_ITEM_STYLE: React.CSSProperties = {
   color: '#fff',
 }
 
-export default function MenuBar({ onNewGame }: MenuBarProps) {
+export default function MenuBar({ onNewGame, onViewRules }: MenuBarProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -138,6 +140,23 @@ export default function MenuBar({ onNewGame }: MenuBarProps) {
             }}
           >
             新的一局…
+          </button>
+
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              onViewRules()
+            }}
+            style={MENU_ITEM_STYLE}
+            onMouseEnter={event => {
+              event.currentTarget.style.background = 'rgba(255,255,255,0.14)'
+            }}
+            onMouseLeave={event => {
+              event.currentTarget.style.background = 'transparent'
+            }}
+          >
+            查看规则…
           </button>
         </div>
       )}

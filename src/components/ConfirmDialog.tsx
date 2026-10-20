@@ -11,6 +11,10 @@ interface ConfirmDialogProps {
   description?: string
   confirmLabel?: string
   cancelLabel?: string
+  /** 隐藏取消按钮（只读信息框：只有一个「知道了」） */
+  hideCancel?: boolean
+  /** 对话框宽度（默认 360） */
+  width?: number
   /** 确认按钮是否为危险操作（红色） */
   danger?: boolean
   /** 附加内容（如规则选项），渲染在说明文字与按钮之间 */
@@ -25,6 +29,8 @@ export default function ConfirmDialog({
   description,
   confirmLabel = '确定',
   cancelLabel = '取消',
+  hideCancel = false,
+  width = 360,
   danger = false,
   children,
   onConfirm,
@@ -62,7 +68,7 @@ export default function ConfirmDialog({
         aria-label={title}
         onClick={event => event.stopPropagation()}
         style={{
-          width: 360,
+          width,
           maxWidth: 'calc(100vw - 40px)',
           padding: '20px 22px 16px',
           borderRadius: 12,
@@ -104,21 +110,23 @@ export default function ConfirmDialog({
           gap: 10,
           marginTop: 20,
         }}>
-          <button
-            onClick={onCancel}
-            style={{
-              padding: '8px 18px',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              border: '1px solid rgba(255,255,255,0.25)',
-              borderRadius: 6,
-              background: 'rgba(255,255,255,0.08)',
-              color: 'rgba(255,255,255,0.85)',
-            }}
-          >
-            {cancelLabel}
-          </button>
+          {!hideCancel && (
+            <button
+              onClick={onCancel}
+              style={{
+                padding: '8px 18px',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                border: '1px solid rgba(255,255,255,0.25)',
+                borderRadius: 6,
+                background: 'rgba(255,255,255,0.08)',
+                color: 'rgba(255,255,255,0.85)',
+              }}
+            >
+              {cancelLabel}
+            </button>
+          )}
           <button
             onClick={onConfirm}
             style={{

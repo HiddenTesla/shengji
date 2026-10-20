@@ -231,6 +231,8 @@ function App() {
   const [autoPaused, setAutoPaused] = useState(false)
   /** 「新的一局」确认框 */
   const [confirmNewGame, setConfirmNewGame] = useState(false)
+  /** 「查看规则」信息框（只读，说明「新的一局」里的可选规则） */
+  const [showRules, setShowRules] = useState(false)
   /** 本局生效的可选规则 */
   const [rules, setRules] = useState<RuleOptions>(DEFAULT_RULE_OPTIONS)
   /** 「新的一局」对话框中待确认的规则 */
@@ -956,7 +958,9 @@ function App() {
         setDraftRules(rules)
         setDraftStartLevel(startLevel)
         setConfirmNewGame(true)
-      }} />
+      }}
+        onViewRules={() => setShowRules(true)}
+      />
 
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
       <div style={{
@@ -1624,6 +1628,67 @@ function App() {
           ⛔ 甩牌被拦了，已自动出小
         </div>
       )}
+
+      {/* 查看规则（只读）：说明「新的一局」里的可选规则 */}
+      <ConfirmDialog
+        open={showRules}
+        title="可选规则"
+        description={"以下选项可在「游戏 → 新的一局」中设置，此处仅作说明（只读）。"}
+        width={420}
+        confirmLabel="知道了"
+        hideCancel
+        onConfirm={() => setShowRules(false)}
+        onCancel={() => setShowRules(false)}
+      >
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+        }}>
+          {[{
+            name: '初始等级',
+            value: `打 ${RANK_NAME[startLevel]}`,
+            desc: '新开一局时南北与东西双方都从这个级牌开始打，可选 2 – A，默认打 2。'
+              + '只决定「新的一局」的起点，之后按升级结果继续。',
+          }, {
+            name: '允许反自己亮的主',
+            value: rules.allowSelfOverride ? '开启' : '关闭',
+            desc: '默认关闭：只能反别人亮的主。开启后可以用更强的报品压掉自己亮的主。'
+              + '同一报品内的补强（单张 → 对子、对子 → 对王）始终允许，不受此开关影响。',
+          }].map(item => (
+            <div key={item.name}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 14,
+                color: 'rgba(255,255,255,0.9)',
+              }}>
+                <span style={{ fontWeight: 700 }}>{item.name}</span>
+                <span style={{
+                  padding: '1px 8px',
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: '#ffd700',
+                  background: 'rgba(255,215,0,0.14)',
+                  border: '1px solid rgba(255,215,0,0.4)',
+                }}>
+                  {item.value}
+                </span>
+              </div>
+              <div style={{
+                marginTop: 4,
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: 'rgba(255,255,255,0.55)',
+              }}>
+                {item.desc}
+              </div>
+            </div>
+          ))}
+        </div>
+      </ConfirmDialog>
 
       {/* 新的一局确认框 */}
       <ConfirmDialog
