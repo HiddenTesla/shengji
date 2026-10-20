@@ -8,7 +8,7 @@
 
 import { type CSSProperties } from 'react'
 import { type BottomSettlement } from '../core/scoring.ts'
-import { type LevelBoard, type LevelSettlement } from '../core/rank.ts'
+import { type LevelBoard, type LevelSettlement, type LapBoard, formatLap } from '../core/rank.ts'
 import {
   type Card,
   PlayerPosition,
@@ -34,12 +34,12 @@ interface RoundSettlementProps {
   banker: PlayerPosition | null
   /** 两队当前级牌 */
   levels: LevelBoard
-  /** 等级结算（升几级 / 换庄） */
+  /** 两队当前周目（本局结算后若要 +1，由这里推导） */
+  laps: LapBoard
+  /** 等级结算（升几级 / 换庄 / 周目） */
   levelSettlement: LevelSettlement | null
   /** 点击「下一局」 */
   onNextRound: () => void
-  /** 点击「重新开始」（通关后） */
-  onRestart: () => void
 }
 
 const BUTTON_STYLE: CSSProperties = {
@@ -61,9 +61,9 @@ export default function RoundSettlement({
   bottomCards,
   banker,
   levels,
+  laps,
   levelSettlement,
   onNextRound,
-  onRestart,
 }: RoundSettlementProps) {
   const total = defendingPoints + bankerPoints
   const taken = bottom?.taken ?? false
@@ -77,6 +77,14 @@ export default function RoundSettlement({
   const nextLevelName = levelSettlement
     ? RANK_NAME[levelSettlement.toLevel]
     : '—'
+  // 下一局的周目（升过 A 的队按完成周目数累加）
+  const nextLaps: LapBoard = levelSettlement?.lapUp
+    ? {
+        ...laps,
+        [levelSettlement.upgradingTeam]:
+          laps[levelSettlement.upgradingTeam] + levelSettlement.lapsGained,
+      }
+    : laps
   const tractorLabel = bottom
     ? bottom.tractorLength === 0
       ? '无对子'
@@ -188,16 +196,23 @@ export default function RoundSettlement({
             <div style={{
               fontSize: 15,
               fontWeight: 700,
-              color: levelSettlement.gameWon
+              color: levelSettlement.lapUp
                 ? '#ffd700'
                 : levelSettlement.actualSteps > 0 ? '#7ee787' : 'rgba(255,255,255,0.85)',
             }}>
               {TEAM_NAME_ZH[levelSettlement.upgradingTeam]}队
-              {levelSettlement.actualSteps > 0
-                ? ` 升 ${levelSettlement.actualSteps} 级 → 打 ${RANK_NAME[levelSettlement.toLevel]}`
-                : ' 不升级'}
-              {levelSettlement.gameWon && ' · 🏆 通关！'}
+              {levelSettlement.lapUp
+                ? ` 升过 A · 🏆 完成${formatLap(laps[levelSettlement.upgradingTeam])}周目`
+                : levelSettlement.actualSteps > 0
+                  ? ` 升 ${levelSettlement.actualSteps} 级 → 打 ${RANK_NAME[levelSettlement.toLevel]}`
+                  : ' 不升级'}
             </div>
+            {levelSettlement.lapUp && (
+              <div style={{ fontSize: 13, color: '#7ee787' }}>
+                进入第{formatLap(laps[levelSettlement.upgradingTeam] + levelSettlement.lapsGained)}周目
+                （从打 {RANK_NAME[levelSettlement.toLevel]} 开始）
+              </div>
+            )}
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
               升级后级牌：南北 打{RANK_NAME[nextBoard[Team.NS]]} · 东西 打{RANK_NAME[nextBoard[Team.EW]]}
               ｜下一局庄家：{POSITION_NAME_ZH[levelSettlement.nextBanker]}家
@@ -209,27 +224,18 @@ export default function RoundSettlement({
 
       {/* 操作按钮 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {levelSettlement?.gameWon ? (
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#ffd700' }}>
-            🏆 {TEAM_NAME_ZH[levelSettlement.upgradingTeam]}队通关！
-          </span>
-        ) : (
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
-            下一局打「{nextTeamName}队」的级牌（{nextLevelName}）
-          </span>
-        )}
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+          下一局打「{nextTeamName}队」的级牌（{nextLevelName}）
+          ｜周目 南北 {formatLap(nextLaps[Team.NS])} · 东西 {formatLap(nextLaps[Team.EW])}
+        </span>
         <span style={{ flex: 1 }} />
-        {levelSettlement?.gameWon ? (
-          <button onClick={onRestart} style={BUTTON_STYLE}>🔄 重新开始</button>
-        ) : (
-          <button
-            onClick={onNextRound}
-            disabled={!levelSettlement}
-            style={{ ...BUTTON_STYLE, opacity: levelSettlement ? 1 : 0.5 }}
-          >
-            ▶ 下一局
-          </button>
-        )}
+        <button
+          onClick={onNextRound}
+          disabled={!levelSettlement}
+          style={{ ...BUTTON_STYLE, opacity: levelSettlement ? 1 : 0.5 }}
+        >
+          ▶ 下一局
+        </button>
       </div>
     </div>
   )

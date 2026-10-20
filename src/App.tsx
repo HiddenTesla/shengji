@@ -35,8 +35,11 @@ import {
 } from './core/bidding.ts'
 import { aiChooseBury, countPoints } from './core/bury.ts'
 import {
+  type LapBoard,
   type LevelBoard,
   LEVEL_RANKS,
+  formatLap,
+  initialLapBoard,
   initialLevelBoard,
   settleLevel,
 } from './core/rank.ts'
@@ -244,6 +247,8 @@ function App() {
 
   /** 两队各自的级牌（标准双升：本局打庄家队的级牌） */
   const [levels, setLevels] = useState<LevelBoard>(() => initialLevelBoard())
+  /** 两队各自的周目数（升过 A 后 +1，从 1 开始） */
+  const [laps, setLaps] = useState<LapBoard>(() => initialLapBoard())
 
   // 本局打的级牌 = **庄家队**的级牌（首局未定庄时按南家队；两队都从 2 打起）
   const levelRank = levels[teamOf(banker ?? PlayerPosition.South)]
@@ -329,9 +334,10 @@ function App() {
     setPhase(GamePhase.Dealing)
   }
 
-  // ---- 新游戏：等级回到起始级牌（默认 2），庄家重新由叫主决定 ----
+  // ---- 新游戏：等级回到起始级牌（默认 2），周目重新从 1 开始，庄家由叫主决定 ----
   function startNewGame(level: Rank = startLevel) {
     setLevels(initialLevelBoard(level))
+    setLaps(initialLapBoard())
     dealRound(null)
   }
 
@@ -798,19 +804,26 @@ function App() {
   const isPlaying = phase === GamePhase.Playing
   const isRoundEnd = phase === GamePhase.RoundEnd
 
-  // 本局等级结算（仅展示；「下一局」的接线留待后续）
+  // 本局等级结算（含周目：升过 A → 周目 +1、级牌从 2 重新开始并累加剩余级数）
   const levelSettlement = isRoundEnd && playState && banker
     ? settleLevel(playState.defendingPoints, banker, levels)
     : null
 
-  // ---- 下一局：应用升级结果（新级牌 / 新庄家）后重新发牌 ----
+  // ---- 下一局：应用升级结果（新级牌 / 新庄家 / 周目）后重新发牌 ----
   // 该局打「新庄家方」的级牌（两队等级可不同）。
   function startNextRound() {
     if (!levelSettlement) return
+    const team = levelSettlement.upgradingTeam
     setLevels(prev => ({
       ...prev,
-      [levelSettlement.upgradingTeam]: levelSettlement.toLevel,
+      [team]: levelSettlement.toLevel,
     }))
+    if (levelSettlement.lapUp) {
+      setLaps(prev => ({
+        ...prev,
+        [team]: prev[team] + levelSettlement.lapsGained,
+      }))
+    }
     dealRound(levelSettlement.nextBanker)
   }
 
@@ -1008,6 +1021,19 @@ function App() {
                 color: isCurrent ? '#ffd700' : 'rgba(255,255,255,0.9)',
               }}>
                 打 {RANK_NAME[levels[team]]}
+              </span>
+              <span
+                title={`第 ${laps[team]} 周目`}
+                style={{
+                  fontSize: 12,
+                  lineHeight: '16px',
+                  padding: '0 5px',
+                  borderRadius: 3,
+                  background: 'rgba(255,255,255,0.1)',
+                  color: 'rgba(255,255,255,0.7)',
+                }}
+              >
+                {formatLap(laps[team])}周目
               </span>
               {isCurrent && (
                 <span style={{
@@ -1321,9 +1347,9 @@ function App() {
               bottomCards={buriedCards}
               banker={banker}
               levels={levels}
+              laps={laps}
               levelSettlement={levelSettlement}
               onNextRound={startNextRound}
-              onRestart={startNewGame}
             />
           )}
 
