@@ -27,3 +27,9 @@ body {
   overflow: hidden;
 }
 
+/* 卡牌：禁止拖拽框选（避免手牌上拖动时选中牌面文字） */
+svg {
+  -webkit-user-select: none;
+  user-select: none;
+}
+

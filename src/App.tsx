@@ -884,6 +884,9 @@ function App() {
       overflow: 'hidden',
       position: 'relative',
       fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+      // 整局界面禁止拖拽框选（手牌、牌桌、状态文字都不会被选中）
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
     }}>
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
       <div style={{

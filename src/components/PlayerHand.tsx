@@ -65,6 +65,8 @@ export default function PlayerHand({
       gap: GROUP_GAP,
       overflow: 'hidden',
       maxWidth: '100%',
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
     }}>
       {groups.map((group) => {
         const groupStartIdx = globalIdx

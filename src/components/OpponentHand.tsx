@@ -269,6 +269,8 @@ function SideGroupColumns({
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: 10,
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
     }}>
       {groups.map((group, groupIndex) => {
         const groupStart = groups
@@ -387,6 +389,8 @@ function LabelRow({
       display: 'flex',
       alignItems: 'center',
       gap: 6,
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
     }}>
       {extra}
       <span style={{
