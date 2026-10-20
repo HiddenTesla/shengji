@@ -52,6 +52,8 @@ import { aiChoosePlay } from './core/ai.ts'
 import PlayerHand from './components/PlayerHand.tsx'
 import OpponentHand from './components/OpponentHand.tsx'
 import PlayerModeButton from './components/PlayerModeButton.tsx'
+import MenuBar, { MENU_BAR_OFFSET } from './components/MenuBar.tsx'
+import ConfirmDialog from './components/ConfirmDialog.tsx'
 import BiddingBar from './components/BiddingBar.tsx'
 import BottomCards from './components/BottomCards.tsx'
 import BottomReveal from './components/BottomReveal.tsx'
@@ -187,6 +189,8 @@ function App() {
   const [history, setHistory] = useState<UndoSnapshot[]>([])
   /** 撤销后暂停托管：避免 AI 立即把刚撤销的动作重做一遍 */
   const [autoPaused, setAutoPaused] = useState(false)
+  /** 「新的一局」确认框 */
+  const [confirmNewGame, setConfirmNewGame] = useState(false)
 
   /** 两队各自的级牌（标准双升：本局打庄家队的级牌） */
   const [levels, setLevels] = useState<LevelBoard>(() => initialLevelBoard())
@@ -888,10 +892,13 @@ function App() {
       userSelect: 'none',
       WebkitUserSelect: 'none',
     }}>
+      {/* ---- 顶部菜单栏 ---- */}
+      <MenuBar onNewGame={() => setConfirmNewGame(true)} />
+
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
       <div style={{
         position: 'absolute',
-        top: 10,
+        top: MENU_BAR_OFFSET,
         left: 12,
         zIndex: 20,
         display: 'flex',
@@ -1292,29 +1299,13 @@ function App() {
             </div>
           )}
 
-          {/* 新游戏 / 撤销 */}
+          {/* 撤销 / 继续托管 */}
           <div style={{
             display: 'flex',
             gap: 8,
             marginTop: 8,
             alignItems: 'stretch',
           }}>
-            <button
-              onClick={startNewGame}
-              style={{
-                padding: '10px 32px',
-                fontSize: 18,
-                cursor: 'pointer',
-                border: 'none',
-                borderRadius: 6,
-                background: 'linear-gradient(135deg, #ffd700, #ffb300)',
-                color: '#1a1a1a',
-                fontWeight: 600,
-                boxShadow: '0 2px 8px rgba(255,215,0,0.3)',
-              }}
-            >
-              新的一局
-            </button>
             <button
               onClick={undo}
               disabled={!canUndo}
@@ -1552,7 +1543,7 @@ function App() {
       {isPlaying && playState?.trick.throwBlocked && (
         <div style={{
           position: 'fixed',
-          top: 14,
+          top: MENU_BAR_OFFSET,
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 50,
@@ -1569,6 +1560,21 @@ function App() {
           ⛔ 甩牌被拦了，已自动出小
         </div>
       )}
+
+      {/* 新的一局确认框 */}
+      <ConfirmDialog
+        open={confirmNewGame}
+        title="开始新的一局？"
+        description={'当前这局的进度将全部清空：手牌、分数、等级都会重置，\n双方从打 2 重新开始。'}
+        confirmLabel="开始新的一局"
+        cancelLabel="取消"
+        danger
+        onConfirm={() => {
+          setConfirmNewGame(false)
+          startNewGame()
+        }}
+        onCancel={() => setConfirmNewGame(false)}
+      />
     </div>
   )
 }
