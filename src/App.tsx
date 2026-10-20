@@ -723,6 +723,18 @@ function App() {
     setAutoPaused(autoWouldAct)
   }
 
+  // ---- 离开 / 刷新页面时弹窗确认 ----
+  // 浏览器只显示自带的通用提示文案（无法自定义内容）；
+  // 需同时 preventDefault 并设置 returnValue，旧版浏览器只看 returnValue。
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
+
   // ---- 初始发牌 ----
   useMemo(() => {
     if (!hands) startNewGame()
