@@ -289,6 +289,16 @@ export type VisibilitySettings = Record<PlayerPosition, boolean>
 // ---- 玩家模式设置 ----
 export type PlayerModeSettings = Record<PlayerPosition, PlayerMode>
 
+// ---- 可选规则（在「新游戏」对话框中设置） ----
+export interface RuleOptions {
+  /** 是否允许反自己亮的主（同一报品内的自保始终允许，不受此开关影响） */
+  allowSelfOverride: boolean
+}
+
+export const DEFAULT_RULE_OPTIONS: RuleOptions = {
+  allowSelfOverride: false,
+}
+
 // ---- 游戏全局配置 ----
 export interface GameConfig {
   /** 初始等级 */

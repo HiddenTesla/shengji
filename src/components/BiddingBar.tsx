@@ -5,6 +5,7 @@
 import {
   type Card,
   type PlayerPosition,
+  type RuleOptions,
   Rank,
   Suit,
   SUIT_SYMBOL,
@@ -13,6 +14,7 @@ import {
   type Declaration,
   BidStrength,
   canOverride,
+  isSelfOverride,
 } from '../core/bidding.ts'
 
 interface BiddingBarProps {
@@ -26,6 +28,8 @@ interface BiddingBarProps {
   current: Declaration | null
   /** 是否可操作（发牌/叫主阶段均可报主） */
   canAct: boolean
+  /** 叫主相关的规则开关 */
+  rules: RuleOptions
   onBid: (d: Declaration) => void
 }
 
@@ -65,6 +69,7 @@ export default function BiddingBar({
   levelRank,
   current,
   canAct,
+  rules,
   onBid,
 }: BiddingBarProps) {
   // 无主（对小王 / 对大王；必须同大小，优先用更强的对大王）
@@ -90,6 +95,11 @@ export default function BiddingBar({
         }
       : null
 
+  // 无主（对小王 / 对大王）若是在压自己先前的有主声明，且规则不允许反自己，则禁用
+  const jokerBlocked = jokerDecl !== null && current !== null
+    && isSelfOverride(jokerDecl, current)
+    && !rules.allowSelfOverride
+
   return (
     <div style={{
       display: 'flex',
@@ -111,6 +121,7 @@ export default function BiddingBar({
           player={player}
           current={current}
           canAct={canAct}
+          rules={rules}
           onBid={onBid}
         />
       ))}
@@ -128,8 +139,9 @@ export default function BiddingBar({
         <BarButton
           label="🃏无主"
           color={SUIT_COLORS[Suit.Joker]}
-          enabled={canAct && jokerDecl !== null && canOverride(jokerDecl, current)}
+          enabled={canAct && jokerDecl !== null && canOverride(jokerDecl, current, rules)}
           onClick={() => jokerDecl && onBid(jokerDecl)}
+          title={jokerBlocked ? '不允许反自己亮的主' : undefined}
         />
       </div>
     </div>
@@ -145,6 +157,7 @@ function SuitColumn({
   player,
   current,
   canAct,
+  rules,
   onBid,
 }: {
   suit: Suit
@@ -153,14 +166,30 @@ function SuitColumn({
   player: PlayerPosition
   current: Declaration | null
   canAct: boolean
+  rules: RuleOptions
   onBid: (d: Declaration) => void
 }) {
   const color = SUIT_COLORS[suit]
   const { levelCount, nonLevelCount, single, pair } =
     buildSuitDecls(hand, suit, levelRank, player)
 
-  const singleEnabled = canAct && single !== null && canOverride(single, current)
-  const pairEnabled = canAct && pair !== null && canOverride(pair, current)
+  const pairBlocked = pair !== null && current !== null
+    && isSelfOverride(pair, current)
+    && !rules.allowSelfOverride
+  const pairSelfProtect = pair !== null && current !== null
+    && current.player === player
+    && pair.suit === current.suit
+    && pair.strength > current.strength
+  const pairTitle = pairBlocked
+    ? '不允许反自己亮的主'
+    : pairSelfProtect
+      ? '自保：同花色补成对子'
+      : '以对子反主'
+
+  const singleEnabled = canAct && single !== null && canOverride(single, current, rules)
+  const pairEnabled = canAct && pair !== null && canOverride(pair, current, rules)
+
+  const singleTitle = levelCount >= 1 ? '报主该花色（亮一张）' : '无该花色级牌'
 
   return (
     <div style={{
@@ -174,7 +203,7 @@ function SuitColumn({
       <button
         onClick={() => single && onBid(single)}
         disabled={!singleEnabled}
-        title={levelCount >= 1 ? '报主该花色（亮一张）' : '无该花色级牌'}
+        title={singleTitle}
         style={{
           width: 44,
           height: 44,
@@ -211,7 +240,7 @@ function SuitColumn({
           color={color}
           enabled={pairEnabled}
           onClick={() => onBid(pair)}
-          title="以对子反主"
+          title={pairTitle}
         />
       )}
     </div>

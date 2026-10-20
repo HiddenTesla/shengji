@@ -2,7 +2,7 @@
 // 通用确认对话框（模态）
 // ============================================================
 
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -13,6 +13,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string
   /** 确认按钮是否为危险操作（红色） */
   danger?: boolean
+  /** 附加内容（如规则选项），渲染在说明文字与按钮之间 */
+  children?: ReactNode
   onConfirm: () => void
   onCancel: () => void
 }
@@ -24,6 +26,7 @@ export default function ConfirmDialog({
   confirmLabel = '确定',
   cancelLabel = '取消',
   danger = false,
+  children,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -86,6 +89,12 @@ export default function ConfirmDialog({
             whiteSpace: 'pre-line',
           }}>
             {description}
+          </div>
+        )}
+
+        {children && (
+          <div style={{ marginTop: 16 }}>
+            {children}
           </div>
         )}
 

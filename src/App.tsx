@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   type Card,
   type Rank,
+  type RuleOptions,
   PlayerPosition,
   POSITION_NAME_ZH,
   PlayerMode,
@@ -16,6 +17,7 @@ import {
   RANK_NAME,
   Team,
   TEAM_NAME_ZH,
+  DEFAULT_RULE_OPTIONS,
   partnerOf,
   teamOf,
 } from './core/types.ts'
@@ -191,6 +193,10 @@ function App() {
   const [autoPaused, setAutoPaused] = useState(false)
   /** 「新的一局」确认框 */
   const [confirmNewGame, setConfirmNewGame] = useState(false)
+  /** 本局生效的可选规则 */
+  const [rules, setRules] = useState<RuleOptions>(DEFAULT_RULE_OPTIONS)
+  /** 「新的一局」对话框中待确认的规则 */
+  const [draftRules, setDraftRules] = useState<RuleOptions>(DEFAULT_RULE_OPTIONS)
 
   /** 两队各自的级牌（标准双升：本局打庄家队的级牌） */
   const [levels, setLevels] = useState<LevelBoard>(() => initialLevelBoard())
@@ -514,13 +520,12 @@ function App() {
     if (!hs) return
 
     const current = bidState.current
+    // 同花色补强（自保）始终允许；换门 / 改无主是否允许由规则决定
     let chosen: Declaration | null = null
     for (const pos of ALL_POSITIONS) {
       if (playerModes[pos] !== PlayerMode.Auto) continue
-      // 叫主阶段不要自己反自己；发牌阶段允许随新牌升级自己的声明
-      if (current?.player === pos && phase !== GamePhase.Dealing) continue
-      const decl = aiChooseDeclare(hs[pos], levelRank, current, pos)
-      if (decl && canOverride(decl, current)) {
+      const decl = aiChooseDeclare(hs[pos], levelRank, current, pos, rules)
+      if (decl && canOverride(decl, current, rules)) {
         chosen = decl
         break
       }
@@ -530,18 +535,18 @@ function App() {
     const decl = chosen
     // 发牌期间：直接亮主。若用延迟，下一次翻牌的 effect 会清掉定时器，导致永远报不出来。
     if (phase === GamePhase.Dealing) {
-      if (canOverride(decl, bidStateRef.current.current)) applyDeclare(decl)
+      if (canOverride(decl, bidStateRef.current.current, rules)) applyDeclare(decl)
       return
     }
 
     const timer = setTimeout(() => {
       // 延迟期间可能已有南家 / 其他 AI 叫了更高的主
-      if (!canOverride(decl, bidStateRef.current.current)) return
+      if (!canOverride(decl, bidStateRef.current.current, rules)) return
       applyDeclare(decl)
     }, gameDelay(800))
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, bidState, playerModes, flipping, levelRank, hands])
+  }, [phase, bidState, playerModes, flipping, levelRank, hands, rules])
 
   // ---- 托管庄家：AI 自动埋底 ----
   useEffect(() => {
@@ -905,7 +910,10 @@ function App() {
       WebkitUserSelect: 'none',
     }}>
       {/* ---- 顶部菜单栏 ---- */}
-      <MenuBar onNewGame={() => setConfirmNewGame(true)} />
+      <MenuBar onNewGame={() => {
+        setDraftRules(rules)
+        setConfirmNewGame(true)
+      }} />
 
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
       <div style={{
@@ -1505,6 +1513,7 @@ function App() {
               levelRank={levelRank}
               current={bidState.current}
               canAct={barCanAct}
+              rules={rules}
               onBid={applyDeclare}
             />
           )}
@@ -1583,10 +1592,45 @@ function App() {
         danger
         onConfirm={() => {
           setConfirmNewGame(false)
+          setRules(draftRules)
           startNewGame()
         }}
         onCancel={() => setConfirmNewGame(false)}
-      />
+      >
+        <div style={{
+          fontSize: 12,
+          letterSpacing: 1,
+          color: 'rgba(255,255,255,0.45)',
+          marginBottom: 8,
+        }}>
+          规则选项
+        </div>
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          fontSize: 14,
+          color: 'rgba(255,255,255,0.85)',
+          cursor: 'pointer',
+        }}>
+          <input
+            type="checkbox"
+            checked={draftRules.allowSelfOverride}
+            onChange={event => setDraftRules(prev => ({
+              ...prev,
+              allowSelfOverride: event.target.checked,
+            }))}
+            style={{
+              width: 16,
+              height: 16,
+              margin: 0,
+              accentColor: '#ffd700',
+              cursor: 'pointer',
+            }}
+          />
+          允许反自己亮的主
+        </label>
+      </ConfirmDialog>
     </div>
   )
 }

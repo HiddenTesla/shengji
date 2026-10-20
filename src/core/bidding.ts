@@ -6,9 +6,11 @@ import {
   type Card,
   type CardId,
   type PlayerPosition,
+  type RuleOptions,
   Suit,
   Rank,
   SUIT_SYMBOL,
+  DEFAULT_RULE_OPTIONS,
 } from './types.ts'
 import { evaluateTrumpStrength } from './trump.ts'
 
@@ -132,13 +134,32 @@ export function getPossibleDeclarations(
   return decls
 }
 
+/**
+ * 自己压自己的情形是否属于「反自己亮的主」。
+ *
+ * - 自保：同一报品内的补强（有主花色下「单张 → 对子」）——不算自反；
+ * - 无主的「对小王」与「对大王」是**两种不同报品**，互相覆盖属于自反；
+ * - 换成别的主门 / 有主与无主互换，同样属于自反。
+ */
+export function isSelfOverride(decl: Declaration, current: Declaration): boolean {
+  if (decl.player !== current.player) return false
+  // 无主只有两档报品，且互不相同；能覆盖时必然是换档
+  if (decl.suit === null) return true
+  return decl.suit !== current.suit
+}
+
 /** 新声明能否覆盖当前声明（无当前声明时总是可以） */
 export function canOverride(
   next: Declaration,
   current: Declaration | null,
+  rules: RuleOptions = DEFAULT_RULE_OPTIONS,
 ): boolean {
   if (!current) return true
-  return next.strength > current.strength
+  if (next.strength <= current.strength) return false
+  if (next.player !== current.player) return true
+  // 同一报品补强（自保）允许；换门 / 改无主属「反自己」，由规则控制
+  if (!isSelfOverride(next, current)) return true
+  return rules.allowSelfOverride
 }
 
 /** 声明的中文标签，如 "亮主 ♠"、"反主 ♥"、"无主" */
@@ -169,9 +190,10 @@ export function aiChooseDeclare(
   levelRank: Rank,
   current: Declaration | null,
   player: PlayerPosition,
+  rules: RuleOptions = DEFAULT_RULE_OPTIONS,
 ): Declaration | null {
   const options = getPossibleDeclarations(hand, levelRank, player)
-    .filter(d => canOverride(d, current))
+    .filter(d => canOverride(d, current, rules))
 
   if (options.length === 0) return null
 
