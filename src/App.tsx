@@ -5,8 +5,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   type Card,
-  type Rank,
   type RuleOptions,
+  Rank,
   PlayerPosition,
   POSITION_NAME_ZH,
   PlayerMode,
@@ -36,6 +36,7 @@ import {
 import { aiChooseBury, countPoints } from './core/bury.ts'
 import {
   type LevelBoard,
+  LEVEL_RANKS,
   initialLevelBoard,
   settleLevel,
 } from './core/rank.ts'
@@ -141,6 +142,43 @@ const TRUMP_TEXT_COLORS: Record<Suit, string> = {
   [Suit.Joker]: '#d0a0ff',
 }
 
+/** 「新的一局」对话框里的一行选项（等级下拉 / 复选开关共用同一套样式） */
+const OPTION_ROW_STYLE: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  fontSize: 14,
+  color: 'rgba(255,255,255,0.85)',
+  cursor: 'pointer',
+}
+
+/** 选项内的下拉框：与选项文字同字号、同色调 */
+const OPTION_SELECT_STYLE: React.CSSProperties = {
+  minWidth: 64,
+  padding: '3px 6px',
+  fontSize: 14,
+  color: 'rgba(255,255,255,0.85)',
+  background: 'rgba(255,255,255,0.08)',
+  border: '1px solid rgba(255,255,255,0.25)',
+  borderRadius: 6,
+  cursor: 'pointer',
+  accentColor: '#ffd700',
+  // 下拉列表由系统绘制：必须声明深色调色板，否则默认白底 + 白字看不见
+  colorScheme: 'dark',
+}
+
+/** 下拉列表项：深底白字（部分浏览器忽略 select 的 color，需要单独指定） */
+const OPTION_ITEM_STYLE: React.CSSProperties = {
+  color: '#f2f2f2',
+  background: '#1e2b1e',
+}
+
+/** 选项内的补充说明（灰色小字） */
+const OPTION_HINT_STYLE: React.CSSProperties = {
+  fontSize: 12,
+  color: 'rgba(255,255,255,0.45)',
+}
+
 function App() {
   // ---- 游戏状态 ----
   const [hands, setHands] = useState<Hands | null>(null)
@@ -197,6 +235,10 @@ function App() {
   const [rules, setRules] = useState<RuleOptions>(DEFAULT_RULE_OPTIONS)
   /** 「新的一局」对话框中待确认的规则 */
   const [draftRules, setDraftRules] = useState<RuleOptions>(DEFAULT_RULE_OPTIONS)
+  /** 新游戏起始级牌（两队相同，默认为 2） */
+  const [startLevel, setStartLevel] = useState<Rank>(Rank.Two)
+  /** 「新的一局」对话框中待确认的起始级牌 */
+  const [draftStartLevel, setDraftStartLevel] = useState<Rank>(Rank.Two)
 
   /** 两队各自的级牌（标准双升：本局打庄家队的级牌） */
   const [levels, setLevels] = useState<LevelBoard>(() => initialLevelBoard())
@@ -285,9 +327,9 @@ function App() {
     setPhase(GamePhase.Dealing)
   }
 
-  // ---- 新游戏：等级回到 2，庄家重新由叫主决定 ----
-  function startNewGame() {
-    setLevels(initialLevelBoard())
+  // ---- 新游戏：等级回到起始级牌（默认 2），庄家重新由叫主决定 ----
+  function startNewGame(level: Rank = startLevel) {
+    setLevels(initialLevelBoard(level))
     dealRound(null)
   }
 
@@ -912,6 +954,7 @@ function App() {
       {/* ---- 顶部菜单栏 ---- */}
       <MenuBar onNewGame={() => {
         setDraftRules(rules)
+        setDraftStartLevel(startLevel)
         setConfirmNewGame(true)
       }} />
 
@@ -1586,14 +1629,15 @@ function App() {
       <ConfirmDialog
         open={confirmNewGame}
         title="开始新的一局？"
-        description={'当前这局的进度将全部清空：手牌、分数、等级都会重置，\n双方从打 2 重新开始。'}
+        description={`当前这局的进度将全部清空：手牌、分数、等级都会重置，\n双方从打 ${RANK_NAME[draftStartLevel]} 重新开始。`}
         confirmLabel="开始新的一局"
         cancelLabel="取消"
         danger
         onConfirm={() => {
           setConfirmNewGame(false)
           setRules(draftRules)
-          startNewGame()
+          setStartLevel(draftStartLevel)
+          startNewGame(draftStartLevel)
         }}
         onCancel={() => setConfirmNewGame(false)}
       >
@@ -1605,31 +1649,46 @@ function App() {
         }}>
           规则选项
         </div>
-        <label style={{
+        <div style={{
           display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          fontSize: 14,
-          color: 'rgba(255,255,255,0.85)',
-          cursor: 'pointer',
+          flexDirection: 'column',
+          gap: 12,
         }}>
-          <input
-            type="checkbox"
-            checked={draftRules.allowSelfOverride}
-            onChange={event => setDraftRules(prev => ({
-              ...prev,
-              allowSelfOverride: event.target.checked,
-            }))}
-            style={{
-              width: 16,
-              height: 16,
-              margin: 0,
-              accentColor: '#ffd700',
-              cursor: 'pointer',
-            }}
-          />
-          允许反自己亮的主
-        </label>
+          <label style={OPTION_ROW_STYLE}>
+            初始等级
+            <select
+              value={draftStartLevel}
+              onChange={event => setDraftStartLevel(Number(event.target.value) as Rank)}
+              style={OPTION_SELECT_STYLE}
+            >
+              {LEVEL_RANKS.map(rank => (
+                <option key={rank} value={rank} style={OPTION_ITEM_STYLE}>
+                  {RANK_NAME[rank]}
+                </option>
+              ))}
+            </select>
+            <span style={OPTION_HINT_STYLE}>默认 2</span>
+          </label>
+
+          <label style={OPTION_ROW_STYLE}>
+            <input
+              type="checkbox"
+              checked={draftRules.allowSelfOverride}
+              onChange={event => setDraftRules(prev => ({
+                ...prev,
+                allowSelfOverride: event.target.checked,
+              }))}
+              style={{
+                width: 16,
+                height: 16,
+                margin: 0,
+                accentColor: '#ffd700',
+                cursor: 'pointer',
+              }}
+            />
+            允许反自己亮的主
+          </label>
+        </div>
       </ConfirmDialog>
     </div>
   )

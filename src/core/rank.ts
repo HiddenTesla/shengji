@@ -119,9 +119,13 @@ export class RankManager {
 /** 每队各自的级牌（标准双升：本局打庄家队的级牌） */
 export type LevelBoard = Record<Team, Rank>
 
-/** 初始级牌：两队都从 2 打起 */
-export function initialLevelBoard(): LevelBoard {
-  return { [Team.NS]: Rank.Two, [Team.EW]: Rank.Two }
+/**
+ * 初始级牌：两队都从 `startLevel` 打起（默认 2）。
+ * 「新的一局」对话框可选起始级牌，两队的级牌始终相同。
+ */
+export function initialLevelBoard(startLevel: Rank = Rank.Two): LevelBoard {
+  const level = LEVEL_INDEX_MAP.has(startLevel) ? startLevel : Rank.Two
+  return { [Team.NS]: level, [Team.EW]: level }
 }
 
 /** 某队当前的级牌 */
