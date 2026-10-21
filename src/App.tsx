@@ -50,6 +50,7 @@ import {
   canBeatCurrentPlay,
   collectTrick,
   createPlayState,
+  currentTrickLeader,
   isLeading,
   validatePlay,
 } from './core/play.ts'
@@ -888,6 +889,13 @@ function App() {
   const selectedCanBeatCurrent = playValidation?.ok && playState
     ? canBeatCurrentPlay(playState, selectedPlayCards, trumpSuit, levelRank)
     : null
+  /** 本墩当前最大者是否为自己的对家（打不过队友时不必红色警示） */
+  const beatLeaderIsPartner = (() => {
+    if (!playState) return false
+    const leader = currentTrickLeader(playState.trick, trumpSuit, levelRank)
+    if (leader === null || leader === playState.turn) return false
+    return teamOf(leader) === teamOf(playState.turn)
+  })()
 
   /** 是否有可撤销的玩家操作 */
   const canUndo = history.length > 0
@@ -919,6 +927,7 @@ function App() {
         onHint={hintPlay}
         compact={compact}
         canBeatCurrent={selectedCanBeatCurrent}
+        leaderIsPartner={beatLeaderIsPartner}
       />
     )
   }
