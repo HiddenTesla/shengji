@@ -1623,6 +1623,8 @@ function App() {
           ) : (
             <PlayerHand
               groups={groupCardsForDisplay(handForDisplay, trumpSuit, levelRank)}
+              trumpSuit={trumpSuit}
+              levelRank={levelRank}
               selectedIndices={canSelectHand ? effectiveSelectedIndices : undefined}
               onToggleCard={canSelectHand ? toggleCard : undefined}
               sourceCardIds={buryingManualBanker && banker === PlayerPosition.South

@@ -6,6 +6,7 @@
 //   - 东/西家按「门」分为若干竖列，同一门内竖排，逐张可见点数与花色
 // ============================================================
 
+import { useMemo } from 'react'
 import {
   type Card,
   type PlayerPosition,
@@ -15,6 +16,7 @@ import {
   POSITION_NAME_ZH,
 } from '../core/types.ts'
 import { type CardGroup, groupCardsForDisplay } from '../core/card.ts'
+import { type HandMark, handMarks } from '../core/hand.ts'
 import CardComponent from './CardComponent.tsx'
 import PlayerHand from './PlayerHand.tsx'
 import PlayerModeButton from './PlayerModeButton.tsx'
@@ -87,6 +89,11 @@ export default function OpponentHand({
   const groups = groupCardsForDisplay(cards, trumpSuit, levelRank)
   const isSelectable = onToggleCard !== undefined
   const showCardsFaceUp = faceUp || isSelectable
+  /** 对子 / 拖拉机标记（东/西竖排与北家横排共用） */
+  const marks = useMemo(
+    () => handMarks(cards, trumpSuit, levelRank),
+    [cards, trumpSuit, levelRank],
+  )
 
   if (cardCount === 0) {
     return (
@@ -144,6 +151,8 @@ export default function OpponentHand({
           {showCardsFaceUp ? (
             <PlayerHand
               groups={groups}
+              trumpSuit={trumpSuit}
+              levelRank={levelRank}
               selectedIndices={selectedIndices}
               onToggleCard={onToggleCard}
               sourceCardIds={sourceCardIds}
@@ -212,6 +221,7 @@ export default function OpponentHand({
         {showCardsFaceUp ? (
           <SideGroupColumns
             groups={groups}
+            marks={marks}
             selectedIndices={selectedIndices}
             onToggleCard={onToggleCard}
             sourceCardIds={sourceCardIds}
@@ -252,11 +262,13 @@ export default function OpponentHand({
 /** 东/西家翻开：按「门」分列，同一门内竖排（必要时同门拆成多列） */
 function SideGroupColumns({
   groups,
+  marks,
   selectedIndices,
   onToggleCard,
   sourceCardIds,
 }: {
   groups: CardGroup[]
+  marks: Map<string, HandMark>
   selectedIndices?: Set<number>
   onToggleCard?: (index: number) => void
   sourceCardIds?: Set<string>
@@ -304,6 +316,7 @@ function SideGroupColumns({
                     .map((card, i) => {
                       const cardIndex = groupStart + ci * SIDE_ROWS_PER_COL + i
                       const selected = selectedIndices?.has(cardIndex) ?? false
+                      const mark = marks.get(card.id)
                       return (
                         <div
                           key={card.id}
@@ -321,6 +334,13 @@ function SideGroupColumns({
                             inlineSuit
                             badge={sourceCardIds?.has(card.id) ? '底' : undefined}
                             badgePosition="top-right"
+                            mark={mark
+                              ? {
+                                  text: mark.kind === 'tractor' ? '拖' : '对',
+                                  color: mark.kind === 'tractor' ? '#ef6c00' : '#2e7d32',
+                                  position: 'top-right',
+                                }
+                              : undefined}
                             selected={selected}
                             onClick={onToggleCard
                               ? () => onToggleCard(cardIndex)

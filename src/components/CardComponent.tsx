@@ -11,6 +11,13 @@ interface CardComponentProps {
   small?: boolean
   badge?: string
   badgePosition?: 'top-right' | 'bottom-left'
+  /** 额外标记（如手牌里的对子 / 拖拉机）；position 默认左下角 */
+  mark?: {
+    text: string
+    color: string
+    /** 竖排（东/西家）只露出牌顶，标记需要放到右上角 */
+    position?: 'bottom-left' | 'top-right'
+  }
   /** 额外缩放（1 = 不缩放）；配合 small 可渲染更小的牌（如出牌区） */
   scale?: number
   /**
@@ -337,6 +344,7 @@ export default function CardComponent({
   small = false,
   badge,
   badgePosition = 'bottom-left',
+  mark,
   scale,
   inlineSuit = false,
   onClick,
@@ -345,6 +353,10 @@ export default function CardComponent({
   const s = scale ?? (small ? 0.95 : 1)
   const w = CARD_WIDTH * s
   const h = CARD_HEIGHT * s
+  // 标记位置：默认左下角；竖排时用右上角（底部会被下一张牌遮住）
+  const markAtTop = mark?.position === 'top-right'
+  const markX = markAtTop ? 49 : 3
+  const markY = markAtTop ? (badge ? 21 : 3) : (badge ? 61 : 78)
 
   return (
     <svg
@@ -389,6 +401,31 @@ export default function CardComponent({
             fontWeight="bold"
           >
             {badge}
+          </text>
+        </g>
+      )}
+      {faceUp && mark && (
+        <g>
+          <rect
+            x={markX}
+            y={markY}
+            width={19}
+            height={15}
+            rx={4}
+            fill={mark.color}
+            stroke="#fff"
+            strokeWidth={0.75}
+          />
+          <text
+            x={markX + 9.5}
+            y={markY + 7.5}
+            fontSize={10}
+            fill="#fff"
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontWeight="bold"
+          >
+            {mark.text}
           </text>
         </g>
       )}

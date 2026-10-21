@@ -200,6 +200,76 @@ export function maxTractorLength(
   return best >= 2 ? best : 0
 }
 
+// ------------------------------------------------------------
+// 手牌结构标记（UI：对子 / 拖拉机）
+// ------------------------------------------------------------
+
+/** 手牌标记类型 */
+export type HandMarkKind = 'pair' | 'tractor'
+
+export interface HandMark {
+  kind: HandMarkKind
+  /** 所在连续对子段的长度（对数）：1 = 单独对子，≥2 = 拖拉机 */
+  runLength: number
+}
+
+/**
+ * 标注手牌里的对子与拖拉机（按牌的 id）。
+ *
+ * - 对子 = 同花色同点数的两张（不同花色的副级牌**不算**对子）。
+ * - 同一门内相邻槽位的对子连成拖拉机（≥2 对）；同槽位的不同花色副级牌不算连续。
+ * - 多段互不相连时各自成段，每段单独标注。
+ */
+export function handMarks(
+  cards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Map<string, HandMark> {
+  const marks = new Map<string, HandMark>()
+
+  const byDoor = new Map<Door, Card[]>()
+  for (const c of cards) {
+    const door = doorOf(c, trumpSuit, levelRank)
+    const arr = byDoor.get(door)
+    if (arr) arr.push(c)
+    else byDoor.set(door, [c])
+  }
+
+  for (const doorCards of byDoor.values()) {
+    const units = pairUnits(doorCards, trumpSuit, levelRank)
+    if (units.length === 0) continue
+
+    // 同一槽位只取一个单元参与「连续段」判定
+    const firstOfSlot = new Map<number, PairUnit>()
+    for (const unit of units) {
+      if (!firstOfSlot.has(unit.slot)) firstOfSlot.set(unit.slot, unit)
+    }
+    const slots = [...firstOfSlot.keys()].sort((a, b) => a - b)
+
+    let i = 0
+    while (i < slots.length) {
+      let j = i
+      while (j + 1 < slots.length && slots[j + 1] === slots[j] + 1) j++
+      const runLength = j - i + 1
+      const kind: HandMarkKind = runLength >= 2 ? 'tractor' : 'pair'
+      for (let k = i; k <= j; k++) {
+        const unit = firstOfSlot.get(slots[k])
+        if (!unit) continue
+        for (const c of unit.cards) marks.set(c.id, { kind, runLength })
+      }
+      i = j + 1
+    }
+
+    // 同槽位的其它对子（不同花色的副级牌）：只算单独的对子
+    for (const unit of units) {
+      if (firstOfSlot.get(unit.slot) === unit) continue
+      for (const c of unit.cards) marks.set(c.id, { kind: 'pair', runLength: 1 })
+    }
+  }
+
+  return marks
+}
+
 /** 分析一手牌的构成 */
 export function analyzeShape(
   cards: Card[],

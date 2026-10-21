@@ -2,11 +2,18 @@
 // 南家手牌（升级分组展示，可点击选中）
 // ============================================================
 
+import { useMemo } from 'react'
 import { type CardGroup } from '../core/card.ts'
+import { type HandMark, handMarks } from '../core/hand.ts'
+import { type Rank, type Suit } from '../core/types.ts'
 import CardComponent from './CardComponent.tsx'
 
 interface PlayerHandProps {
   groups: CardGroup[]
+  /** 主花色（null = 无主 / 尚未定主） */
+  trumpSuit: Suit | null
+  /** 当前级牌 */
+  levelRank: Rank
   /** 选中项（只读展示时可省略） */
   selectedIndices?: Set<number>
   /** 点击选牌（只读展示时可省略） */
@@ -35,10 +42,18 @@ const SUIT_COLORS: Record<string, string> = {
 
 export default function PlayerHand({
   groups,
+  trumpSuit,
+  levelRank,
   selectedIndices,
   onToggleCard,
   sourceCardIds,
 }: PlayerHandProps) {
+  /** 对子 / 拖拉机标记（按牌的 id） */
+  const marks = useMemo(
+    () => handMarks(groups.flatMap(g => g.cards), trumpSuit, levelRank),
+    [groups, trumpSuit, levelRank],
+  )
+
   if (groups.length === 0) {
     return (
       <div style={{
@@ -76,6 +91,7 @@ export default function PlayerHand({
             key={String(group.kind)}
             group={group}
             groupStartIdx={groupStartIdx}
+            marks={marks}
             selectedIndices={selectedIndices}
             onToggleCard={onToggleCard}
             sourceCardIds={sourceCardIds}
@@ -89,12 +105,14 @@ export default function PlayerHand({
 function GroupSection({
   group,
   groupStartIdx,
+  marks,
   selectedIndices,
   onToggleCard,
   sourceCardIds,
 }: {
   group: CardGroup
   groupStartIdx: number
+  marks: Map<string, HandMark>
   selectedIndices?: Set<number>
   onToggleCard?: (index: number) => void
   sourceCardIds?: Set<string>
@@ -148,6 +166,7 @@ function GroupSection({
         {group.cards.map((card, idx) => {
           const globalIdx = groupStartIdx + idx
           const isSelected = selectedIndices?.has(globalIdx) ?? false
+          const mark = marks.get(card.id)
           return (
             <div
               key={card.id}
@@ -163,6 +182,12 @@ function GroupSection({
                 faceUp
                 small
                 badge={sourceCardIds?.has(card.id) ? '底' : undefined}
+                mark={mark
+                  ? {
+                      text: mark.kind === 'tractor' ? '拖' : '对',
+                      color: mark.kind === 'tractor' ? '#ef6c00' : '#2e7d32',
+                    }
+                  : undefined}
                 selected={isSelected}
                 onClick={onToggleCard
                   ? () => onToggleCard(globalIdx)
