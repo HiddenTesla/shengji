@@ -38,6 +38,8 @@ interface RoundSettlementProps {
   laps: LapBoard
   /** 等级结算（升几级 / 换庄 / 周目） */
   levelSettlement: LevelSettlement | null
+  /** 点击「完整日志」：由 App 打开本局日志（可导出 JSON / JSONC） */
+  onViewPlayLog: () => void
   /** 点击「下一局」 */
   onNextRound: () => void
 }
@@ -63,6 +65,7 @@ export default function RoundSettlement({
   levels,
   laps,
   levelSettlement,
+  onViewPlayLog,
   onNextRound,
 }: RoundSettlementProps) {
   const total = defendingPoints + bankerPoints
@@ -229,6 +232,17 @@ export default function RoundSettlement({
           ｜周目 南北 {formatLap(nextLaps[Team.NS])} · 东西 {formatLap(nextLaps[Team.EW])}
         </span>
         <span style={{ flex: 1 }} />
+        <button
+          onClick={onViewPlayLog}
+          style={{
+            ...BUTTON_STYLE,
+            border: '1px solid rgba(255,255,255,0.35)',
+            background: 'rgba(255,255,255,0.1)',
+            color: '#fff',
+          }}
+        >
+          📄 完整日志
+        </button>
         <button
           onClick={onNextRound}
           disabled={!levelSettlement}

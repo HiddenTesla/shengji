@@ -56,6 +56,17 @@ import {
 } from './core/play.ts'
 import { type HandShape, mandatoryFollowCards } from './core/hand.ts'
 import { aiChoosePlay } from './core/ai.ts'
+import {
+  type RoundRecord,
+  appendPlay,
+  buildCardIdMap,
+  buildPlayLog,
+  closeLastTrick,
+  createRoundRecord,
+  encodeCards,
+  serializePlayLog,
+  truncateRecord,
+} from './core/playlog.ts'
 import PlayerHand from './components/PlayerHand.tsx'
 import OpponentHand from './components/OpponentHand.tsx'
 import PlayerModeButton from './components/PlayerModeButton.tsx'
@@ -68,6 +79,7 @@ import TrickArea from './components/TrickArea.tsx'
 import PlayBar from './components/PlayBar.tsx'
 import ScoreBoard from './components/ScoreBoard.tsx'
 import RoundSettlement from './components/RoundSettlement.tsx'
+import PlayLogDialog from './components/PlayLogDialog.tsx'
 import CardComponent from './components/CardComponent.tsx'
 
 type Hands = Record<PlayerPosition, Card[]>
@@ -119,6 +131,10 @@ interface UndoSnapshot {
   buriedCards: Card[]
   /** bottomRef 的值（原始底牌 / 已埋底牌） */
   bottom: Card[]
+  /** 日志：快照时的墩数（撤销时截断） */
+  logTricks: number
+  /** 日志：快照时最后一墩的出牌数 */
+  logLastPlays: number
 }
 
 /** 发牌结束后的叫主窗口时长（秒） */
@@ -282,6 +298,16 @@ function App() {
   // null = 本局庄家由叫主（亮主者）决定（首局 / 新游戏）。
   const presetBankerRef = useRef<PlayerPosition | null>(null)
 
+  /** 本局出牌记录（每局重建；下一局发牌时清空） */
+  const logRef = useRef<RoundRecord | null>(null)
+  /** 运行时 card.id → 稳定 ID（如 S5#0） */
+  const cardIdMapRef = useRef<Map<string, string>>(new Map())
+  /** 本局日志的 gameId（导出用） */
+  const gameIdRef = useRef('')
+  /** 出牌记录弹窗 */
+  const [playLogOpen, setPlayLogOpen] = useState(false)
+  const [playLogMode, setPlayLogMode] = useState<'plays' | 'full'>('plays')
+
   /** 记录一次动作前的状态（玩家 / 托管的埋底、出牌都记录） */
   function pushSnapshot(
     kind: 'bury' | 'play',
@@ -290,6 +316,12 @@ function App() {
     snapPlayState: PlayState | null,
     snapPhase: GamePhase,
   ) {
+    const rec = logRef.current
+    // 必须在 setHistory 之前取值：updater 是延迟执行的，届时日志已经写入了这一手
+    const logTricks = rec?.tricks.length ?? 0
+    const logLastPlays = rec && rec.tricks.length > 0
+      ? rec.tricks[rec.tricks.length - 1].plays.length
+      : 0
     setHistory(prev => [...prev, {
       kind,
       manual,
@@ -298,6 +330,8 @@ function App() {
       phase: snapPhase,
       buriedCards: buriedCardsRef.current,
       bottom: bottomRef.current,
+      logTricks,
+      logLastPlays,
     }])
   }
 
@@ -330,6 +364,24 @@ function App() {
     // 保存完整发牌结果，稍后逐张揭示
     fullHandsRef.current = nextHands
     bottomRef.current = nextBottom
+
+    // 本局日志：每次发牌重建（上一局的记录随之清空）
+    cardIdMapRef.current = buildCardIdMap(nextHands, nextBottom)
+    gameIdRef.current = `G-${Math.random().toString(36).slice(2, 10)}`
+    logRef.current = createRoundRecord({
+      level: levels[teamOf(presetBanker ?? PlayerPosition.South)],
+      playerModes: { ...playerModes },
+      deal: {
+        mode: keepDeal ? 'sameDeal' : 'shuffle',
+        hands: {
+          E: encodeCards(cardIdMapRef.current, nextHands.E),
+          N: encodeCards(cardIdMapRef.current, nextHands.N),
+          W: encodeCards(cardIdMapRef.current, nextHands.W),
+          S: encodeCards(cardIdMapRef.current, nextHands.S),
+        },
+        bottom: encodeCards(cardIdMapRef.current, nextBottom),
+      },
+    })
 
     setHands({ E: [], S: [], W: [], N: [] })
     setRevealed(0)
@@ -457,11 +509,20 @@ function App() {
     const handFull = fullHandsRef.current?.[decl.player] ?? []
     const byId = new Map<string, Card>()
     for (const card of [...handFull, ...handNow]) byId.set(card.id, card)
-    setDeclaredCards(
-      decl.cardIds
-        .map(id => byId.get(id))
-        .filter((card): card is Card => card !== undefined),
-    )
+    const bidCards = decl.cardIds
+      .map(id => byId.get(id))
+      .filter((card): card is Card => card !== undefined)
+    setDeclaredCards(bidCards)
+    if (logRef.current) {
+      logRef.current.trump = {
+        suit: decl.suit,
+        declaredBy: decl.player,
+        strength: decl.strength as 1 | 2 | 3 | 4,
+        cards: encodeCards(cardIdMapRef.current, bidCards),
+        decidedBy: 'bid',
+        atDealt: revealed * 4,
+      }
+    }
     if (phase === GamePhase.BiddingTrump) {
       setBidSeconds(seconds =>
         seconds < FIRST_BID_MIN_REMAINING_SECONDS
@@ -493,6 +554,8 @@ function App() {
   // ---- 进入埋底：庄家收走底牌（手牌 25 → 33），等待埋底 ----
   function startBurying(bankerPos: PlayerPosition) {
     setBanker(bankerPos)
+    // 庄家确定后，本局级牌取庄家队的等级
+    if (logRef.current) logRef.current.level = levels[teamOf(bankerPos)]
     setSelectedIndices(new Set())
     // 庄家收走 8 张底牌
     setHands(prev => {
@@ -517,6 +580,13 @@ function App() {
     })
     bottomRef.current = buried
     setBuriedCards(buried)
+    if (logRef.current) {
+      logRef.current.buried = {
+        player: bankerPos,
+        cards: encodeCards(cardIdMapRef.current, buried),
+        points: countPoints(buried),
+      }
+    }
     setSelectedIndices(new Set())
     setAutoPaused(false)
     setPhase(GamePhase.Playing)
@@ -554,7 +624,30 @@ function App() {
       setBottomTrump(true)
       setFlipping(false)
       // 翻底定主：庄家仍取预定庄家（「下一局」），否则取东家
-      startBurying(presetBankerRef.current ?? ALL_POSITIONS[0])
+      const flipBanker = presetBankerRef.current ?? ALL_POSITIONS[0]
+      const decisive = decisiveBottomIndex(bottom, levelRank)
+      let trumpCard: Card | undefined = bottom[0]
+      if (decisive >= 0) {
+        trumpCard = bottom[decisive]
+      }
+      else {
+        for (const card of bottom) {
+          if (trumpCard === undefined || card.rank > trumpCard.rank) trumpCard = card
+        }
+      }
+      if (logRef.current) {
+        logRef.current.trump = {
+          suit,
+          declaredBy: flipBanker,
+          strength: null,
+          cards: trumpCard
+            ? encodeCards(cardIdMapRef.current, [trumpCard])
+            : [],
+          decidedBy: 'bottomFlip',
+          atDealt: 100,
+        }
+      }
+      startBurying(flipBanker)
     }, gameDelay(3000))
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -656,6 +749,55 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, playState, banker])
 
+  /** 把一次已生效的出牌写入日志（以 applyPlay 后的实际牌为准） */
+  function recordAppliedPlay(before: PlayState, after: PlayState) {
+    const record = logRef.current
+    if (!record) return
+    const play = after.trick.plays[after.trick.plays.length - 1]
+    if (!play) return
+    appendPlay(
+      record,
+      play.player,
+      play.cards,
+      trumpSuitRef.current,
+      levelRank,
+      isLeading(before),
+      after.trick.throwAttempt,
+      cardIdMapRef.current,
+    )
+  }
+
+  /** 局末：把抠底与升级结算写入日志 */
+  function finalizeRoundLog(state: PlayState) {
+    const record = logRef.current
+    if (!record) return
+    if (state.bottom) {
+      record.bottom = {
+        taken: state.bottom.taken,
+        winner: state.bottom.winner,
+        tractorLength: state.bottom.tractorLength,
+        multiplier: state.bottom.multiplier,
+        cardPoints: state.bottom.bottomCardPoints,
+        points: state.bottom.points,
+      }
+    }
+    const settlement = settleLevel(state.defendingPoints, state.banker, levels)
+    record.result = {
+      defendingPoints: state.defendingPoints,
+      bankerPoints: state.bankerPoints,
+      levelChange: {
+        upgradingTeam: settlement.upgradingTeam,
+        side: settlement.side,
+        steps: settlement.steps,
+        switchBanker: settlement.switchBanker,
+      },
+      fromLevel: settlement.fromLevel,
+      toLevel: settlement.toLevel,
+      lapsGained: settlement.lapsGained,
+      nextBanker: settlement.nextBanker,
+    }
+  }
+
   // ---- 托管玩家：AI 自动出牌 ----
   useEffect(() => {
     if (phase !== GamePhase.Playing) return
@@ -678,6 +820,7 @@ function App() {
       }
       pushSnapshot('play', false, hs, cur, GamePhase.Playing)
       const res = applyPlay(hs, cur, cur.turn, cards, trumpSuitRef.current, levelRank)
+      recordAppliedPlay(cur, res.state)
       setHands(res.hands)
       setPlayState(res.state)
     }, gameDelay(800))
@@ -697,6 +840,17 @@ function App() {
       const res = collectTrick(
         hs, cur, buriedCardsRef.current, trumpSuitRef.current, levelRank,
       )
+      const collected = res.state.tricks[res.state.tricks.length - 1]
+      if (logRef.current && collected?.winner) {
+        closeLastTrick(
+          logRef.current,
+          collected.winner,
+          collected.points,
+          res.state.defendingPoints,
+          res.state.bankerPoints,
+        )
+      }
+      if (res.roundOver) finalizeRoundLog(res.state)
       setHands(res.hands)
       setPlayState(res.state)
       if (res.roundOver) setPhase(GamePhase.RoundEnd)
@@ -726,6 +880,7 @@ function App() {
     // 压入撤销点（玩家出牌前的状态）
     pushSnapshot('play', true, hands, playState, phase)
     const res = applyPlay(hands, playState, playState.turn, cards, trumpSuit, levelRank)
+    recordAppliedPlay(playState, res.state)
     setHands(res.hands)
     setPlayState(res.state)
     setSelectedIndices(new Set())
@@ -788,6 +943,14 @@ function App() {
     setBuriedCards(snap.buriedCards)
     bottomRef.current = snap.bottom
     setSelectedIndices(new Set())
+    if (logRef.current) {
+      truncateRecord(
+        logRef.current,
+        snap.logTricks,
+        snap.logLastPlays,
+        snap.phase === GamePhase.Burying,
+      )
+    }
 
     const autoWouldAct = (
       snap.phase === GamePhase.Burying
@@ -848,6 +1011,41 @@ function App() {
       }))
     }
     dealRound(levelSettlement.nextBanker)
+  }
+
+  // ---- 出牌记录：展示 / 导出 ----
+  function currentPlayLog() {
+    return buildPlayLog({
+      gameId: gameIdRef.current,
+      rules,
+      startLevel,
+      record: logRef.current,
+    })
+  }
+
+  function serializeLog(format: 'json' | 'jsonc'): string {
+    return serializePlayLog(currentPlayLog(), format)
+  }
+
+  function exportLog(format: 'json' | 'jsonc') {
+    const blob = new Blob([serializeLog(format)], {
+      type: 'application/json;charset=utf-8',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${gameIdRef.current || 'shengji'}.${
+      format === 'jsonc' ? 'jsonc' : 'json'
+    }`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  function openPlayLog(mode: 'plays' | 'full') {
+    setPlayLogMode(mode)
+    setPlayLogOpen(true)
   }
 
   // 南家报主栏：发牌/叫主阶段显示（仅南家为手动时），窗口内始终可操作
@@ -1005,6 +1203,7 @@ function App() {
       }}
         onRedealSameCards={() => setConfirmRedeal(true)}
         onViewRules={() => setShowRules(true)}
+        onViewPlayLog={() => openPlayLog('plays')}
       />
 
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
@@ -1381,6 +1580,7 @@ function App() {
               levels={levels}
               laps={laps}
               levelSettlement={levelSettlement}
+              onViewPlayLog={() => openPlayLog('full')}
               onNextRound={startNextRound}
             />
           )}
@@ -1688,6 +1888,16 @@ function App() {
           ⛔ 甩牌被拦了，已自动出小
         </div>
       )}
+
+      {/* 出牌记录：菜单「查看」= 仅出牌；结算 = 完整日志 + 导出 */}
+      <PlayLogDialog
+        open={playLogOpen}
+        mode={playLogMode}
+        record={logRef.current}
+        serialize={serializeLog}
+        onExport={exportLog}
+        onClose={() => setPlayLogOpen(false)}
+      />
 
       {/* 查看规则（只读）：说明「新的一局」里的可选规则 */}
       <ConfirmDialog
