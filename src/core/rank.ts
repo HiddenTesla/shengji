@@ -119,14 +119,46 @@ export class RankManager {
 /** 每队各自的级牌（标准双升：本局打庄家队的级牌） */
 export type LevelBoard = Record<Team, Rank>
 
-/** 初始级牌：两队都从 2 打起 */
-export function initialLevelBoard(): LevelBoard {
-  return { [Team.NS]: Rank.Two, [Team.EW]: Rank.Two }
+/**
+ * 初始级牌：两队都从 `startLevel` 打起（默认 2）。
+ * 「新的一局」对话框可选起始级牌，两队的级牌始终相同。
+ */
+export function initialLevelBoard(startLevel: Rank = Rank.Two): LevelBoard {
+  const level = LEVEL_INDEX_MAP.has(startLevel) ? startLevel : Rank.Two
+  return { [Team.NS]: level, [Team.EW]: level }
 }
 
 /** 某队当前的级牌 */
 export function levelOf(board: LevelBoard, team: Team): Rank {
   return board[team]
+}
+
+// ============================================================
+// 周目（打满 2 → A 为一周目）
+//
+//   升过 A 不再结束游戏：该队周目 +1，级牌回到「初始等级」重新开始。
+//   两队周目独立计数，均从第 1 周目开始。
+// ============================================================
+
+/** 每队各自的周目数（从 1 开始） */
+export type LapBoard = Record<Team, number>
+
+/** 初始周目：两队都是第 1 周目 */
+export function initialLapBoard(): LapBoard {
+  return { [Team.NS]: 1, [Team.EW]: 1 }
+}
+
+/** 1 – 10 的繁体大写数字 */
+const LAP_NAMES_ZH: readonly string[] = [
+  '壹', '貳', '參', '肆', '伍', '陸', '柒', '捌', '玖', '拾',
+]
+
+/** 周目数的显示：1 – 10 用繁体大写数字，超过 10 用阿拉伯数字 */
+export function formatLap(lap: number): string {
+  const value = Math.max(1, Math.floor(lap))
+  return value <= LAP_NAMES_ZH.length
+    ? LAP_NAMES_ZH[value - 1]
+    : String(value)
 }
 
 /** 升级结果（纯规则，不含「谁升」） */
@@ -169,21 +201,25 @@ export function calculateLevelChange(defendingPoints: number): LevelChange {
   }
 }
 
-/** 某队升级后的级牌（封顶 A；升过 A 即通关） */
+/**
+ * 某队升级后的级牌。
+ *
+ * 一周目**固定为打 2 → 打 A**（与「新的一局」里设置的初始等级无关，初始等级只决定新游戏从哪里开始）；
+ * 升过 A 就进入下一周目，级牌从 2 重新开始，**多余的级数继续累加**：
+ *   例：A + 1 → 2（周目 +1）；A + 2 → 3；A + 3 → 4。
+ */
 export function advanceLevel(
   current: Rank,
   steps: number,
-): { level: Rank; actualSteps: number; gameWon: boolean } {
+): { level: Rank; actualSteps: number; lapsGained: number } {
   const from = LEVEL_INDEX_MAP.get(current) ?? 0
-  const to = from + steps
-  if (to >= LEVEL_RANKS.length) {
-    return {
-      level: Rank.Ace,
-      actualSteps: LEVEL_RANKS.length - from,
-      gameWon: true,
-    }
-  }
-  return { level: LEVEL_RANKS[to], actualSteps: Math.max(0, steps), gameWon: false }
+  const total = from + Math.max(0, steps)
+  const lapsGained = Math.floor(total / LEVEL_RANKS.length)
+  const level = LEVEL_RANKS[total % LEVEL_RANKS.length]
+  const actualSteps = lapsGained > 0
+    ? LEVEL_RANKS.length - from // 升到 A 为止（展示用）
+    : Math.max(0, steps)
+  return { level, actualSteps, lapsGained }
 }
 
 /** 一局的等级结算（含升级方、新级牌、下一局庄家） */
@@ -194,10 +230,12 @@ export interface LevelSettlement extends LevelChange {
   fromLevel: Rank
   /** 升级后的级牌 */
   toLevel: Rank
-  /** 实际升了几级（到达 A 后封顶） */
+  /** 实际升了几级（升过 A 时只算到 A，用于展示） */
   actualSteps: number
-  /** 是否通关（升过 A） */
-  gameWon: boolean
+  /** 是否升过 A（= 完成一周目：级牌从 2 重新开始、周目 +1） */
+  lapUp: boolean
+  /** 本次完成了几周目（一般 0 或 1） */
+  lapsGained: number
   /**
    * 下一局庄家：
    *   - **连庄**（庄家方获胜）→ 换到原庄的**对家**（同队两人轮流坐庄）
@@ -212,6 +250,8 @@ export interface LevelSettlement extends LevelChange {
  * @param defendingPoints 闲家（防守方）本局总得分（**含抠底**）
  * @param banker 本局庄家
  * @param board 两队当前级牌
+ *
+ * 升过 A 时 `lapUp = true`，`toLevel` 为从 2 重新开始并叠加剩余级数后的级牌。
  */
 export function settleLevel(
   defendingPoints: number,
@@ -224,14 +264,15 @@ export function settleLevel(
     ? bankerTeam
     : oppositeTeam(bankerTeam)
   const fromLevel = board[upgradingTeam]
-  const { level, actualSteps, gameWon } = advanceLevel(fromLevel, change.steps)
+  const { level, actualSteps, lapsGained } = advanceLevel(fromLevel, change.steps)
   return {
     ...change,
     upgradingTeam,
     fromLevel,
     toLevel: level,
     actualSteps,
-    gameWon,
+    lapUp: lapsGained > 0,
+    lapsGained,
     nextBanker: change.switchBanker ? nextPlayer(banker) : partnerOf(banker),
   }
 }

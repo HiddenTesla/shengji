@@ -22,8 +22,12 @@ interface PlayBarProps {
   onPlay: () => void
   /** 清空选择 */
   onClear: () => void
+  /** 提示：由 AI 选出建议的牌（只选中，不出牌） */
+  onHint: () => void
   compact?: boolean
   canBeatCurrent?: boolean | null
+  /** 当前本墩最大者是自己的对家（队友） */
+  leaderIsPartner?: boolean
 }
 
 export default function PlayBar({
@@ -34,10 +38,16 @@ export default function PlayBar({
   reason,
   onPlay,
   onClear,
+  onHint,
   compact = false,
   canBeatCurrent = null,
+  leaderIsPartner = false,
 }: PlayBarProps) {
   const canPlay = selectedCount > 0 && reason === null
+  // 打不过队友时不报警：换成中性颜色与柔和措辞
+  const beatTone = canBeatCurrent
+    ? '#2e7d32'
+    : leaderIsPartner ? '#7a7a7a' : '#c62828'
 
   return (
     <div style={{
@@ -74,12 +84,14 @@ export default function PlayBar({
           maxWidth: compact ? 90 : 130,
           fontSize: compact ? 11 : 12,
           lineHeight: 1.25,
-          fontWeight: 600,
-          color: canBeatCurrent ? '#2e7d32' : '#c62828',
+          fontWeight: leaderIsPartner && !canBeatCurrent ? 500 : 600,
+          color: beatTone,
         }}>
-          {compact
-            ? canBeatCurrent ? '能大过' : '不能大过'
-            : canBeatCurrent ? '能大过当前最大者' : '不能大过当前最大者'}
+          {canBeatCurrent
+            ? (compact ? '能大过' : '能大过当前最大者')
+            : leaderIsPartner
+              ? (compact ? '对家最大' : '对家最大，不用大过')
+              : (compact ? '不能大过' : '不能大过当前最大者')}
         </div>
       )}
 
@@ -99,7 +111,24 @@ export default function PlayBar({
       </div>
 
       {/* 操作 */}
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        <button
+          onClick={onHint}
+          title="由 AI 选出建议的牌（只选中，不出牌）"
+          style={{
+            padding: compact ? '5px 9px' : '7px 16px',
+            fontSize: compact ? 12 : 14,
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+            border: '1.5px solid #7e57c2',
+            borderRadius: 6,
+            background: '#f3e9ff',
+            color: '#5e35b1',
+          }}
+        >
+          提示
+        </button>
         <button
           onClick={onClear}
           disabled={selectedCount === 0}
@@ -107,6 +136,7 @@ export default function PlayBar({
             padding: compact ? '5px 9px' : '7px 16px',
             fontSize: compact ? 12 : 14,
             fontWeight: 600,
+            whiteSpace: 'nowrap',
             cursor: selectedCount === 0 ? 'not-allowed' : 'pointer',
             border: '1.5px solid #bbb',
             borderRadius: 6,
@@ -123,6 +153,7 @@ export default function PlayBar({
             padding: compact ? '5px 11px' : '7px 22px',
             fontSize: compact ? 12 : 14,
             fontWeight: 700,
+            whiteSpace: 'nowrap',
             cursor: canPlay ? 'pointer' : 'not-allowed',
             border: 'none',
             borderRadius: 6,

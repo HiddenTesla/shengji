@@ -6,22 +6,26 @@ import {
   type Card,
   type CardId,
   type PlayerPosition,
+  type RuleOptions,
   Suit,
   Rank,
   SUIT_SYMBOL,
+  DEFAULT_RULE_OPTIONS,
 } from './types.ts'
 import { evaluateTrumpStrength } from './trump.ts'
 
 /**
  * 叫主强度（越大越强）
- *   Single    单张级牌亮主
- *   Pair      一对级牌反主
- *   JokerPair 一对王 → 无主
+ *   Single         单张级牌亮主
+ *   Pair           一对级牌反主
+ *   SmallJokerPair 一对小王 → 无主
+ *   BigJokerPair   一对大王 → 无主（报品高于对小王）
  */
 export enum BidStrength {
   Single = 1,
   Pair = 2,
-  JokerPair = 3,
+  SmallJokerPair = 3,
+  BigJokerPair = 4,
 }
 
 /** 一次叫主声明 */
@@ -66,7 +70,7 @@ export function createBidState(firstTurnIndex = 0): BidState {
  * 规则：
  *   - 持有级牌 → 可"亮主"（单张）
  *   - 持有同花色一对级牌 → 可"反主"（对子）
- *   - 持有任意两张王 → 可"无主"
+ *   - 持有两张同大小的王（对小王 / 对大王）→ 可"无主"
  */
 export function getPossibleDeclarations(
   hand: Card[],
@@ -103,33 +107,66 @@ export function getPossibleDeclarations(
     }
   }
 
-  // 对王 → 无主
-  const jokers = hand.filter(c => c.suit === Suit.Joker)
-  if (jokers.length >= 2) {
+  // 对王 → 无主（必须同大小；大对 > 小对；单大王+单小王不能报）
+  const smallJokers = hand.filter(
+    c => c.suit === Suit.Joker && c.rank === Rank.SmallJoker,
+  )
+  if (smallJokers.length >= 2) {
     decls.push({
       player,
       suit: null,
-      strength: BidStrength.JokerPair,
-      cardIds: [jokers[0].id, jokers[1].id],
+      strength: BidStrength.SmallJokerPair,
+      cardIds: [smallJokers[0].id, smallJokers[1].id],
+    })
+  }
+  const bigJokers = hand.filter(
+    c => c.suit === Suit.Joker && c.rank === Rank.BigJoker,
+  )
+  if (bigJokers.length >= 2) {
+    decls.push({
+      player,
+      suit: null,
+      strength: BidStrength.BigJokerPair,
+      cardIds: [bigJokers[0].id, bigJokers[1].id],
     })
   }
 
   return decls
 }
 
+/**
+ * 自己压自己的情形是否属于「反自己亮的主」。
+ *
+ * - 自保：同一报品内的补强（有主花色下「单张 → 对子」）——不算自反；
+ * - 无主的「对小王」与「对大王」是**两种不同报品**，互相覆盖属于自反；
+ * - 换成别的主门 / 有主与无主互换，同样属于自反。
+ */
+export function isSelfOverride(decl: Declaration, current: Declaration): boolean {
+  if (decl.player !== current.player) return false
+  // 无主只有两档报品，且互不相同；能覆盖时必然是换档
+  if (decl.suit === null) return true
+  return decl.suit !== current.suit
+}
+
 /** 新声明能否覆盖当前声明（无当前声明时总是可以） */
 export function canOverride(
   next: Declaration,
   current: Declaration | null,
+  rules: RuleOptions = DEFAULT_RULE_OPTIONS,
 ): boolean {
   if (!current) return true
-  return next.strength > current.strength
+  if (next.strength <= current.strength) return false
+  if (next.player !== current.player) return true
+  // 同一报品补强（自保）允许；换门 / 改无主属「反自己」，由规则控制
+  if (!isSelfOverride(next, current)) return true
+  return rules.allowSelfOverride
 }
 
 /** 声明的中文标签，如 "亮主 ♠"、"反主 ♥"、"无主" */
 export function declarationLabel(d: Declaration): string {
-  if (d.strength === BidStrength.JokerPair) return '无主'
-  if (d.suit === null) return '无主'
+  if (d.suit === null) {
+    return d.strength === BidStrength.BigJokerPair ? '无主（大王）' : '无主（小王）'
+  }
   const sym = SUIT_SYMBOL[d.suit]
   return d.strength === BidStrength.Pair ? `反主 ${sym}` : `亮主 ${sym}`
 }
@@ -153,9 +190,10 @@ export function aiChooseDeclare(
   levelRank: Rank,
   current: Declaration | null,
   player: PlayerPosition,
+  rules: RuleOptions = DEFAULT_RULE_OPTIONS,
 ): Declaration | null {
   const options = getPossibleDeclarations(hand, levelRank, player)
-    .filter(d => canOverride(d, current))
+    .filter(d => canOverride(d, current, rules))
 
   if (options.length === 0) return null
 
@@ -164,11 +202,12 @@ export function aiChooseDeclare(
 
   for (const d of options) {
     let score: number
-    if (d.strength === BidStrength.JokerPair) {
-      // 无主：依赖手中的王和级牌数量
+    if (d.suit === null) {
+      // 无主：依赖手中的王和级牌数量（对大王略优于对小王）
       const jokers = hand.filter(c => c.suit === Suit.Joker).length
       const levels = hand.filter(c => c.rank === levelRank).length
       score = 60 + jokers * 20 + levels * 10
+      if (d.strength === BidStrength.BigJokerPair) score += 10
     }
     else {
       const info = evaluateTrumpStrength(hand, d.suit as Suit, levelRank)
@@ -197,7 +236,7 @@ export function declarationScore(
   decl: Declaration,
   levelRank: Rank,
 ): number {
-  if (decl.strength === BidStrength.JokerPair) {
+  if (decl.suit === null) {
     const jokers = hand.filter(c => c.suit === Suit.Joker).length
     const levels = hand.filter(c => c.rank === levelRank).length
     return 60 + jokers * 20 + levels * 10 + decl.strength * 30

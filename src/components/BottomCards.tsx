@@ -12,6 +12,8 @@ interface BottomCardsProps {
   banker: PlayerPosition
   /** 是否托管（AI 自动埋底，无需玩家操作） */
   auto: boolean
+  /** 托管是否因撤销而暂停 */
+  paused?: boolean
   /** 已选张数 */
   selectedCount: number
   /** 需选张数 */
@@ -22,16 +24,20 @@ interface BottomCardsProps {
   onConfirm: () => void
   /** 清空选择 */
   onClear: () => void
+  /** 提示：由 AI 选出建议埋的牌（只选中，不确认） */
+  onHint: () => void
 }
 
 export default function BottomCards({
   banker,
   auto,
+  paused = false,
   selectedCount,
   requiredCount,
   buriedPoints,
   onConfirm,
   onClear,
+  onHint,
 }: BottomCardsProps) {
   const full = selectedCount === requiredCount && requiredCount > 0
 
@@ -56,7 +62,9 @@ export default function BottomCards({
         </div>
         <div style={{ fontSize: 13, color: '#666' }}>
           {auto
-            ? '托管中，AI 正在自动扣底…'
+            ? paused
+              ? '托管已暂停（点「继续托管」恢复）'
+              : '托管中，AI 正在自动扣底…'
             : `从手牌中选 ${requiredCount} 张埋入底牌（任意牌）`}
         </div>
       </div>
@@ -96,6 +104,22 @@ export default function BottomCards({
 
           {/* 操作按钮 */}
           <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onHint}
+              title="由 AI 选出建议埋的牌（只选中，不确认）"
+              style={{
+                padding: '7px 16px',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                border: '1.5px solid #7e57c2',
+                borderRadius: 6,
+                background: '#f3e9ff',
+                color: '#5e35b1',
+              }}
+            >
+              提示
+            </button>
             <button
               onClick={onClear}
               disabled={selectedCount === 0}
