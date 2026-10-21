@@ -212,6 +212,8 @@ function App() {
   // ---- 发牌状态（逐张发牌） ----
   const fullHandsRef = useRef<Hands | null>(null)
   const bottomRef = useRef<Card[]>([])
+  /** 本次发牌的**原始**底牌（埋底后 bottomRef 会被覆盖，这里始终保留） */
+  const originalBottomRef = useRef<Card[]>([])
   const [revealed, setRevealed] = useState(0)
   /** 主牌是否由翻底牌确定（此时不可再反主） */
   const [bottomTrump, setBottomTrump] = useState(false)
@@ -235,6 +237,8 @@ function App() {
   const [autoPaused, setAutoPaused] = useState(false)
   /** 「新的一局」确认框 */
   const [confirmNewGame, setConfirmNewGame] = useState(false)
+  /** 「原样发牌」确认框 */
+  const [confirmRedeal, setConfirmRedeal] = useState(false)
   /** 「查看规则」信息框（只读，说明「新的一局」里的可选规则） */
   const [showRules, setShowRules] = useState(false)
   /** 本局生效的可选规则 */
@@ -300,20 +304,32 @@ function App() {
   // ---- 重新发牌 ----
   // presetBanker 非空时以它为庄家（用于「下一局」：庄家由升级规则预定，叫主只定主花色）；
   // 为空时庄家仍由叫主（亮主者）决定（用于首局 / 新游戏）。
-  function dealRound(presetBanker: PlayerPosition | null) {
+  // keepDeal = true 时**不洗牌**，沿用上一次发好的手牌与底部（「原样发牌」）。
+  function dealRound(presetBanker: PlayerPosition | null, keepDeal = false) {
     presetBankerRef.current = presetBanker
-    const deck = createDecks()
-    shuffleCards(deck)
-    const result = dealCards(deck, BOTTOM_COUNT)
+
+    let nextHands: Hands
+    let nextBottom: Card[]
+    if (keepDeal && fullHandsRef.current && originalBottomRef.current.length > 0) {
+      nextHands = fullHandsRef.current
+      nextBottom = originalBottomRef.current
+    } else {
+      const deck = createDecks()
+      shuffleCards(deck)
+      const result = dealCards(deck, BOTTOM_COUNT)
+      nextHands = {
+        E: result.hands.E,
+        S: result.hands.S,
+        W: result.hands.W,
+        N: result.hands.N,
+      }
+      nextBottom = result.bottom
+      originalBottomRef.current = nextBottom
+    }
 
     // 保存完整发牌结果，稍后逐张揭示
-    fullHandsRef.current = {
-      E: result.hands.E,
-      S: result.hands.S,
-      W: result.hands.W,
-      N: result.hands.N,
-    }
-    bottomRef.current = result.bottom
+    fullHandsRef.current = nextHands
+    bottomRef.current = nextBottom
 
     setHands({ E: [], S: [], W: [], N: [] })
     setRevealed(0)
@@ -340,6 +356,12 @@ function App() {
     setLevels(initialLevelBoard(level))
     setLaps(initialLapBoard())
     dealRound(null)
+  }
+
+  // ---- 原样发牌：牌序不变（手牌 / 底牌与刚才完全一致），清除报主记录重新发牌 ----
+  // 等级与周目保持不变；庄家重新由亮主者决定（与首局一致）。
+  function redealSameCards() {
+    dealRound(null, true)
   }
 
   // ---- 逐张发牌动画 ----
@@ -981,6 +1003,7 @@ function App() {
         setDraftStartLevel(startLevel)
         setConfirmNewGame(true)
       }}
+        onRedealSameCards={() => setConfirmRedeal(true)}
         onViewRules={() => setShowRules(true)}
       />
 
@@ -1726,6 +1749,21 @@ function App() {
           ))}
         </div>
       </ConfirmDialog>
+
+      {/* 原样发牌确认框 */}
+      <ConfirmDialog
+        open={confirmRedeal}
+        title="原样发牌？"
+        description={'牌序不变：四家手牌与 8 张底牌和刚才完全一致，\n但会清除报主记录并重新发牌（庄家重新由亮主决定）。\n等级与周目保持不变。'}
+        confirmLabel="原样发牌"
+        cancelLabel="取消"
+        danger
+        onConfirm={() => {
+          setConfirmRedeal(false)
+          redealSameCards()
+        }}
+        onCancel={() => setConfirmRedeal(false)}
+      />
 
       {/* 新的一局确认框 */}
       <ConfirmDialog
