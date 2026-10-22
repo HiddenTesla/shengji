@@ -1,8 +1,9 @@
 // ============================================================
 // 出牌记录弹窗
 //
-//   mode="plays"：「查看 → 出牌记录」，只显示本局的出牌（不含发牌 / 底牌）
-//   mode="full" ：本局结算时显示完整日志，并可导出 JSON / JSONC
+//   mode="plays"：「查看 → 出牌记录」，默认显示本局的出牌（不含发牌 / 底牌），
+//                 也可切换到 JSON / JSONC 文本视图（可选中、可复制 / 导出）
+//   mode="full" ：本局结算时显示完整日志，并可复制 / 导出 JSON / JSONC
 // ============================================================
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
@@ -103,6 +104,18 @@ const PRIMARY_BUTTON_STYLE: CSSProperties = {
   color: '#ffd700',
 }
 
+/** 小号切换按钮（倒序/正序、JSON/JSONC 等） */
+function chipStyle(active: boolean): CSSProperties {
+  return {
+    ...BUTTON_STYLE,
+    padding: '5px 12px',
+    fontSize: 12,
+    background: active ? 'rgba(255,215,0,0.18)' : 'rgba(255,255,255,0.06)',
+    color: active ? '#ffd700' : 'rgba(255,255,255,0.7)',
+    borderColor: active ? 'rgba(255,215,0,0.55)' : 'rgba(255,255,255,0.2)',
+  }
+}
+
 function shapeLabel(shape: PlayRecord['shape'], isLead: boolean): string {
   switch (shape.type) {
     case HandType.Single:
@@ -130,6 +143,10 @@ export default function PlayLogDialog({
   const [format, setFormat] = useState<'json' | 'jsonc'>('json')
   /** 墩的显示顺序：默认倒序（最新一墩在最上面） */
   const [order, setOrder] = useState<'desc' | 'asc'>('desc')
+  /** plays 模式：是否切换到 JSON / JSONC 文本视图 */
+  const [showJson, setShowJson] = useState(false)
+  /** 复制成功提示（短暂显示「已复制」） */
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -140,10 +157,55 @@ export default function PlayLogDialog({
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [open, onClose])
 
+  // 每次打开都回到默认视图：对局中 = 图形记录，结算 = JSON 文本
+  useEffect(() => {
+    if (!open) return
+    setShowJson(mode === 'full')
+    setCopied(false)
+  }, [open, mode])
+
+  useEffect(() => {
+    setCopied(false)
+  }, [format, showJson])
+
+  /** 是否显示 JSON / JSONC 文本视图（两种模式都可自由切换） */
+  const showingJson = showJson
+
   const fullText = useMemo(
-    () => (mode === 'full' && open ? serialize(format) : ''),
-    [mode, open, format, serialize, record],
+    () => (showingJson && open ? serialize(format) : ''),
+    // serialize 每次渲染都是新函数（依赖 logRef），保留 record 作为刷新信号
+    [showingJson, open, format, serialize, record],
   )
+
+  /** 复制当前文本到剪贴板（非安全上下文时回退 execCommand） */
+  async function copyLog() {
+    const text = fullText
+    if (!text) return
+    let done = false
+    try {
+      await navigator.clipboard.writeText(text)
+      done = true
+    }
+    catch {
+      // 权限被拒 / 非安全上下文：走下面的回退
+    }
+    if (!done) {
+      const area = document.createElement('textarea')
+      area.value = text
+      area.style.position = 'fixed'
+      area.style.opacity = '0'
+      document.body.appendChild(area)
+      area.select()
+      try {
+        document.execCommand('copy')
+      }
+      finally {
+        area.remove()
+      }
+    }
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1600)
+  }
 
   if (!open) return null
 
@@ -177,7 +239,7 @@ export default function PlayLogDialog({
           </button>
         </div>
 
-        {mode === 'plays' ? (
+        {!showingJson ? (
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -301,75 +363,86 @@ export default function PlayLogDialog({
             lineHeight: 1.55,
             fontFamily: "'Cascadia Code', Consolas, monospace",
             whiteSpace: 'pre',
+            // App 根节点禁止框选；日志文本单独放开，方便手动选中复制
+            userSelect: 'text',
+            WebkitUserSelect: 'text',
+            cursor: 'text',
           }}>
             {fullText}
           </pre>
         )}
 
         <div style={FOOTER_STYLE}>
-          {mode === 'full' && (
-            <>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {(['json', 'jsonc'] as const).map(value => (
-                  <button
-                    key={value}
-                    onClick={() => setFormat(value)}
-                    style={{
-                      ...BUTTON_STYLE,
-                      padding: '5px 12px',
-                      fontSize: 12,
-                      background: format === value
-                        ? 'rgba(255,215,0,0.18)'
-                        : 'rgba(255,255,255,0.06)',
-                      color: format === value ? '#ffd700' : 'rgba(255,255,255,0.7)',
-                      borderColor: format === value
-                        ? 'rgba(255,215,0,0.55)'
-                        : 'rgba(255,255,255,0.2)',
-                    }}
-                  >
-                    {value.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              <span style={{ flex: 1 }} />
-              <button
-                onClick={() => onExport(format)}
-                style={PRIMARY_BUTTON_STYLE}
-              >
-                ⬇ 导出 {format.toUpperCase()}
-              </button>
-            </>
+          {/* 记录视图：墩的排序 */}
+          {!showingJson && (
+            <div style={{ display: 'flex', gap: 4 }}>
+              {([
+                ['desc', '倒序'],
+                ['asc', '正序'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setOrder(value)}
+                  title={value === 'desc' ? '最新一墩在前' : '最早一墩在前'}
+                  style={chipStyle(order === value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           )}
-          {mode === 'plays' && (
-            <>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {([
-                  ['desc', '倒序'],
-                  ['asc', '正序'],
-                ] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    onClick={() => setOrder(value)}
-                    title={value === 'desc' ? '最新一墩在前' : '最早一墩在前'}
-                    style={{
-                      ...BUTTON_STYLE,
-                      padding: '5px 12px',
-                      fontSize: 12,
-                      background: order === value
-                        ? 'rgba(255,215,0,0.18)'
-                        : 'rgba(255,255,255,0.06)',
-                      color: order === value ? '#ffd700' : 'rgba(255,255,255,0.7)',
-                      borderColor: order === value
-                        ? 'rgba(255,215,0,0.55)'
-                        : 'rgba(255,255,255,0.2)',
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <span style={{ flex: 1 }} />
-            </>
+
+          {/* 图形记录 / JSON / JSONC 视图切换（对局中与结算均可用） */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            {([
+              ['log', '📜 记录'],
+              ['json', 'JSON'],
+              ['jsonc', 'JSONC'],
+            ] as const).map(([value, label]) => {
+              const active = value === 'log'
+                ? !showJson
+                : showJson && format === value
+              return (
+                <button
+                  key={value}
+                  onClick={() => {
+                    if (value === 'log') {
+                      setShowJson(false)
+                    }
+                    else {
+                      setShowJson(true)
+                      setFormat(value)
+                    }
+                  }}
+                  title={value === 'log'
+                    ? '图形化显示每墩出牌'
+                    : `显示 ${value.toUpperCase()} 文本`}
+                  style={chipStyle(active)}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+
+          <span style={{ flex: 1 }} />
+
+          {showingJson && (
+            <button
+              onClick={copyLog}
+              style={BUTTON_STYLE}
+              title="复制当前文本到剪贴板"
+            >
+              {copied ? '✅ 已复制' : '📋 复制'}
+            </button>
+          )}
+          {showingJson && (
+            <button
+              onClick={() => onExport(format)}
+              style={PRIMARY_BUTTON_STYLE}
+            >
+              ⬇ 导出 {format.toUpperCase()}
+            </button>
           )}
           <button onClick={onClose} style={BUTTON_STYLE}>
             关闭
