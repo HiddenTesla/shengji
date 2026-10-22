@@ -738,11 +738,257 @@ function searchTrick(
   return best
 }
 
+// ------------------------------------------------------------
+// 多张领出（对子 / 拖拉机 / 甩牌）的评估
+// ------------------------------------------------------------
+
+/** 该门内所有长度为 length 的连续对子段（构造跟牌用） */
+function pairRunsOfLength(
+  units: LeadPairUnit[],
+  length: number,
+): LeadPairUnit[][] {
+  if (length < 2 || units.length < length) return []
+  const bySlot = new Map<number, LeadPairUnit>()
+  for (const unit of units) {
+    if (!bySlot.has(unit.slot)) bySlot.set(unit.slot, unit)
+  }
+  const slots = [...bySlot.keys()].sort((a, b) => a - b)
+  const runs: LeadPairUnit[][] = []
+  for (let i = 0; i + length <= slots.length; i++) {
+    let ok = true
+    for (let j = 1; j < length; j++) {
+      if (slots[i + j] !== slots[i + j - 1] + 1) {
+        ok = false
+        break
+      }
+    }
+    if (ok) runs.push(slots.slice(i, i + length).map(s => bySlot.get(s)!))
+  }
+  return runs
+}
+
+interface BuildFollowOptions {
+  /** 尽量取大（跟牌抢大 / 毙牌）还是取小（垫牌） */
+  high: boolean
+  /** 补牌只用主牌凑（构造毙牌） */
+  trumpsOnly?: boolean
+  /** 补牌优先出分牌（对家大时垫分） */
+  dumpPoints?: boolean
+}
+
+/**
+ * 构造一手合法的跟牌（多张领出模拟用）。
+ *
+ * - 该门够：门内选牌，并满足「有对必对 / 有拖必拖」；
+ * - 该门不足：门内牌全出，其余按 `options` 补齐（补牌不限牌型）。
+ * 构造不出合法牌时返回 null。
+ */
+function buildFollow(
+  hand: Card[],
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+  options: BuildFollowOptions,
+): Card[] | null {
+  const door = lead.door
+  if (door === null) return null
+  const need = lead.count
+  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
+  const cost = (c: Card) => cardCost(c, trumpSuit, levelRank)
+  const order = (a: Card, b: Card) => (options.high ? cost(b) - cost(a) : cost(a) - cost(b))
+
+  // ---- 该门够：门内选牌，必须满足对子 / 拖拉机要求 ----
+  if (inDoor.length >= need) {
+    const picked: Card[] = []
+    const used = new Set<string>()
+    const take = (cards: Card[]) => {
+      for (const c of cards) {
+        if (used.has(c.id)) continue
+        used.add(c.id)
+        picked.push(c)
+      }
+    }
+
+    const units = leadPairUnits(inDoor, trumpSuit, levelRank)
+      .sort((a, b) => (options.high ? b.slot - a.slot : a.slot - b.slot))
+
+    if (lead.tractor >= 2 && need >= lead.tractor * 2) {
+      const runs = pairRunsOfLength(units, lead.tractor)
+      if (runs.length > 0) {
+        take((options.high ? runs[runs.length - 1] : runs[0]).flatMap(u => u.cards))
+      }
+    }
+    if (lead.pairs >= 1) {
+      const needPairs = Math.min(lead.pairs, units.length, Math.floor(need / 2))
+      for (const unit of units) {
+        if (picked.length >= needPairs * 2) break
+        take(unit.cards)
+      }
+    }
+
+    // 补齐：先整对（不拆对子），再单张
+    const rest = inDoor.filter(c => !used.has(c.id))
+    const restUnits = leadPairUnits(rest, trumpSuit, levelRank)
+    const unitIds = new Set(restUnits.flatMap(u => u.cards.map(c => c.id)))
+    const restUnitsSorted = [...restUnits]
+      .sort((a, b) => (options.high ? b.slot - a.slot : a.slot - b.slot))
+    const ordered = [
+      ...restUnitsSorted.flatMap(u => u.cards),
+      ...rest.filter(c => !unitIds.has(c.id)).sort(order),
+    ]
+    for (const c of ordered) {
+      if (picked.length >= need) break
+      take([c])
+    }
+    if (picked.length < need) return null
+    const play = picked.slice(0, need)
+    return validateFollow(hand, lead, play, trumpSuit, levelRank).ok ? play : null
+  }
+
+  // ---- 该门不足：门内牌全出，其余自选 ----
+  const picked = [...inDoor]
+  const used = new Set(picked.map(c => c.id))
+  const outDoor = hand.filter(c => !used.has(c.id))
+  const side = outDoor
+    .filter(c => doorOf(c, trumpSuit, levelRank) !== 'trump')
+    .sort(order)
+  const trumps = outDoor
+    .filter(c => doorOf(c, trumpSuit, levelRank) === 'trump')
+    .sort(order)
+
+  let fillers: Card[]
+  if (options.trumpsOnly) {
+    fillers = trumps
+  }
+  else if (options.dumpPoints) {
+    const points = outDoor.filter(c => isPointCard(c.rank)).sort(order)
+    const others = outDoor.filter(c => !isPointCard(c.rank)).sort(order)
+    fillers = [...points, ...others]
+  }
+  else {
+    fillers = options.high ? [...trumps, ...side] : [...side, ...trumps]
+  }
+
+  const play = [...picked, ...fillers.slice(0, need - picked.length)]
+  if (play.length !== need) return null
+  return validateFollow(hand, lead, play, trumpSuit, levelRank).ok ? play : null
+}
+
+/**
+ * 某家对多张领出的候选跟牌（数量很少：最省、最强、垫分、毙牌）。
+ *
+ * 多张领出的完整枚举会爆炸（该门缺门时可以垫任意牌），
+ * 这里只取几种典型应对，足够评估领出这一墩的得失。
+ */
+function followOptionsFor(
+  hand: Card[],
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[][] {
+  const door = lead.door
+  if (door === null) return []
+  const need = lead.count
+  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
+
+  const options: Card[][] = []
+  const seen = new Set<string>()
+  const add = (cards: Card[] | null) => {
+    if (!cards || cards.length !== need) return
+    if (!validateFollow(hand, lead, cards, trumpSuit, levelRank).ok) return
+    const key = cards.map(c => c.id).sort().join('|')
+    if (seen.has(key)) return
+    seen.add(key)
+    options.push(cards)
+  }
+
+  add(chooseFollow(hand, lead, trumpSuit, levelRank))
+  add(buildFollow(hand, lead, trumpSuit, levelRank, { high: true }))
+
+  if (inDoor.length < need) {
+    add(buildFollow(hand, lead, trumpSuit, levelRank, { high: false, dumpPoints: true }))
+    if (inDoor.length === 0) {
+      add(buildFollow(hand, lead, trumpSuit, levelRank, { high: false, trumpsOnly: true }))
+      add(buildFollow(hand, lead, trumpSuit, levelRank, { high: true, trumpsOnly: true }))
+    }
+  }
+  return options
+}
+
+/**
+ * 多张领出的通用评估（完美信息、一棵很小的极小化搜索）。
+ *
+ * 之前只有「钓主」和「必胜对子 / AK 甩牌」两种多张领出会被评分，
+ * 所以 AI 几乎不会主动领出对子、拖拉机和普通甩牌。
+ * 这里用与单张搜索同样的 `utility`（赢墩价值 + 墩分 + 牌力消耗）对候选打分，
+ * 让对子 / 拖拉机 / 甩牌和单张公平竞争。
+ */
+function scoreMultiLead(
+  cards: Card[],
+  lead: HandShape,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  const rootTeam = teamOf(player)
+  const startHands: Hands = {
+    ...hands,
+    [player]: hands[player].filter(c => !cards.some(x => x.id === c.id)),
+  }
+  const firstPlay = { player, cards, handType: lead.type }
+
+  const search = (
+    currentHands: Hands,
+    turn: PlayerPosition,
+    plays: PlayState['trick']['plays'],
+    alpha: number,
+    beta: number,
+  ): number => {
+    if (plays.length === ALL_POSITIONS.length) {
+      return utility(plays, lead, rootTeam, trumpSuit, levelRank, 0, false, 0)
+    }
+
+    const options = followOptionsFor(currentHands[turn], lead, trumpSuit, levelRank)
+    if (options.length === 0) {
+      return utility(plays, lead, rootTeam, trumpSuit, levelRank, 0, false, 0)
+    }
+
+    const maximizing = teamOf(turn) === rootTeam
+    let best = maximizing ? -Infinity : Infinity
+    for (const option of options) {
+      const nextHands: Hands = {
+        ...currentHands,
+        [turn]: currentHands[turn].filter(c => !option.some(x => x.id === c.id)),
+      }
+      const nextPlays = [...plays, {
+        player: turn,
+        cards: option,
+        handType: analyzeShape(option, trumpSuit, levelRank).type,
+      }]
+      const score = search(nextHands, nextPlayer(turn), nextPlays, alpha, beta)
+      if (maximizing) {
+        best = Math.max(best, score)
+        alpha = Math.max(alpha, best)
+      }
+      else {
+        best = Math.min(best, score)
+        beta = Math.min(beta, best)
+      }
+      if (alpha >= beta) break
+    }
+    return best
+  }
+
+  return search(startHands, nextPlayer(player), [firstPlay], -Infinity, Infinity)
+}
+
 /**
  * 选择着法。
  *
- * 单张墩使用完美信息搜索；多张领出会额外评估「钓主」候选
- * （对手可毙的对子 / 拖拉机 / 甩牌）。多张跟牌仍使用基础合法策略。
+ * 单张墩使用完美信息搜索；多张领出（对子 / 拖拉机 / 甩牌）先用
+ * 「钓主」「必胜」两种专项规则评分，没有命中时用 `scoreMultiLead`
+ * 做通用评估。多张跟牌仍使用基础合法策略。
  */
 export function aiChoosePlay(
   state: PlayState,
@@ -793,36 +1039,43 @@ export function aiChoosePlay(
       }
     }
 
-    // 多张钓主候选：对子 / 拖拉机 / 甩牌。
-    // 只有在对手能用主牌毙掉、且对家不能反毙时才进入评分。
+    // 多张领出候选：对子 / 拖拉机 / 甩牌（含主牌门）。
+    // 先按「钓主」「必胜」两个专项规则评分，没命中时用通用评估与单张公平竞争。
     const otherHands = ALL_POSITIONS
       .filter(pos => pos !== player)
       .map(pos => hands[pos])
-    const sideDoors = new Set<Suit>()
+    const leadDoors = new Set<Suit | 'trump'>()
     for (const card of hand) {
-      const door = doorOf(card, trumpSuit, levelRank)
-      if (door !== 'trump') sideDoors.add(door)
+      leadDoors.add(doorOf(card, trumpSuit, levelRank))
     }
 
     const seen = new Set<string>()
-    for (const door of sideDoors) {
+    for (const door of leadDoors) {
+      const isTrumpDoor = door === 'trump'
       const doorCards = hand.filter(
         card => doorOf(card, trumpSuit, levelRank) === door,
       )
       const akThrows: Card[][] = []
-      const aces = doorCards.filter(card => card.rank === Rank.Ace)
-      const kings = doorCards.filter(card => card.rank === Rank.King)
-      for (const ace of aces) {
-        for (const king of kings) {
-          akThrows.push([ace, king])
+      if (!isTrumpDoor) {
+        const aces = doorCards.filter(card => card.rank === Rank.Ace)
+        const kings = doorCards.filter(card => card.rank === Rank.King)
+        for (const ace of aces) {
+          for (const king of kings) {
+            akThrows.push([ace, king])
+          }
         }
       }
+      // 主牌门只考虑对子 / 拖拉机（吊主），不生成主牌甩牌
       const candidates: Card[][] = [
         ...leadPairUnits(doorCards, trumpSuit, levelRank)
           .map(unit => unit.cards),
         ...generateTractorLeadCandidates(doorCards, trumpSuit, levelRank),
-        ...generateThrowLeadCandidates(doorCards, trumpSuit, levelRank),
-        ...akThrows,
+        ...(isTrumpDoor
+          ? []
+          : [
+              ...generateThrowLeadCandidates(doorCards, trumpSuit, levelRank),
+              ...akThrows,
+            ]),
       ]
 
       for (const cards of candidates) {
@@ -838,12 +1091,17 @@ export function aiChoosePlay(
           continue
         }
 
-        const score = scoreRuffBaitLead(
+        const special = scoreRuffBaitLead(
           cards, lead, hands, player, trumpSuit, levelRank,
         ) ?? scoreWinningMultiLead(
           cards, lead, hands, player, trumpSuit, levelRank,
         )
-        if (score === null) continue
+        // 主牌多张领出同样不该交出王（与单张领出的 leadJokerPenalty 一致）
+        const score = special ?? (scoreMultiLead(
+          cards, lead, hands, player, trumpSuit, levelRank,
+        ) - cards.reduce(
+          (sum, card) => sum + leadJokerPenalty(card, trumpSuit, levelRank), 0,
+        ))
         if (score > bestScore) {
           bestScore = score
           bestCards = cards
