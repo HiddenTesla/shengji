@@ -77,7 +77,6 @@ import BottomCards from './components/BottomCards.tsx'
 import BottomReveal from './components/BottomReveal.tsx'
 import TrickArea from './components/TrickArea.tsx'
 import PlayBar from './components/PlayBar.tsx'
-import ScoreBoard from './components/ScoreBoard.tsx'
 import RoundSettlement from './components/RoundSettlement.tsx'
 import PlayLogDialog from './components/PlayLogDialog.tsx'
 import CardComponent from './components/CardComponent.tsx'
@@ -145,13 +144,6 @@ const FIRST_BID_MIN_REMAINING_SECONDS = 5
 /** 底牌张数（= 庄家埋底张数） */
 const BOTTOM_COUNT = 8
 const SPEED_MULTIPLIERS = [2.0, 1.2, 0.7, 0.4, 0.2] as const
-const TRUMP_COLORS: Record<Suit, string> = {
-  [Suit.Spade]: '#111111',
-  [Suit.Heart]: '#c62828',
-  [Suit.Club]: '#1b5e20',
-  [Suit.Diamond]: '#e65100',
-  [Suit.Joker]: '#7c3aed',
-}
 
 /** 深色背景上的主花色文字颜色（黑桃用白色，否则看不清） */
 const TRUMP_TEXT_COLORS: Record<Suit, string> = {
@@ -160,6 +152,54 @@ const TRUMP_TEXT_COLORS: Record<Suit, string> = {
   [Suit.Club]: '#7bd88f',
   [Suit.Diamond]: '#ffb74d',
   [Suit.Joker]: '#d0a0ff',
+}
+
+/**
+ * 闲家得分颜色：分数越高越危险（0 = 绿，接近 80 = 橙黄，80 = 橙红，越大越红）。
+ * 分段线性插值，保证数值连续变化时颜色也平滑过渡。
+ */
+const DEFENDING_SCORE_STOPS: { at: number; rgb: [number, number, number] }[] = [
+  { at: 0, rgb: [126, 231, 135] },    // 绿
+  { at: 40, rgb: [205, 220, 57] },    // 黄绿
+  { at: 65, rgb: [255, 202, 40] },    // 橙黄（接近 80）
+  { at: 80, rgb: [255, 112, 67] },    // 橙红（上台线）
+  { at: 120, rgb: [244, 81, 30] },    // 红
+  { at: 160, rgb: [211, 47, 47] },    // 深红
+  { at: 200, rgb: [139, 0, 0] },      // 暗红
+]
+
+function defendingScoreColor(points: number): string {
+  const first = DEFENDING_SCORE_STOPS[0]
+  const last = DEFENDING_SCORE_STOPS[DEFENDING_SCORE_STOPS.length - 1]
+  if (points <= first.at) return `rgb(${first.rgb.join(', ')})`
+  if (points >= last.at) return `rgb(${last.rgb.join(', ')})`
+  for (let i = 1; i < DEFENDING_SCORE_STOPS.length; i++) {
+    const hi = DEFENDING_SCORE_STOPS[i]
+    const lo = DEFENDING_SCORE_STOPS[i - 1]
+    if (points <= hi.at) {
+      const t = (points - lo.at) / (hi.at - lo.at)
+      const rgb = lo.rgb.map((v, k) => Math.round(v + (hi.rgb[k] - v) * t))
+      return `rgb(${rgb.join(', ')})`
+    }
+  }
+  return `rgb(${last.rgb.join(', ')})`
+}
+
+/** 亮主显示的「花色」：无主时注明是用大王还是小王报的 */
+function trumpOfDeclaration(decl: Declaration): string {
+  if (decl.suit !== null) return SUIT_SYMBOL[decl.suit]
+  return decl.strength === BidStrength.BigJokerPair
+    ? '无主（大王）'
+    : '无主（小王）'
+}
+
+/** 翻底定主的「花色」：翻到王时同样注明大小王 */
+function trumpOfBottomFlip(suit: Suit | null, decisiveCard: Card | null): string {
+  if (suit !== null) return SUIT_SYMBOL[suit]
+  if (decisiveCard && decisiveCard.suit === Suit.Joker) {
+    return decisiveCard.rank === Rank.BigJoker ? '无主（大王）' : '无主（小王）'
+  }
+  return '无主'
 }
 
 /** 「新的一局」对话框里的一行选项（等级下拉 / 复选开关共用同一套样式） */
@@ -222,8 +262,6 @@ function App() {
   const [bidState, setBidState] = useState<BidState>(createBidState(0))
   const [trumpSuit, setTrumpSuit] = useState<Suit | null>(null)
   const [banker, setBanker] = useState<PlayerPosition | null>(null)
-  /** 当前报主所用的牌（公开信息，保留快照以便整局展示在桌面） */
-  const [declaredCards, setDeclaredCards] = useState<Card[]>([])
 
   // ---- 发牌状态（逐张发牌） ----
   const fullHandsRef = useRef<Hands | null>(null)
@@ -237,6 +275,8 @@ function App() {
   const [bidSeconds, setBidSeconds] = useState(BID_WINDOW_SECONDS)
   /** 是否正在逐张翻底牌定主 */
   const [flipping, setFlipping] = useState(false)
+  /** 翻底定主时翻到的「决定性」牌（用于无主时区分大王 / 小王） */
+  const [flipTrumpCard, setFlipTrumpCard] = useState<Card | null>(null)
   /** 已翻开的底牌张数 */
   const [flipCount, setFlipCount] = useState(0)
   /** 翻底定主的翻牌记录（按翻开顺序） */
@@ -255,7 +295,7 @@ function App() {
   const [confirmNewGame, setConfirmNewGame] = useState(false)
   /** 「原样发牌」确认框 */
   const [confirmRedeal, setConfirmRedeal] = useState(false)
-  /** 「查看规则」信息框（只读，说明「新的一局」里的可选规则） */
+  /** 「自定义规则」信息框（只读，说明「新的一局」里的可选规则） */
   const [showRules, setShowRules] = useState(false)
   /** 本局生效的可选规则 */
   const [rules, setRules] = useState<RuleOptions>(DEFAULT_RULE_OPTIONS)
@@ -393,12 +433,12 @@ function App() {
     setFlipping(false)
     setFlipCount(0)
     setFlipLog([])
+    setFlipTrumpCard(null)
     setShowFlipLog(false)
     setBuriedCards([])
     setPlayState(null)
     setHistory([])
     setAutoPaused(false)
-    setDeclaredCards([])
     setBidState(createBidState(0))
     setPhase(GamePhase.Dealing)
   }
@@ -504,7 +544,7 @@ function App() {
   function applyDeclare(decl: Declaration) {
     const prev = bidStateRef.current
     setBidState({ ...prev, current: decl, history: [...prev.history, decl] })
-    // 记录报主所用的牌（从当前/完整手牌里取回 Card 对象，此后整局展示在桌上）
+    // 报主所用的牌（仅用于写入出牌记录）
     const handNow = handsRef.current?.[decl.player] ?? []
     const handFull = fullHandsRef.current?.[decl.player] ?? []
     const byId = new Map<string, Card>()
@@ -512,7 +552,6 @@ function App() {
     const bidCards = decl.cardIds
       .map(id => byId.get(id))
       .filter((card): card is Card => card !== undefined)
-    setDeclaredCards(bidCards)
     if (logRef.current) {
       logRef.current.trump = {
         suit: decl.suit,
@@ -549,6 +588,12 @@ function App() {
       setFlipCount(0)
       setFlipping(true)
     }
+  }
+
+  // ---- 「不反主」：立即结束等待反主，以当前声明定主并进入埋底 ----
+  function passBidding() {
+    if (phase !== GamePhase.BiddingTrump) return
+    finishBidding(bidStateRef.current)
   }
 
   // ---- 进入埋底：庄家收走底牌（手牌 25 → 33），等待埋底 ----
@@ -647,6 +692,7 @@ function App() {
           atDealt: 100,
         }
       }
+      setFlipTrumpCard(trumpCard ?? null)
       startBurying(flipBanker)
     }, gameDelay(3000))
     return () => clearTimeout(t)
@@ -1122,13 +1168,7 @@ function App() {
   /** 最近一次可撤销的操作类型（用于按钮提示） */
   const lastUndoKind = history[history.length - 1]?.kind ?? null
 
-  // 本局主牌：已亮主 / 翻底定主后才有值（null 且未定 → 显示「未定」）
-  const trumpDecided = trumpSuit !== null
-    || (bidState.current !== null && bidState.current.suit === null)
-    || bottomTrump
-  const trumpText = trumpSuit !== null
-    ? SUIT_SYMBOL[trumpSuit]
-    : trumpDecided ? '无主' : '未定'
+  // 本局主牌颜色：无主用紫色（与牌面一致），其余按花色
   const trumpTextColor = trumpSuit === null
     ? TRUMP_TEXT_COLORS[Suit.Joker]
     : TRUMP_TEXT_COLORS[trumpSuit]
@@ -1149,36 +1189,6 @@ function App() {
         canBeatCurrent={selectedCanBeatCurrent}
         leaderIsPartner={beatLeaderIsPartner}
       />
-    )
-  }
-
-  /** 报主牌：只在该玩家报主时显示，放在其座位与桌心之间 */
-  function renderDeclaredCards(pos: PlayerPosition) {
-    if (declaredCards.length === 0) return null
-    if (bidState.current?.player !== pos) return null
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: '3px 8px',
-        borderRadius: 8,
-        background: 'rgba(0,0,0,0.3)',
-        border: '1px solid rgba(255,255,255,0.12)',
-      }}>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
-          报主
-        </span>
-        {declaredCards.map(card => (
-          <CardComponent
-            key={card.id}
-            card={card}
-            faceUp
-            small
-            scale={0.7}
-          />
-        ))}
-      </div>
     )
   }
 
@@ -1293,16 +1303,109 @@ function App() {
             minWidth: 36,
             color: 'rgba(255,255,255,0.6)',
           }}>
-            主
+            亮主
           </span>
-          <b style={{
-            fontSize: 19,
-            lineHeight: 1.1,
-            color: trumpTextColor,
-          }}>
-            {trumpText}
+          {bidState.current
+            ? (
+              <>
+                <b style={{ fontSize: 15, color: 'rgba(255,255,255,0.92)', whiteSpace: 'nowrap' }}>
+                  {POSITION_NAME_ZH[bidState.current.player]}家
+                </b>
+                <b style={{
+                  fontSize: 19,
+                  lineHeight: 1.1,
+                  color: trumpTextColor,
+                }}>
+                  {trumpOfDeclaration(bidState.current)}
+                </b>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+                  {bidState.current.cardIds.length} 张
+                </span>
+              </>
+            )
+            : bottomTrump
+              ? (
+                <>
+                  <b style={{
+                    fontSize: 19,
+                    lineHeight: 1.1,
+                    color: trumpTextColor,
+                  }}>
+                    {trumpOfBottomFlip(trumpSuit, flipTrumpCard)}
+                  </b>
+                  <span
+                    onClick={() => setShowFlipLog(v => !v)}
+                    title="点击查看翻底记录"
+                    style={{
+                      pointerEvents: 'auto',
+                      fontSize: 11,
+                      lineHeight: '16px',
+                      padding: '0 5px',
+                      borderRadius: 3,
+                      color: '#90caf9',
+                      background: 'rgba(144,202,249,0.15)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    翻底
+                  </span>
+                </>
+              )
+              : (
+                <b style={{ fontSize: 19, lineHeight: 1.1, color: 'rgba(255,255,255,0.45)' }}>
+                  未定
+                </b>
+              )}
+        </div>
+
+        {/* 庄家 */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ minWidth: 36, color: 'rgba(255,255,255,0.6)' }}>
+            庄家
+          </span>
+          <b style={{ color: banker ? '#7ee787' : 'rgba(255,255,255,0.45)' }}>
+            {banker ? `${POSITION_NAME_ZH[banker]}家` : '—'}
           </b>
         </div>
+
+        {/* 得分 / 逃分（出牌阶段起显示） */}
+        {playState && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+            marginTop: 2,
+            paddingTop: 5,
+            borderTop: '1px solid rgba(255,255,255,0.15)',
+            fontSize: 14,
+          }}>
+            {/* 庄家逃分（次要）/ 闲家得分（重点：字号大、颜色随分值渐变） */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span style={{ color: 'rgba(255,255,255,0.6)' }}>庄家逃分</span>
+              <b style={{
+                fontSize: 16,
+                lineHeight: 1.1,
+                color: '#ffd700',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {playState.bankerPoints}
+              </b>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span style={{ color: 'rgba(255,255,255,0.6)' }}>闲家得分</span>
+              <b style={{
+                fontSize: 26,
+                lineHeight: 1.05,
+                color: defendingScoreColor(playState.defendingPoints),
+                fontVariantNumeric: 'tabular-nums',
+                transition: 'color 0.3s',
+              }}>
+                {playState.defendingPoints}
+              </b>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>/80</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ---- 顶部：北家 ---- */}
@@ -1312,15 +1415,7 @@ function App() {
         alignItems: 'center',
         justifyContent: 'center',
         paddingTop: 12,
-        position: 'relative',
       }}>
-        {/* 西家 / 东家报主牌：显示在其座位上方（顶栏左右角） */}
-        <div style={{ position: 'absolute', left: 16, bottom: 0 }}>
-          {renderDeclaredCards(PlayerPosition.West)}
-        </div>
-        <div style={{ position: 'absolute', right: 16, bottom: 0 }}>
-          {renderDeclaredCards(PlayerPosition.East)}
-        </div>
         <OpponentHand
           position={PlayerPosition.North}
           cards={hands.N}
@@ -1340,7 +1435,6 @@ function App() {
           onToggleCard={canSelectPosition(PlayerPosition.North)
             ? toggleCard
             : undefined}
-          labelExtra={renderDeclaredCards(PlayerPosition.North)}
         />
         {playingTurn === PlayerPosition.North && (
           <div style={{ marginTop: 4 }}>
@@ -1416,147 +1510,71 @@ function App() {
             </>
           )}
 
-          {/* 叫主状态 / 结果 */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 4,
-            marginTop: 4,
-            padding: '8px 18px',
-            borderRadius: 8,
-            background: 'rgba(0,0,0,0.3)',
-            border: '1px solid rgba(255,255,255,0.12)',
-          }}>
-            <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.85)' }}>
-              打 <b style={{ color: '#ffd700' }}>{RANK_NAME[levelRank]}</b>
-            </div>
-            {isDealing && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                fontSize: 14,
-                color: 'rgba(255,255,255,0.7)',
-              }}>
-                发牌中… 可抢亮
-                {bidState.current && (
-                  <span style={{ color: 'rgba(255,255,255,0.85)' }}>
-                    · 当前主牌：
-                    <b style={{
-                      color: trumpSuit ? TRUMP_COLORS[trumpSuit] : 'inherit',
-                      background: trumpSuit ? 'rgba(255,255,255,0.9)' : undefined,
-                      borderRadius: 4,
-                      padding: trumpSuit ? '1px 5px' : undefined,
-                    }}>
-                      {trumpSuit ? SUIT_SYMBOL[trumpSuit] : '无主'}
-                    </b>
-                    （{POSITION_NAME_ZH[bidState.current.player]}）
-                  </span>
-                )}
-              </div>
-            )}
-            {isBidding && (
-              <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>
-                {flipping
-                  ? '翻底牌定主…'
-                  : (
-                    <>
-                      叫主倒计时 <b style={{ color: '#ffd700' }}>{bidSeconds}</b> 秒
-                      {bidState.current
-                        ? (
-                          <span style={{ color: 'rgba(255,255,255,0.85)', marginLeft: 6 }}>
-                            （当前 {POSITION_NAME_ZH[bidState.current.player]}家：
-                            <b style={{
-                              color: bidState.current.suit
-                                ? TRUMP_COLORS[bidState.current.suit]
-                                : 'inherit',
-                              background: bidState.current.suit
-                                ? 'rgba(255,255,255,0.9)'
-                                : undefined,
-                              borderRadius: 4,
-                              padding: bidState.current.suit ? '1px 5px' : undefined,
-                              marginLeft: 3,
-                            }}>
-                              {bidState.current.suit
-                                ? SUIT_SYMBOL[bidState.current.suit]
-                                : '无主'}
-                            </b>
-                            {' '}{bidState.current.suit === null
-                              ? ''
-                              : bidState.current.strength === BidStrength.Pair
-                                ? '反主'
-                                : '亮主'}）
-                          </span>
-                        )
-                        : (
-                          <span style={{ color: 'rgba(255,255,255,0.5)', marginLeft: 6 }}>暂无人亮主</span>
-                        )}
-                    </>
+          {/* 阶段提示：无边框（牌桌上方不再有框框） */}
+          {(isDealing || isBidding || isBurying || autoPaused) && (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 2,
+              marginTop: 2,
+              fontSize: 14,
+              color: 'rgba(255,255,255,0.8)',
+              textAlign: 'center',
+              textShadow: '0 1px 4px rgba(0,0,0,0.55)',
+            }}>
+              {isDealing && (
+                <div>
+                  发牌中… 可抢亮
+                  {bidState.current && (
+                    <span style={{ color: 'rgba(255,255,255,0.85)' }}>
+                      · 当前主牌：{trumpOfDeclaration(bidState.current)}
+                      （{POSITION_NAME_ZH[bidState.current.player]}）
+                    </span>
                   )}
-              </div>
-            )}
-            {!isDealing && !isBidding && (
-              <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>
-                主牌：<b style={{
-                  color: trumpSuit ? TRUMP_COLORS[trumpSuit] : 'inherit',
-                  background: trumpSuit ? 'rgba(255,255,255,0.9)' : undefined,
-                  borderRadius: 4,
-                  padding: trumpSuit ? '1px 5px' : undefined,
-                }}>
-                  {trumpSuit ? `主 ${SUIT_SYMBOL[trumpSuit]}` : '无主'}
-                </b>
-                {bottomTrump && (
-                  <span
-                    onClick={() => setShowFlipLog(v => !v)}
-                    title="点击查看翻底记录"
-                    style={{
-                      color: '#90caf9',
-                      marginLeft: 6,
-                      cursor: 'pointer',
-                      textDecoration: 'underline',
-                      padding: '0 5px',
-                      borderRadius: 3,
-                      background: 'rgba(144,202,249,0.15)',
-                    }}
-                  >
-                    翻底定主
-                  </span>
-                )}
-                {' · '}
-                庄家：<b style={{ color: '#7ee787' }}>
-                  {banker ? `${POSITION_NAME_ZH[banker]}家` : '—'}
-                </b>
-              </div>
-            )}
-            {isBurying && (
-              <div style={{ fontSize: 13, color: '#ffd700' }}>
-                {bankerIsAuto
-                  ? autoPaused
-                    ? '庄家托管（已暂停，点「继续托管」恢复）'
-                    : '庄家托管，自动埋底中…'
-                  : `请选 ${BOTTOM_COUNT} 张埋入底牌（已选 ${selectedIndices.size} 张）`}
-              </div>
-            )}
-            {isPlaying && playState && (
-              <div style={{ fontSize: 13, color: '#ffd700' }}>
-                轮到 {POSITION_NAME_ZH[playState.turn]}家
-                （{playerModes[playState.turn] === PlayerMode.Manual ? '手动' : '托管'}）
-              </div>
-            )}
-            {autoPaused && (
-              <div style={{ fontSize: 13, color: '#ffd700' }}>
-                ⏸ 已撤销 · 托管已暂停
-              </div>
-            )}
-          </div>
-
-          {/* 计分板（闲家得分 / 庄家逃分） */}
-          {playState && (
-            <ScoreBoard
-              defendingPoints={playState.defendingPoints}
-              bankerPoints={playState.bankerPoints}
-            />
+                </div>
+              )}
+              {isBidding && (
+                <div>
+                  {flipping
+                    ? '翻底牌定主…'
+                    : (
+                      <>
+                        叫主倒计时 <b style={{ color: '#ffd700' }}>{bidSeconds}</b> 秒
+                        {bidState.current
+                          ? (
+                            <span style={{ color: 'rgba(255,255,255,0.85)', marginLeft: 6 }}>
+                              （当前 {POSITION_NAME_ZH[bidState.current.player]}家：
+                              {trumpOfDeclaration(bidState.current)}
+                              {' '}{bidState.current.suit === null
+                                ? ''
+                                : bidState.current.strength === BidStrength.Pair
+                                  ? '反主'
+                                  : '亮主'}）
+                            </span>
+                          )
+                          : (
+                            <span style={{ color: 'rgba(255,255,255,0.5)', marginLeft: 6 }}>暂无人亮主</span>
+                          )}
+                      </>
+                    )}
+                </div>
+              )}
+              {isBurying && (
+                <div style={{ color: '#ffd700' }}>
+                  {bankerIsAuto
+                    ? autoPaused
+                      ? '庄家托管（已暂停，点「继续托管」恢复）'
+                      : '庄家托管，自动埋底中…'
+                    : `请选 ${BOTTOM_COUNT} 张埋入底牌（已选 ${selectedIndices.size} 张）`}
+                </div>
+              )}
+              {autoPaused && (
+                <div style={{ color: '#ffd700' }}>
+                  ⏸ 已撤销 · 托管已暂停
+                </div>
+              )}
+            </div>
           )}
 
           {/* 出牌区（本墩四家出牌） */}
@@ -1771,8 +1789,6 @@ function App() {
               mode={playerModes[PlayerPosition.South]}
               onToggle={() => toggleMode(PlayerPosition.South)}
             />
-            {/* 南家报主牌：显示在「南家」右侧 */}
-            {renderDeclaredCards(PlayerPosition.South)}
           </div>
           <span style={{
             fontSize: 16,
@@ -1820,6 +1836,9 @@ function App() {
               canAct={barCanAct}
               rules={rules}
               onBid={applyDeclare}
+              onPass={isBidding && !flipping && bidState.current !== null
+                ? passBidding
+                : undefined}
             />
           )}
           {/* 南家非手动时不显示报主栏：给出原因（否则容易以为「报主框消失了」） */}
@@ -1899,10 +1918,10 @@ function App() {
         onClose={() => setPlayLogOpen(false)}
       />
 
-      {/* 查看规则（只读）：说明「新的一局」里的可选规则 */}
+      {/* 自定义规则（只读）：说明「新的一局」里的可选规则 */}
       <ConfirmDialog
         open={showRules}
-        title="可选规则"
+        title="自定义规则"
         description={"以下选项可在「游戏 → 新的一局」中设置，此处仅作说明（只读）。"}
         width={420}
         confirmLabel="知道了"

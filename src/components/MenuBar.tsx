@@ -9,7 +9,7 @@ interface MenuBarProps {
   onNewGame: () => void
   /** 点击「原样发牌」：牌序不变，仅清除报主记录重新发牌 */
   onRedealSameCards: () => void
-  /** 点击「查看规则」：由 App 弹出只读的规则选项说明 */
+  /** 点击「自定义规则」：由 App 弹出只读的规则选项说明 */
   onViewRules: () => void
   /** 点击「出牌记录」：显示本局出牌（不含发牌记录） */
   onViewPlayLog: () => void
@@ -160,9 +160,6 @@ export default function MenuBar({
             <MenuItem onClick={() => closeThen(onRedealSameCards)}>
               原样发牌…
             </MenuItem>
-            <MenuItem onClick={() => closeThen(onViewRules)}>
-              查看规则…
-            </MenuItem>
           </div>
         )}
       </div>
@@ -184,6 +181,9 @@ export default function MenuBar({
           <div role="menu" style={DROPDOWN_STYLE}>
             <MenuItem onClick={() => closeThen(onViewPlayLog)}>
               出牌记录…
+            </MenuItem>
+            <MenuItem onClick={() => closeThen(onViewRules)}>
+              自定义规则…
             </MenuItem>
           </div>
         )}

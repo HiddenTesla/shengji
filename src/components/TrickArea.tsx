@@ -42,6 +42,14 @@ const SLOTS: { player: PlayerPosition; col: number; row: number }[] = [
   { player: PlayerPosition.South, col: 2, row: 3 },
 ]
 
+/** 「轮到谁出牌」箭头：指向该玩家所在方位（牌未出，空位上显示） */
+const TURN_ARROW: Record<PlayerPosition, string> = {
+  [PlayerPosition.North]: '▲',
+  [PlayerPosition.South]: '▼',
+  [PlayerPosition.West]: '◀',
+  [PlayerPosition.East]: '▶',
+}
+
 export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProps) {
   const { trick } = state
   const trickNo = state.tricks.length + 1
@@ -78,6 +86,7 @@ export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProp
               isCurrentMax={currentLeader === slot.player}
               isWinner={trick.complete && trick.winner === slot.player}
               isLead={trick.leadPlayer === slot.player}
+              isTurn={!trick.complete && state.turn === slot.player}
             />
           </div>
         )
@@ -130,6 +139,7 @@ function PlaySlot({
   isCurrentMax,
   isWinner,
   isLead,
+  isTurn,
 }: {
   player: PlayerPosition
   cards: Card[]
@@ -141,6 +151,8 @@ function PlaySlot({
   isCurrentMax: boolean
   isWinner: boolean
   isLead: boolean
+  /** 是否轮到该玩家出牌（空位上显示箭头） */
+  isTurn: boolean
 }) {
   const n = cards.length
   const step = n > 1 ? Math.min(STEP_MAX, (SLOT_W - CARD_W) / (n - 1)) : 0
@@ -159,8 +171,8 @@ function PlaySlot({
       {/* 方位标签 */}
       <div style={{
         fontSize: 12,
-        fontWeight: isCurrentMax ? 700 : 500,
-        color: isCurrentMax
+        fontWeight: isCurrentMax || isTurn ? 700 : 500,
+        color: isCurrentMax || isTurn
           ? '#ffd700'
           : isLead
             ? 'rgba(255,255,255,0.85)'
@@ -168,11 +180,12 @@ function PlaySlot({
         whiteSpace: 'nowrap',
       }}>
         {POSITION_NAME_ZH[player]}家
-        {isWinner ? ' 🏆' : isCurrentMax ? ' · 当前最大' : isLead ? ' · 首出' : ''}
+        {isWinner ? ' 🏆' : isTurn ? ' · 出牌' : isCurrentMax ? ' · 当前最大' : isLead ? ' · 首出' : ''}
       </div>
 
       {/* 牌 */}
       <div style={{
+        position: 'relative',
         width: SLOT_W,
         height: CARD_H,
         display: 'flex',
@@ -250,6 +263,25 @@ function PlaySlot({
             </div>
           )}
         </div>
+
+        {/* 轮到该玩家：空位上显示指向其方位的脉动箭头 */}
+        {isTurn && n === 0 && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 32,
+            lineHeight: 1,
+            color: '#ffd700',
+            textShadow: '0 0 14px rgba(255,215,0,0.8)',
+            animation: 'turnPulse 1.1s ease-in-out infinite',
+            pointerEvents: 'none',
+          }}>
+            {TURN_ARROW[player]}
+          </div>
+        )}
       </div>
     </div>
   )
