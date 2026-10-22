@@ -31,6 +31,11 @@ interface BiddingBarProps {
   /** 叫主相关的规则开关 */
   rules: RuleOptions
   onBid: (d: Declaration) => void
+  /**
+   * 「不反主」：立即结束等待反主。
+   * 仅在「发牌结束 + 已有人报主」时由 App 传入；未传则不显示按钮。
+   */
+  onPass?: () => void
 }
 
 /** 四门花色顺序 */
@@ -71,6 +76,7 @@ export default function BiddingBar({
   canAct,
   rules,
   onBid,
+  onPass,
 }: BiddingBarProps) {
   // 无主（对小王 / 对大王；必须同大小，优先用更强的对大王）
   const smallJokers = hand.filter(
@@ -143,6 +149,29 @@ export default function BiddingBar({
           onClick={() => jokerDecl && onBid(jokerDecl)}
           title={jokerBlocked ? '不允许反自己亮的主' : undefined}
         />
+
+        {/* 不反主：立即结束等待反主（发牌结束后、已有人报主时才出现） */}
+        {onPass && (
+          <button
+            onClick={onPass}
+            title="不反主：立即结束报主，直接开始埋底"
+            style={{
+              padding: '3px 8px',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              borderRadius: 5,
+              border: '1.5px solid #546e7a',
+              background: 'rgba(84,110,122,0.1)',
+              color: '#37474f',
+              lineHeight: 1.1,
+              minWidth: 44,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            不反主
+          </button>
+        )}
       </div>
     </div>
   )

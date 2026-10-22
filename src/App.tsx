@@ -551,6 +551,12 @@ function App() {
     }
   }
 
+  // ---- 「不反主」：立即结束等待反主，以当前声明定主并进入埋底 ----
+  function passBidding() {
+    if (phase !== GamePhase.BiddingTrump) return
+    finishBidding(bidStateRef.current)
+  }
+
   // ---- 进入埋底：庄家收走底牌（手牌 25 → 33），等待埋底 ----
   function startBurying(bankerPos: PlayerPosition) {
     setBanker(bankerPos)
@@ -1820,6 +1826,9 @@ function App() {
               canAct={barCanAct}
               rules={rules}
               onBid={applyDeclare}
+              onPass={isBidding && !flipping && bidState.current !== null
+                ? passBidding
+                : undefined}
             />
           )}
           {/* 南家非手动时不显示报主栏：给出原因（否则容易以为「报主框消失了」） */}
