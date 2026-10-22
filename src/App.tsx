@@ -255,7 +255,7 @@ function App() {
   const [confirmNewGame, setConfirmNewGame] = useState(false)
   /** 「原样发牌」确认框 */
   const [confirmRedeal, setConfirmRedeal] = useState(false)
-  /** 「查看规则」信息框（只读，说明「新的一局」里的可选规则） */
+  /** 「自定义规则」信息框（只读，说明「新的一局」里的可选规则） */
   const [showRules, setShowRules] = useState(false)
   /** 本局生效的可选规则 */
   const [rules, setRules] = useState<RuleOptions>(DEFAULT_RULE_OPTIONS)
@@ -1899,10 +1899,10 @@ function App() {
         onClose={() => setPlayLogOpen(false)}
       />
 
-      {/* 查看规则（只读）：说明「新的一局」里的可选规则 */}
+      {/* 自定义规则（只读）：说明「新的一局」里的可选规则 */}
       <ConfirmDialog
         open={showRules}
-        title="可选规则"
+        title="自定义规则"
         description={"以下选项可在「游戏 → 新的一局」中设置，此处仅作说明（只读）。"}
         width={420}
         confirmLabel="知道了"
