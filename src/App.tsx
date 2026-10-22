@@ -154,6 +154,37 @@ const TRUMP_TEXT_COLORS: Record<Suit, string> = {
   [Suit.Joker]: '#d0a0ff',
 }
 
+/**
+ * 闲家得分颜色：分数越高越危险（0 = 绿，接近 80 = 橙黄，80 = 橙红，越大越红）。
+ * 分段线性插值，保证数值连续变化时颜色也平滑过渡。
+ */
+const DEFENDING_SCORE_STOPS: { at: number; rgb: [number, number, number] }[] = [
+  { at: 0, rgb: [126, 231, 135] },    // 绿
+  { at: 40, rgb: [205, 220, 57] },    // 黄绿
+  { at: 65, rgb: [255, 202, 40] },    // 橙黄（接近 80）
+  { at: 80, rgb: [255, 112, 67] },    // 橙红（上台线）
+  { at: 120, rgb: [244, 81, 30] },    // 红
+  { at: 160, rgb: [211, 47, 47] },    // 深红
+  { at: 200, rgb: [139, 0, 0] },      // 暗红
+]
+
+function defendingScoreColor(points: number): string {
+  const first = DEFENDING_SCORE_STOPS[0]
+  const last = DEFENDING_SCORE_STOPS[DEFENDING_SCORE_STOPS.length - 1]
+  if (points <= first.at) return `rgb(${first.rgb.join(', ')})`
+  if (points >= last.at) return `rgb(${last.rgb.join(', ')})`
+  for (let i = 1; i < DEFENDING_SCORE_STOPS.length; i++) {
+    const hi = DEFENDING_SCORE_STOPS[i]
+    const lo = DEFENDING_SCORE_STOPS[i - 1]
+    if (points <= hi.at) {
+      const t = (points - lo.at) / (hi.at - lo.at)
+      const rgb = lo.rgb.map((v, k) => Math.round(v + (hi.rgb[k] - v) * t))
+      return `rgb(${rgb.join(', ')})`
+    }
+  }
+  return `rgb(${last.rgb.join(', ')})`
+}
+
 /** 「新的一局」对话框里的一行选项（等级下拉 / 复选开关共用同一套样式） */
 const OPTION_ROW_STYLE: React.CSSProperties = {
   display: 'flex',
@@ -1341,18 +1372,7 @@ function App() {
             borderTop: '1px solid rgba(255,255,255,0.15)',
             fontSize: 14,
           }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-              <span style={{ color: 'rgba(255,255,255,0.6)' }}>闲家得分</span>
-              <b style={{
-                fontSize: 18,
-                lineHeight: 1.1,
-                color: playState.defendingPoints >= 80 ? '#ff5252' : '#7ee787',
-                fontVariantNumeric: 'tabular-nums',
-              }}>
-                {playState.defendingPoints}
-              </b>
-              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>/80</span>
-            </div>
+            {/* 庄家逃分（次要）/ 闲家得分（重点：字号大、颜色随分值渐变） */}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span style={{ color: 'rgba(255,255,255,0.6)' }}>庄家逃分</span>
               <b style={{
@@ -1363,9 +1383,19 @@ function App() {
               }}>
                 {playState.bankerPoints}
               </b>
-              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginLeft: 4 }}>
-                合计 {playState.defendingPoints + playState.bankerPoints}
-              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span style={{ color: 'rgba(255,255,255,0.6)' }}>闲家得分</span>
+              <b style={{
+                fontSize: 26,
+                lineHeight: 1.05,
+                color: defendingScoreColor(playState.defendingPoints),
+                fontVariantNumeric: 'tabular-nums',
+                transition: 'color 0.3s',
+              }}>
+                {playState.defendingPoints}
+              </b>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>/80</span>
             </div>
           </div>
         )}
