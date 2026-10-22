@@ -112,6 +112,33 @@ const PASS_POINT_CARD_PENALTY = 2 * TRICK_WIN_VALUE + 50
 const BREAK_PAIR_PENALTY = 6
 const BREAK_TRACTOR_PENALTY = 7
 
+/**
+ * 「领出主牌控制牌」惩罚。
+ *
+ * 单张搜索只看一墩，「用大王稳赢这一墩」的收益被记成完整的 ±TRICK_WIN_VALUE，
+ * 于是 AI 会像对待副牌 A 一样，把王当作「安全大牌」领出来抢一墩。
+ * 但王能稳收以后的一墩：领出来只是把「以后的一墩」提前兑现，并不真的多赢一墩；
+ * 正常玩家几乎不会领出大王，而是先出小主牌吊主。
+ *
+ * 惩罚扣得比一墩的价值还多，所以除非手里只剩这几张牌，AI 不会领出大王 / 小王。
+ * 小主牌、级牌、普通主牌都不受影响，「吊主」和副牌的「安全大牌」领出照旧。
+ * 只在领出单张时计入，跟牌不受影响。
+ */
+const LEAD_BIG_JOKER_PENALTY = 2600
+const LEAD_SMALL_JOKER_PENALTY = 2200
+
+/** 领出王（主牌里唯一的「永远安全」大牌）的保留惩罚；其它牌 → 0 */
+function leadJokerPenalty(
+  card: Card,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  if (doorOf(card, trumpSuit, levelRank) !== 'trump') return 0
+  if (card.rank === Rank.BigJoker) return LEAD_BIG_JOKER_PENALTY
+  if (card.rank === Rank.SmallJoker) return LEAD_SMALL_JOKER_PENALTY
+  return 0
+}
+
 function cardCost(card: Card, trumpSuit: Suit | null, levelRank: Rank): number {
   const slot = slotOf(card, trumpSuit, levelRank)
   return doorOf(card, trumpSuit, levelRank) === 'trump' ? 20 + slot : slot
@@ -744,6 +771,8 @@ export function aiChoosePlay(
       }
       const leadBonus = safePointLeadBonus(card, hands, player, trumpSuit, levelRank)
       const splitBonus = splitKingLeadBonus(card, hands, player, trumpSuit, levelRank)
+      const strategicBonus = splitBonus
+        - leadJokerPenalty(card, trumpSuit, levelRank)
       const score = searchTrick(
         remainingHands,
         nextPlayer(player),
@@ -754,7 +783,7 @@ export function aiChoosePlay(
         levelRank,
         leadBonus,
         true,
-        splitBonus,
+        strategicBonus,
         bestScore,
         Infinity,
       )
