@@ -37,8 +37,6 @@ interface OpponentHandProps {
   selectedIndices?: Set<number>
   onToggleCard?: (index: number) => void
   sourceCardIds?: Set<string>
-  /** 标签行左侧的额外内容（如报主牌） */
-  labelExtra?: React.ReactNode
 }
 
 /** 牌背重叠偏移 */
@@ -80,7 +78,6 @@ export default function OpponentHand({
   selectedIndices,
   onToggleCard,
   sourceCardIds,
-  labelExtra,
 }: OpponentHandProps) {
   const label = POSITION_NAME_ZH[position]
   const isSide = position === 'E' || position === 'W'
@@ -110,7 +107,6 @@ export default function OpponentHand({
           onToggleVisibility={onToggleVisibility}
           playerMode={playerMode}
           onToggleMode={onToggleMode}
-          extra={labelExtra}
         />
         <div style={{
           color: 'rgba(255,255,255,0.35)',
@@ -139,7 +135,6 @@ export default function OpponentHand({
           onToggleVisibility={onToggleVisibility}
           playerMode={playerMode}
           onToggleMode={onToggleMode}
-          extra={labelExtra}
         />
         {/* 固定高度：显示/隐藏切换时按钮位置不变 */}
         <div style={{
@@ -394,7 +389,6 @@ function LabelRow({
   onToggleVisibility,
   playerMode,
   onToggleMode,
-  extra,
 }: {
   position: PlayerPosition
   faceUp: boolean
@@ -402,8 +396,6 @@ function LabelRow({
   onToggleVisibility?: () => void
   playerMode: PlayerMode
   onToggleMode: () => void
-  /** 标签左侧的额外内容（如报主牌） */
-  extra?: React.ReactNode
 }) {
   return (
     <div style={{
@@ -413,7 +405,6 @@ function LabelRow({
       userSelect: 'none',
       WebkitUserSelect: 'none',
     }}>
-      {extra}
       <span style={{
         fontSize: 16,
         fontWeight: 600,
