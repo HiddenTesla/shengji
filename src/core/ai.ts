@@ -426,6 +426,121 @@ function canAddPointsToTrick(
 }
 
 /**
+ * 「大主」权重：大王 1、小王 0.8、级牌 0.4；主 A 及以下、副牌 = 0。
+ * 用于「用大主换一墩无分 / 逼对家用大主保分」的降权。
+ */
+function bigTrumpWeight(
+  card: Card,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  if (doorOf(card, trumpSuit, levelRank) !== 'trump') return 0
+  if (card.rank === Rank.BigJoker) return 1
+  if (card.rank === Rank.SmallJoker) return 0.8
+  if (card.rank === levelRank) return 0.4
+  return 0
+}
+
+/** 用大主去管一个暂时 0 分的墩：控制牌换一墩无分，评分要降 */
+const BIG_TRUMP_EMPTY_TRICK_PENALTY = 2600
+/** 出了分牌，却要逼对家用大主来保这墩：等于拿对家的控制牌换这点分 */
+const POINT_FEED_BIG_TRUMP_PENALTY = 800
+
+/** 当前已出牌里最大的那一手（同大先出者赢） */
+function bestPlayOf(
+  plays: PlayState['trick']['plays'],
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): PlayState['trick']['plays'][number] | null {
+  let best: PlayState['trick']['plays'][number] | null = null
+  for (const play of plays) {
+    if (!best || beats(play.cards, best.cards, lead, trumpSuit, levelRank)) {
+      best = play
+    }
+  }
+  return best
+}
+
+/**
+ * 跟牌时用「大主」去管一个暂时无分的墩 → 降权。
+ * 只有真的靠这张牌管住当前最大（`beats` 成立）且全墩暂时 0 分时才罚；
+ * 该墩已经有分（值得抢）时不罚。
+ */
+function bigTrumpEmptyTrickPenalty(
+  state: PlayState,
+  lead: HandShape,
+  card: Card,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  const weight = bigTrumpWeight(card, trumpSuit, levelRank)
+  if (weight === 0) return 0
+
+  const tablePoints = trickPoints(state.trick.plays.flatMap(p => p.cards))
+    + trickPoints([card])
+  if (tablePoints > 0) return 0
+
+  const best = bestPlayOf(state.trick.plays, lead, trumpSuit, levelRank)
+  if (!best || !beats([card], best.cards, lead, trumpSuit, levelRank)) return 0
+  return BIG_TRUMP_EMPTY_TRICK_PENALTY * weight
+}
+
+/**
+ * 「喂分却要逼对家用大主保」降权。
+ *
+ * 跟单张时打出分牌，如果：
+ *   - 出完之后当前最大仍是对手；
+ *   - 对家还没出牌；
+ *   - 对家要保住这墩的分，最省的办法也是用大主（王 / 级牌）；
+ * 则降低这张分牌的评分（对手能便宜管住就让对手拿去，不必搭上对家的大主）。
+ */
+function pointFeedBigTrumpPenalty(
+  state: PlayState,
+  hands: Hands,
+  player: PlayerPosition,
+  lead: HandShape,
+  card: Card,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  if (!isPointCard(card.rank)) return 0
+
+  const partner = ALL_POSITIONS.find(
+    pos => pos !== player && teamOf(pos) === teamOf(player),
+  )
+  if (!partner) return 0
+  if (state.trick.plays.some(play => play.player === partner)) return 0
+
+  const before = bestPlayOf(state.trick.plays, lead, trumpSuit, levelRank)
+  if (!before) return 0
+
+  // 我这张牌能管住 → 当前最大成了我们的（对家不用救）
+  const takesLead = beats([card], before.cards, lead, trumpSuit, levelRank)
+  const currentBest = takesLead
+    ? { player, cards: [card] }
+    : before
+  if (teamOf(currentBest.player) === teamOf(player)) return 0
+
+  // 对家最省能赢的一手：优先看代价（主牌 > 副牌），代价最低的是不是大主
+  const partnerHand = hands[partner]
+  let cheapestCost = Infinity
+  let cheapestWeight = 0
+  for (const option of partnerHand) {
+    if (!validateFollow(partnerHand, lead, [option], trumpSuit, levelRank).ok) continue
+    if (!beats([option], currentBest.cards, lead, trumpSuit, levelRank)) continue
+    const cost = cardCost(option, trumpSuit, levelRank)
+    if (cost < cheapestCost) {
+      cheapestCost = cost
+      cheapestWeight = bigTrumpWeight(option, trumpSuit, levelRank)
+    }
+  }
+  if (cheapestCost === Infinity) return 0
+  if (cheapestWeight === 0) return 0
+  return POINT_FEED_BIG_TRUMP_PENALTY * cheapestWeight
+}
+
+/**
  * 「分牌例外」：第 3 家或第 2 家跟单张时，如果：
  *   - 当前大牌在对手手里；
  *   - 已出的牌都是 0 分；
@@ -1244,6 +1359,10 @@ export function aiChoosePlay(
       const strategicBonus = pointCardPassPenalty(
         state, hands, player, trumpSuit, levelRank, card,
       ) - breakStructurePenalty(card, hands[player], trumpSuit, levelRank)
+        - bigTrumpEmptyTrickPenalty(state, lead, card, trumpSuit, levelRank)
+        - pointFeedBigTrumpPenalty(
+          state, hands, player, lead, card, trumpSuit, levelRank,
+        )
       const score = searchTrick(
         remainingHands,
         nextPlayer(player),
