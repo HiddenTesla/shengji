@@ -280,6 +280,110 @@ function splitKingLeadBonus(
 }
 
 /**
+ * 「空甩一对 A」惩罚。
+ *
+ * 副牌的一对 A 必然管住这一墩，但它的价值在于**收分**：
+ * 只有对家能加分、或者对手被迫垫分时，打掉这对控制牌才划算。
+ * 若对家加不了分（有对子必须跟非分对子，或手里根本没有能出的分牌），
+ * 对手也逼不出分（没有分对子、该门剩下的牌都不是分牌），
+ * 领出这对 A 就只是用一张控制牌换一墩 0 分，评级要降低。
+ */
+const ACE_PAIR_NO_POINT_PENALTY = 200
+
+/** 跟「对子」时，某家**最少**被迫要出的分数（对手视角：会挑最不值钱的跟） */
+function minPointsForcedVsPair(
+  hand: Card[],
+  door: Suit,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  const need = 2
+  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
+  const inDoorIds = new Set(inDoor.map(c => c.id))
+  const sortedFill = hand
+    .filter(c => !inDoorIds.has(c.id))
+    .map(c => trickPoints([c]))
+    .sort((a, b) => a - b)
+
+  if (inDoor.length >= need) {
+    const units = leadPairUnits(inDoor, trumpSuit, levelRank)
+    // 有对必对：挑一对最不值钱的
+    if (units.length > 0) {
+      return Math.min(...units.map(u => trickPoints(u.cards)))
+    }
+    // 没有对子：自由选 2 张，挑最不值钱的
+    const points = inDoor.map(c => trickPoints([c])).sort((a, b) => a - b)
+    return points[0] + points[1]
+  }
+
+  // 该门不足：门内牌必出，补牌挑最不值钱的
+  return trickPoints(inDoor)
+    + sortedFill.slice(0, need - inDoor.length).reduce((sum, p) => sum + p, 0)
+}
+
+/** 跟「对子」时，某家**最多**能加多少分（对家视角：愿意加分） */
+function maxPointsAddableVsPair(
+  hand: Card[],
+  door: Suit,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  const need = 2
+  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
+  const inDoorIds = new Set(inDoor.map(c => c.id))
+  const sortedFill = hand
+    .filter(c => !inDoorIds.has(c.id))
+    .map(c => trickPoints([c]))
+    .sort((a, b) => b - a)
+
+  if (inDoor.length >= need) {
+    const units = leadPairUnits(inDoor, trumpSuit, levelRank)
+    // 有对必对：挑一对最值钱的（对家愿意送分）
+    if (units.length > 0) {
+      return Math.max(...units.map(u => trickPoints(u.cards)))
+    }
+    // 没有对子：自由选 2 张，挑最值钱的
+    const points = inDoor.map(c => trickPoints([c])).sort((a, b) => b - a)
+    return points[0] + points[1]
+  }
+
+  // 该门不足：门内牌必出，补牌挑最值钱的
+  return trickPoints(inDoor)
+    + sortedFill.slice(0, need - inDoor.length).reduce((sum, p) => sum + p, 0)
+}
+
+/**
+ * 空甩一对 A 的降权：副牌 AA 领出后，对家加不了分、对手也逼不出分 → 扣分。
+ * 主牌 A 对（吊主）与单张 A 不受影响。
+ */
+function acePairLeadPenalty(
+  cards: Card[],
+  lead: HandShape,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  if (lead.type !== HandType.Pair || cards.length !== 2) return 0
+  if (!cards.every(c => c.rank === Rank.Ace)) return 0
+  const door = doorOf(cards[0], trumpSuit, levelRank)
+  if (door === 'trump') return 0
+
+  const partner = ALL_POSITIONS.find(
+    pos => pos !== player && teamOf(pos) === teamOf(player),
+  )
+  const partnerPoints = partner
+    ? maxPointsAddableVsPair(hands[partner], door, trumpSuit, levelRank)
+    : 0
+  const opponentPoints = ALL_POSITIONS
+    .filter(pos => teamOf(pos) !== teamOf(player))
+    .reduce((sum, pos) =>
+      sum + minPointsForcedVsPair(hands[pos], door, trumpSuit, levelRank), 0)
+
+  return partnerPoints + opponentPoints > 0 ? 0 : ACE_PAIR_NO_POINT_PENALTY
+}
+
+/**
  * 跟单张时拆对子 / 拆拖拉机的结构惩罚。
  * 只是评分偏好：如果拆结构能赢墩或抢到关键分数，+1000 的赢墩价值仍会压过它。
  */
@@ -1091,17 +1195,18 @@ export function aiChoosePlay(
           continue
         }
 
-        const special = scoreRuffBaitLead(
-          cards, lead, hands, player, trumpSuit, levelRank,
-        ) ?? scoreWinningMultiLead(
+        const ruffBaitScore = scoreRuffBaitLead(
           cards, lead, hands, player, trumpSuit, levelRank,
         )
-        // 主牌多张领出同样不该交出王（与单张领出的 leadJokerPenalty 一致）
-        const score = special ?? (scoreMultiLead(
-          cards, lead, hands, player, trumpSuit, levelRank,
-        ) - cards.reduce(
+        // 保留惩罚：主牌多张领出同样不该交出王；空甩一对 A 也降低评级
+        const holdPenalty = cards.reduce(
           (sum, card) => sum + leadJokerPenalty(card, trumpSuit, levelRank), 0,
-        ))
+        ) + acePairLeadPenalty(cards, lead, hands, player, trumpSuit, levelRank)
+        const score = ruffBaitScore !== null
+          ? ruffBaitScore
+          : (scoreWinningMultiLead(cards, lead, hands, player, trumpSuit, levelRank)
+            ?? scoreMultiLead(cards, lead, hands, player, trumpSuit, levelRank))
+            - holdPenalty
         if (score > bestScore) {
           bestScore = score
           bestCards = cards
