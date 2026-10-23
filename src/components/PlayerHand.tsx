@@ -1,11 +1,13 @@
 // ============================================================
 // 南家手牌（升级分组展示，可点击选中）
+// 样式：src/styles/components/_player-hand.scss（BEM）
 // ============================================================
 
 import { useMemo } from 'react';
 import { type CardGroup } from '../core/card.ts';
 import { type HandMark, handMarks } from '../core/hand.ts';
 import { type Rank, type Suit } from '../core/types.ts';
+import { cssVars } from '../utils/cssVars.ts';
 import CardComponent from './CardComponent.tsx';
 
 interface PlayerHandProps {
@@ -22,14 +24,10 @@ interface PlayerHandProps {
   sourceCardIds?: Set<string>;
 }
 
-/** 手牌重叠偏移量 */
+/** 手牌重叠偏移量（与 `.player-hand__card` 的 left 步长一致） */
 const OVERLAP = 34;
-/** 组间距 */
-const GROUP_GAP = 16;
 /** 手牌缩放后单牌宽度 */
 const CARD_W_SMALL = 71 * 0.95;
-/** 手牌缩放后单牌高度 */
-const CARD_H_SMALL = 96 * 0.95;
 
 /** 花色颜色映射 — 与卡牌一致 */
 const SUIT_COLORS: Record<string, string> = {
@@ -56,14 +54,7 @@ export default function PlayerHand({
 
   if (groups.length === 0) {
     return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: 80,
-        color: 'rgba(255,255,255,0.5)',
-        fontSize: 16,
-      }}>
+      <div className="player-hand player-hand--empty">
         无手牌
       </div>
     );
@@ -72,17 +63,7 @@ export default function PlayerHand({
   let globalIdx = 0;
 
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'flex-end',
-      padding: '4px 0',
-      gap: GROUP_GAP,
-      overflow: 'hidden',
-      maxWidth: '100%',
-      userSelect: 'none',
-      WebkitUserSelect: 'none',
-    }}>
+    <div className="player-hand">
       {groups.map((group) => {
         const groupStartIdx = globalIdx;
         globalIdx += group.cards.length;
@@ -122,47 +103,25 @@ function GroupSection({
   const color = SUIT_COLORS[group.kind] ?? 'rgba(255,255,255,0.6)';
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: 2,
-    }}>
+    <div className="player-hand__group">
       {/* 组标签：彩色图标 + 张数 */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        fontSize: 18,
-        fontWeight: 700,
-        color,
-        padding: '3px 10px',
-        borderRadius: 4,
-        background: group.kind === 'trump'
-          ? 'rgba(255,215,0,0.12)'
-          : 'rgba(255,255,255,0.06)',
-        whiteSpace: 'nowrap',
-      }}>
+      <div
+        className={group.kind === 'trump'
+          ? 'player-hand__group-label player-hand__group-label--trump'
+          : 'player-hand__group-label'}
+        style={cssVars({ '--group-color': color })}
+      >
         <span>{group.label}</span>
-        <span style={{
-          fontSize: 13,
-          fontWeight: 500,
-          color: 'rgba(255,255,255,0.55)',
-          background: 'rgba(255,255,255,0.1)',
-          borderRadius: 8,
-          padding: '0 6px',
-          lineHeight: '18px',
-        }}>
+        <span className="player-hand__group-count">
           {count}
         </span>
       </div>
 
       {/* 牌 */}
-      <div style={{
-        position: 'relative',
-        width,
-        height: CARD_H_SMALL + 8,
-      }}>
+      <div
+        className="player-hand__cards"
+        style={cssVars({ '--cards-width': `${width}px` })}
+      >
         {group.cards.map((card, idx) => {
           const globalIdx = groupStartIdx + idx;
           const isSelected = selectedIndices?.has(globalIdx) ?? false;
@@ -170,12 +129,8 @@ function GroupSection({
           return (
             <div
               key={card.id}
-              style={{
-                position: 'absolute',
-                left: idx * OVERLAP,
-                zIndex: idx,
-                transition: 'transform 0.15s, filter 0.15s',
-              }}
+              className="player-hand__card"
+              style={cssVars({ '--card-index': idx })}
             >
               <CardComponent
                 card={card}

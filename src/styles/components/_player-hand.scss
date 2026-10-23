@@ -1,0 +1,73 @@
+// ============================================================
+// PlayerHand —— 南家 / 北家 分门手牌
+// 牌位偏移与容器宽度是运行时值（随张数变化），通过 CSS 变量传入。
+// ============================================================
+
+@use '../tokens' as *;
+
+.player-hand {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 4px 0;
+  max-width: 100%;
+  overflow: hidden;
+  user-select: none;
+}
+
+.player-hand--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.player-hand__group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.player-hand__group-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--group-color);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  white-space: nowrap;
+
+  &--trump {
+    background: rgba(255, 215, 0, 0.12);
+  }
+}
+
+.player-hand__group-count {
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.player-hand__cards {
+  position: relative;
+  width: var(--cards-width, 0);
+  height: 99.2px; /* 96 * 0.95 + 8 */
+}
+
+.player-hand__card {
+  position: absolute;
+  left: calc(var(--card-index, 0) * 34px);
+  z-index: var(--card-index, 0);
+  transition: transform 0.15s, filter 0.15s;
+}

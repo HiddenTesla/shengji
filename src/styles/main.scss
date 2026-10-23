@@ -1,0 +1,21 @@
+// ============================================================
+// 样式入口（由 src/main.tsx 引入）
+// 新组件样式放 components/_<name>.scss 并在此 @use。
+// ============================================================
+
+@use 'base';
+@use 'components/app';
+@use 'components/menu-bar';
+@use 'components/play-bar';
+@use 'components/player-mode-button';
+@use 'components/score-board';
+@use 'components/confirm-dialog';
+@use 'components/bottom-reveal';
+@use 'components/bidding-bar';
+@use 'components/bottom-cards';
+@use 'components/player-hand';
+@use 'components/card';
+@use 'components/opponent-hand';
+@use 'components/trick-area';
+@use 'components/round-settlement';
+@use 'components/play-log-dialog';

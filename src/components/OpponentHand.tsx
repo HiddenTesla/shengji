@@ -4,6 +4,7 @@
 // 翻开时：
 //   - 北家与南家一致 —— 按「门」横向分组显示（主牌 / ♠ / ♥ / ♣ / ♦）
 //   - 东/西家按「门」分为若干竖列，同一门内竖排，逐张可见点数与花色
+// 样式：src/styles/components/_opponent-hand.scss（BEM）
 // ============================================================
 
 import { useMemo } from 'react';
@@ -17,6 +18,7 @@ import {
 } from '../core/types.ts';
 import { type CardGroup, groupCardsForDisplay } from '../core/card.ts';
 import { type HandMark, handMarks } from '../core/hand.ts';
+import { cssVars } from '../utils/cssVars.ts';
 import CardComponent from './CardComponent.tsx';
 import PlayerHand from './PlayerHand.tsx';
 import PlayerModeButton from './PlayerModeButton.tsx';
@@ -52,9 +54,6 @@ const SIDE_STEP_Y = 42;
  * 取 6 使翻开后的竖列不高于牌背竖排，避免挤占南家手牌空间。
  */
 const SIDE_ROWS_PER_COL = 6;
-
-/** 北家翻开时的固定高度（与南家分组展示等高，避免切换时位置跳动） */
-const TOP_REVEAL_H = 142;
 
 /** 门标签颜色 */
 const GROUP_COLORS: Record<string, string> = {
@@ -94,12 +93,7 @@ export default function OpponentHand({
 
   if (cardCount === 0) {
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 4,
-      }}>
+      <div className="opponent-hand">
         <LabelRow
           position={position}
           faceUp={faceUp}
@@ -108,10 +102,7 @@ export default function OpponentHand({
           playerMode={playerMode}
           onToggleMode={onToggleMode}
         />
-        <div style={{
-          color: 'rgba(255,255,255,0.35)',
-          fontSize: 15,
-        }}>
+        <div className="opponent-hand__empty">
           无手牌
         </div>
       </div>
@@ -122,12 +113,7 @@ export default function OpponentHand({
   if (!isSide) {
     const width = maxShow * OVERLAP_H + CARD_W;
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 4,
-      }}>
+      <div className="opponent-hand">
         <LabelRow
           position={position}
           faceUp={showCardsFaceUp}
@@ -137,12 +123,7 @@ export default function OpponentHand({
           onToggleMode={onToggleMode}
         />
         {/* 固定高度：显示/隐藏切换时按钮位置不变 */}
-        <div style={{
-          height: TOP_REVEAL_H,
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'center',
-        }}>
+        <div className="opponent-hand__top-area">
           {showCardsFaceUp ? (
             <PlayerHand
               groups={groups}
@@ -153,19 +134,15 @@ export default function OpponentHand({
               sourceCardIds={sourceCardIds}
             />
           ) : (
-            <div style={{
-              position: 'relative',
-              width,
-              height: CARD_H,
-            }}>
+            <div
+              className="opponent-hand__back-stack"
+              style={cssVars({ '--stack-width': `${width}px` })}
+            >
               {Array.from({ length: maxShow }).map((_, idx) => (
                 <div
                   key={idx}
-                  style={{
-                    position: 'absolute',
-                    left: idx * OVERLAP_H,
-                    zIndex: idx,
-                  }}
+                  className="opponent-hand__back-card"
+                  style={cssVars({ '--card-index': idx })}
                 >
                   <CardComponent
                     card={{ id: `h-${idx}`, suit: 'S' as any, rank: 2 as any }}
@@ -191,15 +168,12 @@ export default function OpponentHand({
   const sideAreaHeight = isSelectable
     ? revealHeight
     : Math.max(backHeight, revealHeight);
-  const sideAlign = position === 'W' ? 'flex-start' : 'flex-end';
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: sideAlign,
-      gap: 4,
-    }}>
+    <div className={position === 'W'
+      ? 'opponent-hand opponent-hand--start'
+      : 'opponent-hand opponent-hand--end'}
+    >
       <LabelRow
         position={position}
         faceUp={showCardsFaceUp}
@@ -208,11 +182,10 @@ export default function OpponentHand({
         playerMode={playerMode}
         onToggleMode={onToggleMode}
       />
-      <div style={{
-        height: sideAreaHeight,
-        display: 'flex',
-        alignItems: 'flex-start',
-      }}>
+      <div
+        className="opponent-hand__side-area"
+        style={cssVars({ '--side-area-height': `${sideAreaHeight}px` })}
+      >
         {showCardsFaceUp ? (
           <SideGroupColumns
             groups={groups}
@@ -222,19 +195,15 @@ export default function OpponentHand({
             sourceCardIds={sourceCardIds}
           />
         ) : (
-          <div style={{
-            position: 'relative',
-            width: CARD_W + 6,
-            height: backHeight,
-          }}>
+          <div
+            className="opponent-hand__back-stack opponent-hand__back-stack--vertical"
+            style={cssVars({ '--stack-height': `${backHeight}px` })}
+          >
             {Array.from({ length: maxShow }).map((_, idx) => (
               <div
                 key={idx}
-                style={{
-                  position: 'absolute',
-                  top: idx * OVERLAP_V,
-                  zIndex: idx,
-                }}
+                className="opponent-hand__back-card opponent-hand__back-card--vertical"
+                style={cssVars({ '--card-index': idx })}
               >
                 <CardComponent
                   card={{ id: `v-${idx}`, suit: 'S' as any, rank: 2 as any }}
@@ -271,14 +240,7 @@ function SideGroupColumns({
   if (groups.length === 0) return null;
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 10,
-      userSelect: 'none',
-      WebkitUserSelect: 'none',
-    }}>
+    <div className="side-columns">
       {groups.map((group, groupIndex) => {
         const groupStart = groups
           .slice(0, groupIndex)
@@ -291,20 +253,16 @@ function SideGroupColumns({
         return (
           <div
             key={String(group.kind)}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 3,
-            }}
+            className="side-columns__group"
           >
             <GroupLabel group={group} />
 
-            <div style={{ display: 'flex', flexDirection: 'row', gap: 3 }}>
+            <div className="side-columns__cols">
               {Array.from({ length: colCount }).map((_, ci) => (
                 <div
                   key={ci}
-                  style={{ position: 'relative', width: CARD_W, height }}
+                  className="side-columns__col"
+                  style={cssVars({ '--col-height': `${height}px` })}
                 >
                   {group.cards
                     .slice(ci * SIDE_ROWS_PER_COL, (ci + 1) * SIDE_ROWS_PER_COL)
@@ -315,12 +273,8 @@ function SideGroupColumns({
                       return (
                         <div
                           key={card.id}
-                          style={{
-                            position: 'absolute',
-                            top: i * SIDE_STEP_Y,
-                            zIndex: i,
-                            transition: 'transform 0.15s, filter 0.15s',
-                          }}
+                          className="side-columns__card"
+                          style={cssVars({ '--card-index': i })}
                         >
                           <CardComponent
                             card={card}
@@ -358,24 +312,12 @@ function SideGroupColumns({
 function GroupLabel({ group }: { group: CardGroup }) {
   const color = GROUP_COLORS[group.kind] ?? 'rgba(255,255,255,0.7)';
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 4,
-      fontSize: 16,
-      fontWeight: 700,
-      color,
-    }}>
+    <div
+      className="group-label"
+      style={cssVars({ '--group-color': color })}
+    >
       <span>{group.label}</span>
-      <span style={{
-        fontSize: 12,
-        fontWeight: 500,
-        color: 'rgba(255,255,255,0.55)',
-        background: 'rgba(255,255,255,0.1)',
-        borderRadius: 8,
-        padding: '0 5px',
-        lineHeight: '16px',
-      }}>
+      <span className="group-label__count">
         {group.cards.length}
       </span>
     </div>
@@ -398,18 +340,8 @@ function LabelRow({
   onToggleMode: () => void;
 }) {
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 6,
-      userSelect: 'none',
-      WebkitUserSelect: 'none',
-    }}>
-      <span style={{
-        fontSize: 16,
-        fontWeight: 600,
-        color: 'rgba(255,255,255,0.75)',
-      }}>
+    <div className="label-row">
+      <span className="label-row__name">
         {POSITION_NAME_ZH[position]}家
       </span>
       <PlayerModeButton
@@ -419,16 +351,10 @@ function LabelRow({
       />
       {showToggle && (
         <button
+          className={faceUp
+            ? 'label-row__toggle label-row__toggle--on'
+            : 'label-row__toggle'}
           onClick={onToggleVisibility}
-          style={{
-            padding: '3px 9px',
-            fontSize: 13,
-            cursor: 'pointer',
-            border: '1px solid rgba(255,255,255,0.3)',
-            borderRadius: 4,
-            background: faceUp ? 'rgba(255,255,255,0.2)' : 'transparent',
-            color: '#fff',
-          }}
         >
           {faceUp ? '隐藏' : '显示'}
         </button>
@@ -439,10 +365,7 @@ function LabelRow({
 
 function CardCount({ count }: { count: number }) {
   return (
-    <div style={{
-      fontSize: 14,
-      color: 'rgba(255,255,255,0.45)',
-    }}>
+    <div className="opponent-hand__count">
       {count} 张
     </div>
   );
@@ -450,18 +373,7 @@ function CardCount({ count }: { count: number }) {
 
 function ExtraBadge({ count, side }: { count: number; side?: boolean }) {
   return (
-    <div style={{
-      position: 'absolute',
-      ...(side
-        ? { bottom: -2, left: '50%', transform: 'translateX(-50%)' }
-        : { right: -18, top: 24 }),
-      fontSize: 12,
-      color: 'rgba(255,255,255,0.6)',
-      background: 'rgba(0,0,0,0.3)',
-      borderRadius: 8,
-      padding: '1px 6px',
-      whiteSpace: 'nowrap',
-    }}>
+    <div className={side ? 'extra-badge extra-badge--side' : 'extra-badge'}>
       +{count}
     </div>
   );

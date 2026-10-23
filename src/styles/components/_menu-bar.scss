@@ -1,0 +1,80 @@
+// ============================================================
+// MenuBar —— BEM: .menu-bar / .menu-bar__element / --modifier
+// ============================================================
+
+@use '../tokens' as *;
+
+.menu-bar {
+  position: relative;
+  z-index: $z-menu-bar;
+  flex-shrink: 0;
+  height: var(--menu-bar-height);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 clamp(8px, 1vw, 16px);
+  background: rgba(0, 0, 0, 0.42);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: $menu-font-size;
+}
+
+.menu-bar__group {
+  position: relative;
+}
+
+.menu-bar__button {
+  padding: 0 clamp(10px, 1vw, 16px);
+  height: calc(var(--menu-bar-height) - 8px);
+  display: flex;
+  align-items: center;
+  font-size: $menu-font-size;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+
+  &:hover,
+  &--open {
+    background: $color-menu-active;
+  }
+}
+
+.menu-bar__dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: clamp(150px, 15vw, 220px);
+  padding: 4px;
+  border-radius: 6px;
+  background: $color-menu-bg;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.menu-bar__item {
+  display: block;
+  width: 100%;
+  padding: clamp(6px, 1vh, 11px) clamp(12px, 1vw, 18px);
+  font-size: $menu-font-size;
+  text-align: left;
+  color: #fff;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+
+  &:hover {
+    background: $color-menu-hover;
+  }
+}
+
+.menu-bar__title {
+  margin-left: auto;
+  margin-right: 4px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: clamp(11px, 1.3vh, 14px);
+  letter-spacing: 1px;
+}

@@ -1,5 +1,6 @@
 // ============================================================
 // 顶部菜单栏 —— 「游戏」「查看」菜单
+// 样式：src/styles/components/_menu-bar.scss（BEM）
 // ============================================================
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -15,65 +16,10 @@ interface MenuBarProps {
   onViewPlayLog: () => void;
 }
 
-/** 菜单栏下沿的偏移量（供 App 里绝对定位的浮层使用） */
-export const MENU_BAR_OFFSET = 'calc(var(--menu-bar-height) + 8px)';
-
-/** 菜单栏文字尺寸：同样随窗口高度轻微缩放 */
-const BAR_FONT_SIZE = 'clamp(13px, 1.6vh, 17px)';
-
-const ROOT_STYLE: React.CSSProperties = {
-  position: 'relative',
-  zIndex: 40,
-  flexShrink: 0,
-  height: 'var(--menu-bar-height)',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 4,
-  padding: '0 clamp(8px, 1vw, 16px)',
-  background: 'rgba(0,0,0,0.42)',
-  borderBottom: '1px solid rgba(255,255,255,0.12)',
-  color: 'rgba(255,255,255,0.85)',
-  fontSize: BAR_FONT_SIZE,
-};
-
-const MENU_BUTTON_STYLE: React.CSSProperties = {
-  padding: '0 clamp(10px, 1vw, 16px)',
-  height: 'calc(var(--menu-bar-height) - 8px)',
-  display: 'flex',
-  alignItems: 'center',
-  fontSize: BAR_FONT_SIZE,
-  cursor: 'pointer',
-  border: 'none',
-  borderRadius: 4,
-  background: 'transparent',
-  color: '#fff',
-  fontWeight: 600,
-};
-
-const MENU_ITEM_STYLE: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  padding: 'clamp(6px, 1vh, 11px) clamp(12px, 1vw, 18px)',
-  fontSize: BAR_FONT_SIZE,
-  textAlign: 'left',
-  cursor: 'pointer',
-  border: 'none',
-  borderRadius: 4,
-  background: 'transparent',
-  color: '#fff',
-};
-
-const DROPDOWN_STYLE: React.CSSProperties = {
-  position: 'absolute',
-  top: '100%',
-  left: 0,
-  minWidth: 'clamp(150px, 15vw, 220px)',
-  padding: 4,
-  borderRadius: 6,
-  background: '#20301f',
-  border: '1px solid rgba(255,255,255,0.18)',
-  boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
-};
+/**
+ * 菜单栏下沿的偏移量由 CSS 变量 `--menu-bar-offset` 提供（见 styles/_base.scss），
+ * 绝对定位的浮层直接用 `top: var(--menu-bar-offset)`。
+ */
 
 function MenuItem({ onClick, children }: {
   onClick: () => void;
@@ -82,14 +28,8 @@ function MenuItem({ onClick, children }: {
   return (
     <button
       role="menuitem"
+      className="menu-bar__item"
       onClick={onClick}
-      style={MENU_ITEM_STYLE}
-      onMouseEnter={event => {
-        event.currentTarget.style.background = 'rgba(255,255,255,0.14)';
-      }}
-      onMouseLeave={event => {
-        event.currentTarget.style.background = 'transparent';
-      }}
     >
       {children}
     </button>
@@ -134,26 +74,26 @@ export default function MenuBar({
     action();
   };
 
+  const buttonClassName = (menu: MenuKey) =>
+    openMenu === menu ? 'menu-bar__button menu-bar__button--open' : 'menu-bar__button';
+
   return (
     <div
       ref={rootRef}
-      style={ROOT_STYLE}
+      className="menu-bar"
     >
-      <div style={{ position: 'relative' }}>
+      <div className="menu-bar__group">
         <button
+          className={buttonClassName('game')}
           onClick={() => toggle('game')}
           aria-haspopup="menu"
           aria-expanded={openMenu === 'game'}
-          style={{
-            ...MENU_BUTTON_STYLE,
-            background: openMenu === 'game' ? 'rgba(255,255,255,0.18)' : 'transparent',
-          }}
         >
           游戏
         </button>
 
         {openMenu === 'game' && (
-          <div role="menu" style={DROPDOWN_STYLE}>
+          <div role="menu" className="menu-bar__dropdown">
             <MenuItem onClick={() => closeThen(onNewGame)}>
               新的一局…
             </MenuItem>
@@ -164,21 +104,18 @@ export default function MenuBar({
         )}
       </div>
 
-      <div style={{ position: 'relative' }}>
+      <div className="menu-bar__group">
         <button
+          className={buttonClassName('view')}
           onClick={() => toggle('view')}
           aria-haspopup="menu"
           aria-expanded={openMenu === 'view'}
-          style={{
-            ...MENU_BUTTON_STYLE,
-            background: openMenu === 'view' ? 'rgba(255,255,255,0.18)' : 'transparent',
-          }}
         >
           查看
         </button>
 
         {openMenu === 'view' && (
-          <div role="menu" style={DROPDOWN_STYLE}>
+          <div role="menu" className="menu-bar__dropdown">
             <MenuItem onClick={() => closeThen(onViewPlayLog)}>
               出牌记录…
             </MenuItem>
@@ -190,13 +127,7 @@ export default function MenuBar({
       </div>
 
       {/* 右侧标题（纯展示） */}
-      <span style={{
-        marginLeft: 'auto',
-        marginRight: 4,
-        color: 'rgba(255,255,255,0.45)',
-        fontSize: 'clamp(11px, 1.3vh, 14px)',
-        letterSpacing: 1,
-      }}>
+      <span className="menu-bar__title">
         升级 · 拖拉机
       </span>
     </div>

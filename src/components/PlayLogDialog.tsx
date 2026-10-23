@@ -4,9 +4,10 @@
 //   mode="plays"：「查看 → 出牌记录」，默认显示本局的出牌（不含发牌 / 底牌），
 //                 也可切换到 JSON / JSONC 文本视图（可选中、可复制 / 导出）
 //   mode="full" ：本局结算时显示完整日志，并可复制 / 导出 JSON / JSONC
+// 样式：src/styles/components/_play-log-dialog.scss（BEM）
 // ============================================================
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   type PlayRecord,
   type RoundRecord,
@@ -28,92 +29,9 @@ interface PlayLogDialogProps {
   onClose: () => void;
 }
 
-const OVERLAY_STYLE: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  zIndex: 110,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: 'rgba(0,0,0,0.6)',
-};
-
-const PANEL_STYLE: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  width: 'min(760px, calc(100vw - 40px))',
-  maxHeight: '84vh',
-  padding: '16px 18px 14px',
-  borderRadius: 12,
-  background: '#1e2b1e',
-  border: '1px solid rgba(255,255,255,0.2)',
-  boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
-  color: 'rgba(255,255,255,0.88)',
-};
-
-const HEADER_STYLE: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 10,
-  marginBottom: 12,
-};
-
-const TITLE_STYLE: CSSProperties = {
-  fontSize: 19,
-  fontWeight: 700,
-  color: '#fff',
-};
-
-const CLOSE_STYLE: CSSProperties = {
-  marginLeft: 'auto',
-  width: 28,
-  height: 28,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  border: '1px solid rgba(255,255,255,0.2)',
-  borderRadius: 6,
-  background: 'transparent',
-  color: 'rgba(255,255,255,0.75)',
-  fontSize: 16,
-  cursor: 'pointer',
-};
-
-const FOOTER_STYLE: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  marginTop: 12,
-};
-
-const BUTTON_STYLE: CSSProperties = {
-  padding: '7px 16px',
-  fontSize: 14,
-  fontWeight: 600,
-  cursor: 'pointer',
-  borderRadius: 7,
-  border: '1px solid rgba(255,255,255,0.25)',
-  background: 'rgba(255,255,255,0.08)',
-  color: '#fff',
-};
-
-const PRIMARY_BUTTON_STYLE: CSSProperties = {
-  ...BUTTON_STYLE,
-  border: '1px solid rgba(255,215,0,0.6)',
-  background: 'rgba(255,215,0,0.16)',
-  color: '#ffd700',
-};
-
-/** 小号切换按钮（倒序/正序、JSON/JSONC 等） */
-function chipStyle(active: boolean): CSSProperties {
-  return {
-    ...BUTTON_STYLE,
-    padding: '5px 12px',
-    fontSize: 12,
-    background: active ? 'rgba(255,215,0,0.18)' : 'rgba(255,255,255,0.06)',
-    color: active ? '#ffd700' : 'rgba(255,255,255,0.7)',
-    borderColor: active ? 'rgba(255,215,0,0.55)' : 'rgba(255,255,255,0.2)',
-  };
+/** 小号切换按钮（倒序/正序、JSON/JSONC 等）的类名 */
+function chipClass(active: boolean): string {
+  return active ? 'log-panel__chip log-panel__chip--active' : 'log-panel__chip';
 }
 
 function shapeLabel(shape: PlayRecord['shape'], isLead: boolean): string {
@@ -217,44 +135,32 @@ export default function PlayLogDialog({
   if (order === 'desc') trickItems.reverse();
 
   return (
-    <div style={OVERLAY_STYLE} onClick={onClose}>
+    <div className="log-overlay" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label={mode === 'full' ? '本局完整日志' : '本局出牌记录'}
         onClick={event => event.stopPropagation()}
-        style={PANEL_STYLE}
+        className="log-panel"
       >
-        <div style={HEADER_STYLE}>
-          <div style={TITLE_STYLE}>
+        <div className="log-panel__header">
+          <div className="log-panel__title">
             {mode === 'full' ? '📄 本局完整日志' : '📜 本局出牌记录'}
           </div>
           {record && (
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+            <span className="log-panel__count">
               共 {record.tricks.length} 墩
             </span>
           )}
-          <button onClick={onClose} style={CLOSE_STYLE} aria-label="关闭">
+          <button className="log-panel__close" onClick={onClose} aria-label="关闭">
             ✕
           </button>
         </div>
 
         {!showingJson ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10,
-            overflow: 'auto',
-            minHeight: 0,
-            paddingRight: 4,
-          }}>
+          <div className="log-list">
             {!hasPlays && (
-              <div style={{
-                padding: '28px 0',
-                textAlign: 'center',
-                fontSize: 14,
-                color: 'rgba(255,255,255,0.5)',
-              }}>
+              <div className="log-list__empty">
                 本局还没有出牌记录
               </div>
             )}
@@ -262,39 +168,25 @@ export default function PlayLogDialog({
             {trickItems.map(({ trick, index }) => (
               <div
                 key={index}
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: 8,
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                }}
+                className="log-trick"
               >
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  gap: 8,
-                  fontSize: 13,
-                }}>
-                  <b style={{ color: '#ffd700' }}>第 {index + 1} 墩</b>
-                  <span style={{ color: 'rgba(255,255,255,0.7)' }}>
+                <div className="log-trick__header">
+                  <b className="log-trick__no">第 {index + 1} 墩</b>
+                  <span className="log-trick__meta">
                     领出 {POSITION_NAME_ZH[trick.leadPlayer]}家
                   </span>
                   {trick.winner && (
-                    <span style={{ color: 'rgba(255,255,255,0.7)' }}>
+                    <span className="log-trick__meta">
                       · 赢家 {POSITION_NAME_ZH[trick.winner]}家
                     </span>
                   )}
                   {trick.points !== undefined && (
-                    <span style={{ color: '#7ee787' }}>
+                    <span className="log-trick__points">
                       · {trick.points} 分
                     </span>
                   )}
                   {trick.scoreAfter && (
-                    <span style={{
-                      marginLeft: 'auto',
-                      fontSize: 12,
-                      color: 'rgba(255,255,255,0.45)',
-                    }}>
+                    <span className="log-trick__score">
                       闲 {trick.scoreAfter.defending} / 庄 {trick.scoreAfter.banker}
                     </span>
                   )}
@@ -303,23 +195,12 @@ export default function PlayLogDialog({
                 {trick.plays.map((play, playIndex) => (
                   <div
                     key={playIndex}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      marginTop: 6,
-                      minHeight: 52,
-                    }}
+                    className="log-play"
                   >
-                    <span style={{
-                      width: 34,
-                      flexShrink: 0,
-                      fontSize: 13,
-                      color: 'rgba(255,255,255,0.65)',
-                    }}>
+                    <span className="log-play__player">
                       {POSITION_NAME_ZH[play.player]}家
                     </span>
-                    <div style={{ display: 'flex', gap: 3 }}>
+                    <div className="log-play__cards">
                       {play.cards.map(id => (
                         <CardComponent
                           key={id}
@@ -330,16 +211,16 @@ export default function PlayLogDialog({
                         />
                       ))}
                     </div>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
+                    <span className="log-play__shape">
                       {shapeLabel(play.shape, playIndex === 0)}
                     </span>
                     {play.shape.points !== undefined && (
-                      <span style={{ fontSize: 12, color: '#ffd700' }}>
+                      <span className="log-play__points">
                         +{play.shape.points}
                       </span>
                     )}
                     {play.throw && (
-                      <span style={{ fontSize: 12, color: '#ff8a80' }}>
+                      <span className="log-play__throw">
                         甩牌被拦 · 欲甩 {play.throw.attempted.length} 张
                       </span>
                     )}
@@ -349,33 +230,15 @@ export default function PlayLogDialog({
             ))}
           </div>
         ) : (
-          <pre style={{
-            flex: 1,
-            minHeight: 0,
-            overflow: 'auto',
-            margin: 0,
-            padding: '12px 14px',
-            borderRadius: 8,
-            background: 'rgba(0,0,0,0.35)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            color: '#d7e6d7',
-            fontSize: 12,
-            lineHeight: 1.55,
-            fontFamily: "'Cascadia Code', Consolas, monospace",
-            whiteSpace: 'pre',
-            // App 根节点禁止框选；日志文本单独放开，方便手动选中复制
-            userSelect: 'text',
-            WebkitUserSelect: 'text',
-            cursor: 'text',
-          }}>
+          <pre className="log-text">
             {fullText}
           </pre>
         )}
 
-        <div style={FOOTER_STYLE}>
+        <div className="log-panel__footer">
           {/* 记录视图：墩的排序 */}
           {!showingJson && (
-            <div style={{ display: 'flex', gap: 4 }}>
+            <div className="log-panel__chip-group">
               {([
                 ['desc', '倒序'],
                 ['asc', '正序'],
@@ -384,7 +247,7 @@ export default function PlayLogDialog({
                   key={value}
                   onClick={() => setOrder(value)}
                   title={value === 'desc' ? '最新一墩在前' : '最早一墩在前'}
-                  style={chipStyle(order === value)}
+                  className={chipClass(order === value)}
                 >
                   {label}
                 </button>
@@ -393,7 +256,7 @@ export default function PlayLogDialog({
           )}
 
           {/* 图形记录 / JSON / JSONC 视图切换（对局中与结算均可用） */}
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div className="log-panel__chip-group">
             {([
               ['log', '📜 记录'],
               ['json', 'JSON'],
@@ -417,7 +280,7 @@ export default function PlayLogDialog({
                   title={value === 'log'
                     ? '图形化显示每墩出牌'
                     : `显示 ${value.toUpperCase()} 文本`}
-                  style={chipStyle(active)}
+                  className={chipClass(active)}
                 >
                   {label}
                 </button>
@@ -425,12 +288,12 @@ export default function PlayLogDialog({
             })}
           </div>
 
-          <span style={{ flex: 1 }} />
+          <span className="log-panel__spacer" />
 
           {showingJson && (
             <button
               onClick={copyLog}
-              style={BUTTON_STYLE}
+              className="log-panel__button"
               title="复制当前文本到剪贴板"
             >
               {copied ? '✅ 已复制' : '📋 复制'}
@@ -439,12 +302,12 @@ export default function PlayLogDialog({
           {showingJson && (
             <button
               onClick={() => onExport(format)}
-              style={PRIMARY_BUTTON_STYLE}
+              className="log-panel__button log-panel__button--primary"
             >
               ⬇ 导出 {format.toUpperCase()}
             </button>
           )}
-          <button onClick={onClose} style={BUTTON_STYLE}>
+          <button onClick={onClose} className="log-panel__button">
             关闭
           </button>
         </div>

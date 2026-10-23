@@ -1,0 +1,195 @@
+// ============================================================
+// RoundSettlement —— 本局结算面板（抠底 + 升级）
+// ============================================================
+
+@use '../tokens' as *;
+
+.settlement {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 520px;
+  padding: 14px 20px;
+  border-radius: 14px;
+  background: $panel-gradient;
+  border: 1px solid $panel-border-gold;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+}
+
+.settlement__title {
+  font-size: 17px;
+  font-weight: 700;
+  color: $color-gold;
+}
+
+.settlement__scores {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.settlement__score-group {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.settlement__label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.settlement__value {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+
+  &--green {
+    color: $color-green-bright;
+  }
+
+  &--gold {
+    color: $color-gold;
+  }
+}
+
+.settlement__note {
+  font-size: 12px;
+  color: $color-green-bright;
+}
+
+.settlement__spacer {
+  flex: 1;
+}
+
+.settlement__total {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.settlement__divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+
+  &--vertical {
+    width: 1px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.15);
+  }
+}
+
+.settlement__bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settlement__bottom-title {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.settlement__bottom-points {
+  color: $color-gold;
+}
+
+.settlement__bottom-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.settlement__pill {
+  padding: 2px 10px;
+  font-size: 13px;
+  border-radius: 999px;
+
+  &--taken {
+    font-weight: 700;
+    color: #052e16;
+    background: $color-green-bright;
+  }
+
+  &--missed {
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+
+.settlement__cards {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.settlement__winner {
+  font-size: 12px;
+  color: $text-on-dark-dim;
+}
+
+.settlement__level {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.settlement__level-title {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.settlement__level-line {
+  font-size: 15px;
+  font-weight: 700;
+  color: $text-on-dark;
+
+  &--gold {
+    color: $color-gold;
+  }
+
+  &--green {
+    color: $color-green-bright;
+  }
+}
+
+.settlement__level-detail {
+  font-size: 13px;
+  color: $color-green-bright;
+}
+
+.settlement__level-next {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.settlement__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settlement__footer-text {
+  font-size: 12px;
+  color: $text-on-dark-dim;
+}
+
+.settlement__button {
+  padding: 7px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(255, 215, 0, 0.6);
+  border-radius: 7px;
+  background: rgba(255, 215, 0, 0.16);
+  color: $color-gold;
+
+  &--ghost {
+    border-color: rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+  }
+}

@@ -1,7 +1,10 @@
 // ============================================================
 // 计分板 —— 实时显示「闲家得分」与「庄家逃分」
 // 闲家得分达到 80 会变红（上台线）
+// 样式：src/styles/components/_score-board.scss（BEM）
 // ============================================================
+
+import { cssVars } from '../utils/cssVars.ts';
 
 interface ScoreBoardProps {
   /** 闲家（进攻方）得分 */
@@ -22,59 +25,38 @@ export default function ScoreBoard({
   const pct = Math.min(100, (defendingPoints / target) * 100);
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 14,
-      padding: '5px 16px',
-      borderRadius: 10,
-      background: 'rgba(0,0,0,0.32)',
-      border: '1px solid rgba(255,255,255,0.12)',
-    }}>
+    <div className="score-board">
       {/* 闲家得分 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>闲家得分</span>
-        <b style={{
-          fontSize: 21,
-          lineHeight: 1,
-          color: reached ? '#ff5252' : '#7ee787',
-          fontVariantNumeric: 'tabular-nums',
-        }}>
+      <div className="score-board__group">
+        <span className="score-board__label">闲家得分</span>
+        <b className={reached
+          ? 'score-board__value score-board__value--defending score-board__value--reached'
+          : 'score-board__value score-board__value--defending'}
+        >
           {defendingPoints}
         </b>
-        <div style={{
-          width: 104,
-          height: 6,
-          borderRadius: 3,
-          background: 'rgba(255,255,255,0.15)',
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            width: `${pct}%`,
-            height: '100%',
-            background: reached ? '#ff5252' : '#7ee787',
-            transition: 'width 0.25s',
-          }} />
+        <div className="score-board__bar">
+          <div
+            className={reached
+              ? 'score-board__bar-fill score-board__bar-fill--reached'
+              : 'score-board__bar-fill'}
+            style={cssVars({ '--score-pct': `${pct}%` })}
+          />
         </div>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>/{target}</span>
+        <span className="score-board__target">/{target}</span>
       </div>
 
-      <span style={{ width: 1, height: 22, background: 'rgba(255,255,255,0.15)' }} />
+      <span className="score-board__divider" />
 
       {/* 庄家逃分 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>庄家逃分</span>
-        <b style={{
-          fontSize: 21,
-          lineHeight: 1,
-          color: '#ffd700',
-          fontVariantNumeric: 'tabular-nums',
-        }}>
+      <div className="score-board__group">
+        <span className="score-board__label">庄家逃分</span>
+        <b className="score-board__value score-board__value--banker">
           {bankerPoints}
         </b>
       </div>
 
-      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
+      <span className="score-board__total">
         合计 {total}
       </span>
     </div>

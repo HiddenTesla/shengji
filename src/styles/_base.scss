@@ -1,3 +1,7 @@
+// ============================================================
+// 全局基础样式（由原 src/index.css 迁入）
+// ============================================================
+
 *,
 *::before,
 *::after {
@@ -15,6 +19,8 @@ html {
   -webkit-font-smoothing: antialiased;
   /* 顶部菜单栏高度：随窗口高度自适应（窗口越矮越紧凑，但不会小于 36px） */
   --menu-bar-height: clamp(36px, 5.5vh, 56px);
+  /* 菜单栏下沿 + 8px：绝对定位的浮层（等级面板、甩牌提示）用它，避免写死数字 */
+  --menu-bar-offset: calc(var(--menu-bar-height) + 8px);
 }
 
 body {
@@ -55,4 +61,3 @@ select option {
     opacity: 1;
   }
 }
-

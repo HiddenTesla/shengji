@@ -1,5 +1,6 @@
 // ============================================================
 // 四花色报主栏（仅南家，发牌/叫主阶段）
+// 样式：src/styles/components/_bidding-bar.scss（BEM）
 // ============================================================
 
 import {
@@ -16,6 +17,7 @@ import {
   canOverride,
   isSelfOverride,
 } from '../core/bidding.ts';
+import { cssVars } from '../utils/cssVars.ts';
 
 interface BiddingBarProps {
   /** 该栏归属玩家（南家） */
@@ -107,16 +109,7 @@ export default function BiddingBar({
     && !rules.allowSelfOverride;
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'stretch',
-      gap: 10,
-      padding: '8px 14px',
-      borderRadius: 12,
-      background: 'rgba(255,255,255,0.93)',
-      border: '1px solid rgba(0,0,0,0.15)',
-      boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
-    }}>
+    <div className="bidding-bar">
       {/* 四色花列 */}
       {SUIT_LIST.map(suit => (
         <SuitColumn
@@ -133,15 +126,7 @@ export default function BiddingBar({
       ))}
 
       {/* 右侧：无主 */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        paddingLeft: 10,
-        borderLeft: '1px solid rgba(0,0,0,0.12)',
-      }}>
+      <div className="bidding-bar__joker">
         <BarButton
           label="🃏无主"
           color={SUIT_COLORS[Suit.Joker]}
@@ -153,21 +138,9 @@ export default function BiddingBar({
         {/* 不反主：立即结束等待反主（发牌结束后、已有人报主时才出现） */}
         {onPass && (
           <button
+            className="bidding-bar__pass"
             onClick={onPass}
             title="不反主：立即结束报主，直接开始埋底"
-            style={{
-              padding: '3px 8px',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              borderRadius: 5,
-              border: '1.5px solid #546e7a',
-              background: 'rgba(84,110,122,0.1)',
-              color: '#37474f',
-              lineHeight: 1.1,
-              minWidth: 44,
-              whiteSpace: 'nowrap',
-            }}
           >
             不反主
           </button>
@@ -221,44 +194,25 @@ function SuitColumn({
   const singleTitle = levelCount >= 1 ? '报主该花色（亮一张）' : '无该花色级牌';
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: 3,
-      minWidth: 54,
-    }}>
+    <div className="bidding-bar__suit">
       {/* 花色符号本身即「报主」按钮；不可用时禁用 */}
       <button
+        className={singleEnabled
+          ? 'bidding-bar__suit-button bidding-bar__suit-button--enabled'
+          : 'bidding-bar__suit-button'}
         onClick={() => single && onBid(single)}
         disabled={!singleEnabled}
         title={singleTitle}
-        style={{
-          width: 44,
-          height: 44,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 26,
-          lineHeight: 1,
-          color: singleEnabled ? color : '#bdbdbd',
-          background: singleEnabled ? `${color}14` : '#f2f2f2',
-          border: `2px solid ${singleEnabled ? color : '#dcdcdc'}`,
-          borderRadius: 9,
-          cursor: singleEnabled ? 'pointer' : 'not-allowed',
-          padding: 0,
-        }}
+        style={cssVars({
+          '--suit-color': color,
+          '--suit-tint': `${color}14`,
+        })}
       >
         {SUIT_SYMBOL[suit]}
       </button>
 
       {/* 该花色非级牌数量 */}
-      <span style={{
-        fontSize: 18,
-        fontWeight: 700,
-        color: '#333',
-        lineHeight: 1,
-      }}>
+      <span className="bidding-bar__count">
         {nonLevelCount}
       </span>
 
@@ -291,22 +245,16 @@ function BarButton({
 }) {
   return (
     <button
+      className={enabled
+        ? 'bidding-bar__action bidding-bar__action--enabled'
+        : 'bidding-bar__action'}
       onClick={onClick}
       disabled={!enabled}
       title={title}
-      style={{
-        padding: '3px 8px',
-        fontSize: 13,
-        fontWeight: 600,
-        cursor: enabled ? 'pointer' : 'not-allowed',
-        borderRadius: 5,
-        border: `1.5px solid ${enabled ? color : '#bbb'}`,
-        background: enabled ? `${color}1a` : '#f0f0f0',
-        color: enabled ? color : '#aaa',
-        lineHeight: 1.1,
-        minWidth: 44,
-        whiteSpace: 'nowrap',
-      }}
+      style={cssVars({
+        '--action-color': color,
+        '--action-tint': `${color}1a`,
+      })}
     >
       {label}
     </button>

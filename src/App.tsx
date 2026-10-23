@@ -22,6 +22,7 @@ import {
   teamOf,
 } from './core/types.ts';
 import { groupCardsForDisplay } from './core/card.ts';
+import { cssVars } from './utils/cssVars.ts';
 import { createDecks, shuffleCards, dealCards } from './core/deck.ts';
 import {
   type Declaration,
@@ -70,7 +71,7 @@ import {
 import PlayerHand from './components/PlayerHand.tsx';
 import OpponentHand from './components/OpponentHand.tsx';
 import PlayerModeButton from './components/PlayerModeButton.tsx';
-import MenuBar, { MENU_BAR_OFFSET } from './components/MenuBar.tsx';
+import MenuBar from './components/MenuBar.tsx';
 import ConfirmDialog from './components/ConfirmDialog.tsx';
 import BiddingBar from './components/BiddingBar.tsx';
 import BottomCards from './components/BottomCards.tsx';
@@ -201,43 +202,6 @@ function trumpOfBottomFlip(suit: Suit | null, decisiveCard: Card | null): string
   }
   return '无主';
 }
-
-/** 「新的一局」对话框里的一行选项（等级下拉 / 复选开关共用同一套样式） */
-const OPTION_ROW_STYLE: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  fontSize: 14,
-  color: 'rgba(255,255,255,0.85)',
-  cursor: 'pointer',
-};
-
-/** 选项内的下拉框：与选项文字同字号、同色调 */
-const OPTION_SELECT_STYLE: React.CSSProperties = {
-  minWidth: 64,
-  padding: '3px 6px',
-  fontSize: 14,
-  color: 'rgba(255,255,255,0.85)',
-  background: 'rgba(255,255,255,0.08)',
-  border: '1px solid rgba(255,255,255,0.25)',
-  borderRadius: 6,
-  cursor: 'pointer',
-  accentColor: '#ffd700',
-  // 下拉列表由系统绘制：必须声明深色调色板，否则默认白底 + 白字看不见
-  colorScheme: 'dark',
-};
-
-/** 下拉列表项：深底白字（部分浏览器忽略 select 的 color，需要单独指定） */
-const OPTION_ITEM_STYLE: React.CSSProperties = {
-  color: '#f2f2f2',
-  background: '#1e2b1e',
-};
-
-/** 选项内的补充说明（灰色小字） */
-const OPTION_HINT_STYLE: React.CSSProperties = {
-  fontSize: 12,
-  color: 'rgba(255,255,255,0.45)',
-};
 
 function App() {
   // ---- 游戏状态 ----
@@ -1193,18 +1157,7 @@ function App() {
   }
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100vh',
-      background: 'linear-gradient(135deg, #1a5c2a 0%, #0d3b1a 100%)',
-      overflow: 'hidden',
-      position: 'relative',
-      fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
-      // 整局界面禁止拖拽框选（手牌、牌桌、状态文字都不会被选中）
-      userSelect: 'none',
-      WebkitUserSelect: 'none',
-    }}>
+    <div className="app">
       {/* ---- 顶部菜单栏 ---- */}
       <MenuBar onNewGame={() => {
         setDraftRules(rules);
@@ -1217,27 +1170,8 @@ function App() {
       />
 
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
-      <div style={{
-        position: 'absolute',
-        top: MENU_BAR_OFFSET,
-        left: 12,
-        zIndex: 20,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-        padding: '8px 12px',
-        borderRadius: 8,
-        background: 'rgba(0,0,0,0.32)',
-        border: '1px solid rgba(255,255,255,0.14)',
-        color: 'rgba(255,255,255,0.85)',
-        fontSize: 16,
-        pointerEvents: 'none',
-      }}>
-        <div style={{
-          fontSize: 12,
-          letterSpacing: 2,
-          color: 'rgba(255,255,255,0.5)',
-        }}>
+      <div className="level-panel">
+        <div className="level-panel__caption">
           等级
         </div>
         {[Team.NS, Team.EW].map(team => {
@@ -1245,80 +1179,50 @@ function App() {
           return (
             <div
               key={team}
-              style={{
-                display: 'flex',
-                alignItems: 'baseline',
-                gap: 8,
-                fontWeight: isCurrent ? 700 : 500,
-              }}
+              className={isCurrent
+                ? 'level-panel__row level-panel__row--current'
+                : 'level-panel__row'}
             >
-              <span style={{
-                minWidth: 36,
-                color: 'rgba(255,255,255,0.6)',
-              }}>
+              <span className="level-panel__team">
                 {TEAM_NAME_ZH[team]}
               </span>
-              <span style={{
-                color: isCurrent ? '#ffd700' : 'rgba(255,255,255,0.9)',
-              }}>
+              <span className={isCurrent
+                ? 'level-panel__level level-panel__level--current'
+                : 'level-panel__level'}
+              >
                 打 {RANK_NAME[levels[team]]}
               </span>
               <span
                 title={`第 ${laps[team]} 周目`}
-                style={{
-                  fontSize: 12,
-                  lineHeight: '16px',
-                  padding: '0 5px',
-                  borderRadius: 3,
-                  background: 'rgba(255,255,255,0.1)',
-                  color: 'rgba(255,255,255,0.7)',
-                }}
+                className="level-panel__badge"
               >
                 {formatLap(laps[team])}周目
               </span>
               {isCurrent && (
-                <span style={{
-                  fontSize: 11,
-                  lineHeight: '16px',
-                  padding: '0 5px',
-                  borderRadius: 3,
-                  background: 'rgba(255,215,0,0.2)',
-                  color: '#ffd700',
-                }}>
+                <span className="level-panel__badge level-panel__badge--current">
                   本局
                 </span>
               )}
             </div>
           );
         })}
-        <div style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: 8,
-          marginTop: 2,
-          paddingTop: 5,
-          borderTop: '1px solid rgba(255,255,255,0.15)',
-        }}>
-          <span style={{
-            minWidth: 36,
-            color: 'rgba(255,255,255,0.6)',
-          }}>
+        <div className="level-panel__row level-panel__row--section">
+          <span className="level-panel__label">
             亮主
           </span>
           {bidState.current
             ? (
               <>
-                <b style={{ fontSize: 15, color: 'rgba(255,255,255,0.92)', whiteSpace: 'nowrap' }}>
+                <b className="level-panel__trump-player">
                   {POSITION_NAME_ZH[bidState.current.player]}家
                 </b>
-                <b style={{
-                  fontSize: 19,
-                  lineHeight: 1.1,
-                  color: trumpTextColor,
-                }}>
+                <b
+                  className="level-panel__trump-suit"
+                  style={cssVars({ '--trump-color': trumpTextColor })}
+                >
                   {trumpOfDeclaration(bidState.current)}
                 </b>
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+                <span className="level-panel__trump-count">
                   {bidState.current.cardIds.length} 张
                 </span>
               </>
@@ -1326,96 +1230,69 @@ function App() {
             : bottomTrump
               ? (
                 <>
-                  <b style={{
-                    fontSize: 19,
-                    lineHeight: 1.1,
-                    color: trumpTextColor,
-                  }}>
+                  <b
+                    className="level-panel__trump-suit"
+                    style={cssVars({ '--trump-color': trumpTextColor })}
+                  >
                     {trumpOfBottomFlip(trumpSuit, flipTrumpCard)}
                   </b>
                   <span
                     onClick={() => setShowFlipLog(v => !v)}
                     title="点击查看翻底记录"
-                    style={{
-                      pointerEvents: 'auto',
-                      fontSize: 11,
-                      lineHeight: '16px',
-                      padding: '0 5px',
-                      borderRadius: 3,
-                      color: '#90caf9',
-                      background: 'rgba(144,202,249,0.15)',
-                      cursor: 'pointer',
-                    }}
+                    className="level-panel__badge level-panel__badge--flip"
                   >
                     翻底
                   </span>
                 </>
               )
               : (
-                <b style={{ fontSize: 19, lineHeight: 1.1, color: 'rgba(255,255,255,0.45)' }}>
+                <b className="level-panel__undecided">
                   未定
                 </b>
               )}
         </div>
 
         {/* 庄家 */}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span style={{ minWidth: 36, color: 'rgba(255,255,255,0.6)' }}>
+        <div className="level-panel__row">
+          <span className="level-panel__label">
             庄家
           </span>
-          <b style={{ color: banker ? '#7ee787' : 'rgba(255,255,255,0.45)' }}>
+          <b className={banker
+            ? 'level-panel__banker level-panel__banker--set'
+            : 'level-panel__banker'}
+          >
             {banker ? `${POSITION_NAME_ZH[banker]}家` : '—'}
           </b>
         </div>
 
         {/* 得分 / 逃分（出牌阶段起显示） */}
         {playState && (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1,
-            marginTop: 2,
-            paddingTop: 5,
-            borderTop: '1px solid rgba(255,255,255,0.15)',
-            fontSize: 14,
-          }}>
+          <div className="level-panel__scores">
             {/* 庄家逃分（次要）/ 闲家得分（重点：字号大、颜色随分值渐变） */}
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-              <span style={{ color: 'rgba(255,255,255,0.6)' }}>庄家逃分</span>
-              <b style={{
-                fontSize: 16,
-                lineHeight: 1.1,
-                color: '#ffd700',
-                fontVariantNumeric: 'tabular-nums',
-              }}>
+            <div className="level-panel__score-line">
+              <span className="level-panel__score-label">庄家逃分</span>
+              <b className="level-panel__score-value">
                 {playState.bankerPoints}
               </b>
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-              <span style={{ color: 'rgba(255,255,255,0.6)' }}>闲家得分</span>
-              <b style={{
-                fontSize: 26,
-                lineHeight: 1.05,
-                color: defendingScoreColor(playState.defendingPoints),
-                fontVariantNumeric: 'tabular-nums',
-                transition: 'color 0.3s',
-              }}>
+            <div className="level-panel__score-line">
+              <span className="level-panel__score-label">闲家得分</span>
+              <b
+                className="level-panel__score-value level-panel__score-value--defending"
+                style={cssVars({
+                  '--score-color': defendingScoreColor(playState.defendingPoints),
+                })}
+              >
                 {playState.defendingPoints}
               </b>
-              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>/80</span>
+              <span className="level-panel__score-max">/80</span>
             </div>
           </div>
         )}
       </div>
 
       {/* ---- 顶部：北家 ---- */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingTop: 12,
-      }}>
+      <div className="stage">
         <OpponentHand
           position={PlayerPosition.North}
           cards={hands.N}
@@ -1437,24 +1314,16 @@ function App() {
             : undefined}
         />
         {playingTurn === PlayerPosition.North && (
-          <div style={{ marginTop: 4 }}>
+          <div className="stage__playbar">
             {renderPlayBar()}
           </div>
         )}
       </div>
 
       {/* ---- 中部：西家 + 牌桌 + 东家 ---- */}
-      <div style={{
-        flex: 1,
-        minHeight: 0,
-        overflow: 'hidden',
-        display: 'grid',
-        gridTemplateColumns: '1fr auto 1fr',
-        alignItems: 'center',
-        padding: '0 16px',
-      }}>
+      <div className="table">
         {/* 西家 */}
-        <div style={{ justifySelf: 'start' }}>
+        <div className="table__west">
           <OpponentHand
             position={PlayerPosition.West}
             cards={hands.W}
@@ -1476,35 +1345,21 @@ function App() {
               : undefined}
           />
           {playingTurn === PlayerPosition.West && (
-            <div style={{ marginTop: 8 }}>
+            <div className="table__west-playbar">
               {renderPlayBar(true)}
             </div>
           )}
         </div>
 
         {/* 牌桌中心 */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 8,
-        }}>
+        <div className="table__center">
           {/* 游戏标题（出牌阶段让位给出牌区） */}
           {!isPlaying && !isRoundEnd && (
             <>
-              <div style={{
-                fontSize: 28,
-                fontWeight: 700,
-                color: 'rgba(255,255,255,0.85)',
-                letterSpacing: 2,
-                textShadow: '0 2px 8px rgba(0,0,0,0.4)',
-              }}>
+              <div className="game-title">
                 升级
               </div>
-              <div style={{
-                fontSize: 17,
-                color: 'rgba(255,255,255,0.55)',
-              }}>
+              <div className="game-subtitle">
                 拖拉机 · 80分
               </div>
             </>
@@ -1512,22 +1367,12 @@ function App() {
 
           {/* 阶段提示：无边框（牌桌上方不再有框框） */}
           {(isDealing || isBidding || isBurying || autoPaused) && (
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 2,
-              marginTop: 2,
-              fontSize: 14,
-              color: 'rgba(255,255,255,0.8)',
-              textAlign: 'center',
-              textShadow: '0 1px 4px rgba(0,0,0,0.55)',
-            }}>
+            <div className="phase-hint">
               {isDealing && (
                 <div>
                   发牌中… 可抢亮
                   {bidState.current && (
-                    <span style={{ color: 'rgba(255,255,255,0.85)' }}>
+                    <span className="phase-hint__inline">
                       · 当前主牌：{trumpOfDeclaration(bidState.current)}
                       （{POSITION_NAME_ZH[bidState.current.player]}）
                     </span>
@@ -1540,10 +1385,10 @@ function App() {
                     ? '翻底牌定主…'
                     : (
                       <>
-                        叫主倒计时 <b style={{ color: '#ffd700' }}>{bidSeconds}</b> 秒
+                        叫主倒计时 <b className="phase-hint__gold">{bidSeconds}</b> 秒
                         {bidState.current
                           ? (
-                            <span style={{ color: 'rgba(255,255,255,0.85)', marginLeft: 6 }}>
+                            <span className="phase-hint__detail">
                               （当前 {POSITION_NAME_ZH[bidState.current.player]}家：
                               {trumpOfDeclaration(bidState.current)}
                               {' '}{bidState.current.suit === null
@@ -1554,14 +1399,14 @@ function App() {
                             </span>
                           )
                           : (
-                            <span style={{ color: 'rgba(255,255,255,0.5)', marginLeft: 6 }}>暂无人亮主</span>
+                            <span className="phase-hint__muted">暂无人亮主</span>
                           )}
                       </>
                     )}
                 </div>
               )}
               {isBurying && (
-                <div style={{ color: '#ffd700' }}>
+                <div className="phase-hint__gold">
                   {bankerIsAuto
                     ? autoPaused
                       ? '庄家托管（已暂停，点「继续托管」恢复）'
@@ -1570,7 +1415,7 @@ function App() {
                 </div>
               )}
               {autoPaused && (
-                <div style={{ color: '#ffd700' }}>
+                <div className="phase-hint__gold">
                   ⏸ 已撤销 · 托管已暂停
                 </div>
               )}
@@ -1611,14 +1456,7 @@ function App() {
 
           {/* 翻底牌逐张展示 */}
           {flipping && (
-            <div style={{
-              display: 'flex',
-              gap: 5,
-              padding: '6px 10px',
-              borderRadius: 8,
-              background: 'rgba(0,0,0,0.35)',
-              border: '1px solid rgba(255,215,0,0.3)',
-            }}>
+            <div className="flip-strip">
               {bottomRef.current.slice(0, flipCount).map(c => (
                 <CardComponent key={c.id} card={c} faceUp={true} small={true} />
               ))}
@@ -1627,15 +1465,7 @@ function App() {
 
           {/* 翻底记录（点击“翻底定主”展开） */}
           {showFlipLog && flipLog.length > 0 && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '6px 10px',
-              borderRadius: 8,
-              background: 'rgba(0,0,0,0.35)',
-              border: '1px solid rgba(144,202,249,0.4)',
-            }}>
+            <div className="flip-strip flip-strip--log">
               {flipLog.map(c => (
                 <CardComponent key={c.id} card={c} faceUp={true} small={true} />
               ))}
@@ -1643,82 +1473,42 @@ function App() {
           )}
 
           {/* 撤销 / 继续托管 */}
-          <div style={{
-            display: 'flex',
-            gap: 8,
-            marginTop: 8,
-            alignItems: 'stretch',
-          }}>
+          <div className="action-row">
             <button
+              className="undo-button"
               onClick={undo}
               disabled={!canUndo}
               title={canUndo
                 ? `撤销${lastUndoKind === 'bury' ? '埋底' : '出牌'}（共 ${history.length} 步；撤销后托管暂停）`
                 : '暂无可撤销的操作'}
-              style={{
-                padding: '10px 22px',
-                fontSize: 17,
-                cursor: canUndo ? 'pointer' : 'not-allowed',
-                border: '1px solid rgba(255,255,255,0.3)',
-                borderRadius: 6,
-                background: canUndo ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.05)',
-                color: canUndo ? '#fff' : 'rgba(255,255,255,0.35)',
-                fontWeight: 600,
-              }}
             >
               ↩ 撤销{canUndo ? `（${history.length}）` : ''}
             </button>
             {autoPaused && (
               <button
+                className="resume-button"
                 onClick={() => setAutoPaused(false)}
                 title="恢复托管：让 AI 继续自动埋底 / 出牌"
-                style={{
-                  padding: '10px 22px',
-                  fontSize: 17,
-                  cursor: 'pointer',
-                  border: '1px solid rgba(126,231,135,0.5)',
-                  borderRadius: 6,
-                  background: 'rgba(126,231,135,0.16)',
-                  color: '#7ee787',
-                  fontWeight: 600,
-                }}
               >
                 ▶ 继续托管
               </button>
             )}
           </div>
 
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 5,
-            marginTop: 8,
-            color: 'rgba(255,255,255,0.7)',
-            fontSize: 14,
-          }}>
-            <span style={{ marginRight: 3 }}>速度</span>
+          <div className="speed-row">
+            <span className="speed-row__label">速度</span>
             {SPEED_MULTIPLIERS.map((_, index) => {
               const level = index + 1;
               const active = gameSpeed === level;
               return (
                 <button
                   key={level}
+                  className={active
+                    ? 'speed-button speed-button--active'
+                    : 'speed-button'}
                   onClick={() => setGameSpeed(level)}
                   aria-pressed={active}
                   title={`速度 ${level}${level === 3 ? '（当前默认）' : ''}`}
-                  style={{
-                    width: 28,
-                    height: 28,
-                    padding: 0,
-                    fontSize: 14,
-                    fontWeight: active ? 700 : 500,
-                    cursor: 'pointer',
-                    border: `1px solid ${active ? '#ffd700' : 'rgba(255,255,255,0.25)'}`,
-                    borderRadius: 5,
-                    background: active ? 'rgba(255,215,0,0.24)' : 'rgba(255,255,255,0.08)',
-                    color: active ? '#ffd700' : 'rgba(255,255,255,0.75)',
-                  }}
                 >
                   {level}
                 </button>
@@ -1729,7 +1519,7 @@ function App() {
         </div>
 
         {/* 东家 */}
-        <div style={{ justifySelf: 'end' }}>
+        <div className="table__east">
           <OpponentHand
             position={PlayerPosition.East}
             cards={hands.E}
@@ -1751,7 +1541,7 @@ function App() {
               : undefined}
           />
           {playingTurn === PlayerPosition.East && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            <div className="table__east-playbar">
               {renderPlayBar(true)}
             </div>
           )}
@@ -1759,27 +1549,10 @@ function App() {
       </div>
 
       {/* ---- 底部：南家（玩家）/ 庄家埋底 ---- */}
-      <div style={{
-        padding: '4px 16px 8px',
-        background: 'linear-gradient(transparent, rgba(0,0,0,0.2))',
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 4,
-          padding: '0 8px',
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}>
-            <span style={{
-              fontSize: 18,
-              fontWeight: 600,
-              color: 'rgba(255,255,255,0.75)',
-            }}>
+      <div className="bottom-area">
+        <div className="bottom-header">
+          <div className="bottom-header__left">
+            <span className="bottom-title">
               {isBurying && banker === PlayerPosition.South
                 ? `庄家（${POSITION_NAME_ZH[banker]}家）埋底`
                 : '南家（你）'}
@@ -1790,17 +1563,14 @@ function App() {
               onToggle={() => toggleMode(PlayerPosition.South)}
             />
           </div>
-          <span style={{
-            fontSize: 16,
-            color: 'rgba(255,255,255,0.5)',
-          }}>
+          <span className="bottom-count">
             {handForDisplay.length} 张
           </span>
         </div>
 
         {/* 埋底控制栏 */}
         {isBurying && banker && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
+          <div className="center-row center-row--spaced">
             <BottomCards
               banker={banker}
               auto={bankerIsAuto}
@@ -1817,16 +1587,13 @@ function App() {
 
         {/* 出牌控制栏 */}
         {isPlaying && turnIsManual && playingTurn === PlayerPosition.South && playState && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
+          <div className="center-row center-row--spaced">
             {renderPlayBar()}
           </div>
         )}
 
         {/* 南家报主栏（发牌/叫主阶段） */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-        }}>
+        <div className="center-row">
           {!isBurying && showBar && (
             <BiddingBar
               player={PlayerPosition.South}
@@ -1843,30 +1610,15 @@ function App() {
           )}
           {/* 南家非手动时不显示报主栏：给出原因（否则容易以为「报主框消失了」） */}
           {!isBurying && !showBar && !southManual && (isDealing || isBidding) && (
-            <div style={{
-              fontSize: 12,
-              color: 'rgba(255,255,255,0.55)',
-              padding: '6px 14px',
-              border: '1px dashed rgba(255,255,255,0.28)',
-              borderRadius: 9,
-            }}>
+            <div className="bid-placeholder">
               南家当前为托管，AI 将自动参与亮主
             </div>
           )}
         </div>
 
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: 12,
-        }}>
+        <div className="hand-row">
           {isBurying && bankerIsAuto ? (
-            <div style={{
-              padding: '28px 0',
-              fontSize: 16,
-              color: 'rgba(255,255,255,0.65)',
-            }}>
+            <div className="auto-bury">
               {autoPaused
                 ? '⏸ 托管已暂停（点「继续托管」或把庄家切为手动）'
                 : `🤖 ${banker ? `${POSITION_NAME_ZH[banker]}家` : ''}托管埋底中…`}
@@ -1888,22 +1640,7 @@ function App() {
 
       {/* 甩牌被拦：只告知出牌者「被拦了」，不透露是谁 / 哪些牌 / 对方持有什么 */}
       {isPlaying && playState?.trick.throwBlocked && (
-        <div style={{
-          position: 'fixed',
-          top: MENU_BAR_OFFSET,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 50,
-          padding: '8px 18px',
-          borderRadius: 999,
-          background: 'rgba(198,40,40,0.92)',
-          color: '#fff',
-          fontSize: 15,
-          fontWeight: 700,
-          letterSpacing: 0.5,
-          boxShadow: '0 4px 14px rgba(0,0,0,0.45)',
-          pointerEvents: 'none',
-        }}>
+        <div className="throw-blocked">
           ⛔ 甩牌被拦了，已自动出小
         </div>
       )}
@@ -1929,11 +1666,7 @@ function App() {
         onConfirm={() => setShowRules(false)}
         onCancel={() => setShowRules(false)}
       >
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 14,
-        }}>
+        <div className="rules-dialog__list">
           {[{
             name: '初始等级',
             value: `打 ${RANK_NAME[startLevel]}`,
@@ -1946,32 +1679,13 @@ function App() {
               + '同一报品内的补强（单张 → 对子、对子 → 对王）始终允许，不受此开关影响。',
           }].map(item => (
             <div key={item.name}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 14,
-                color: 'rgba(255,255,255,0.9)',
-              }}>
-                <span style={{ fontWeight: 700 }}>{item.name}</span>
-                <span style={{
-                  padding: '1px 8px',
-                  borderRadius: 999,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: '#ffd700',
-                  background: 'rgba(255,215,0,0.14)',
-                  border: '1px solid rgba(255,215,0,0.4)',
-                }}>
+              <div className="rules-dialog__item-head">
+                <span className="rules-dialog__name">{item.name}</span>
+                <span className="rules-dialog__value">
                   {item.value}
                 </span>
               </div>
-              <div style={{
-                marginTop: 4,
-                fontSize: 13,
-                lineHeight: 1.6,
-                color: 'rgba(255,255,255,0.55)',
-              }}>
+              <div className="rules-dialog__desc">
                 {item.desc}
               </div>
             </div>
@@ -2010,50 +1724,35 @@ function App() {
         }}
         onCancel={() => setConfirmNewGame(false)}
       >
-        <div style={{
-          fontSize: 12,
-          letterSpacing: 1,
-          color: 'rgba(255,255,255,0.45)',
-          marginBottom: 8,
-        }}>
+        <div className="rules-dialog__caption">
           规则选项
         </div>
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}>
-          <label style={OPTION_ROW_STYLE}>
+        <div className="rules-dialog__list rules-dialog__list--options">
+          <label className="option-row">
             初始等级
             <select
+              className="option-select"
               value={draftStartLevel}
               onChange={event => setDraftStartLevel(Number(event.target.value) as Rank)}
-              style={OPTION_SELECT_STYLE}
             >
               {LEVEL_RANKS.map(rank => (
-                <option key={rank} value={rank} style={OPTION_ITEM_STYLE}>
+                <option key={rank} value={rank} className="option-item">
                   {RANK_NAME[rank]}
                 </option>
               ))}
             </select>
-            <span style={OPTION_HINT_STYLE}>默认 2</span>
+            <span className="option-hint">默认 2</span>
           </label>
 
-          <label style={OPTION_ROW_STYLE}>
+          <label className="option-row">
             <input
               type="checkbox"
+              className="option-checkbox"
               checked={draftRules.allowSelfOverride}
               onChange={event => setDraftRules(prev => ({
                 ...prev,
                 allowSelfOverride: event.target.checked,
               }))}
-              style={{
-                width: 16,
-                height: 16,
-                margin: 0,
-                accentColor: '#ffd700',
-                cursor: 'pointer',
-              }}
             />
             允许反自己亮的主
           </label>

@@ -1,0 +1,21 @@
+// ============================================================
+// PlayerModeButton —— 手动 / 托管 切换
+// ============================================================
+
+@use '../tokens' as *;
+
+.mode-button {
+  padding: 3px 9px;
+  font-size: 13px;
+  color: #90caf9;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: rgba(100, 200, 255, 0.15);
+  white-space: nowrap;
+
+  &--manual {
+    color: $color-gold;
+    background: rgba(255, 215, 0, 0.2);
+  }
+}

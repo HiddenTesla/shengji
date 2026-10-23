@@ -1,0 +1,169 @@
+// ============================================================
+// OpponentHand —— 东 / 西 / 北家手牌
+// 牌背堆叠位置与区域高度是运行时值，通过 CSS 变量传入。
+// ============================================================
+
+@use '../tokens' as *;
+
+.opponent-hand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+
+  &--start {
+    align-items: flex-start;
+  }
+
+  &--end {
+    align-items: flex-end;
+  }
+}
+
+.opponent-hand__empty {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* 北家翻开区：固定高度，避免显示/隐藏切换时按钮位置跳动 */
+.opponent-hand__top-area {
+  height: 142px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.opponent-hand__side-area {
+  display: flex;
+  align-items: flex-start;
+  height: var(--side-area-height, 0);
+}
+
+.opponent-hand__back-stack {
+  position: relative;
+  width: var(--stack-width, 0);
+  height: 91.2px;
+
+  &--vertical {
+    width: 73.45px;
+    height: var(--stack-height, 0);
+  }
+}
+
+.opponent-hand__back-card {
+  position: absolute;
+  left: calc(var(--card-index, 0) * 26px);
+  z-index: var(--card-index, 0);
+
+  &--vertical {
+    left: 0;
+    top: calc(var(--card-index, 0) * 22px);
+  }
+}
+
+.opponent-hand__count {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.extra-badge {
+  position: absolute;
+  top: 24px;
+  right: -18px;
+  padding: 1px 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  white-space: nowrap;
+
+  &--side {
+    top: auto;
+    right: auto;
+    bottom: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
+/* ---- 方位 + 模式 / 显示-隐藏 ---- */
+.label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.label-row__name {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.label-row__toggle {
+  padding: 3px 9px;
+  font-size: 13px;
+  color: #fff;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background: transparent;
+
+  &--on {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* ---- 东 / 西家翻开：按门分列 ---- */
+.side-columns {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  user-select: none;
+}
+
+.side-columns__group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.side-columns__cols {
+  display: flex;
+  flex-direction: row;
+  gap: 3px;
+}
+
+.side-columns__col {
+  position: relative;
+  width: 67.45px;
+  height: var(--col-height, 0);
+}
+
+.side-columns__card {
+  position: absolute;
+  top: calc(var(--card-index, 0) * 42px);
+  z-index: var(--card-index, 0);
+  transition: transform 0.15s, filter 0.15s;
+}
+
+.group-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--group-color);
+}
+
+.group-label__count {
+  padding: 0 5px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}

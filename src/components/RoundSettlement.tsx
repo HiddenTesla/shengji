@@ -6,7 +6,6 @@
 //   以及按闲家得分判定的等级变化（升几级 / 换庄 / 下一局庄家）
 // ============================================================
 
-import { type CSSProperties } from 'react';
 import { type BottomSettlement } from '../core/scoring.ts';
 import { type LevelBoard, type LevelSettlement, type LapBoard, formatLap } from '../core/rank.ts';
 import {
@@ -43,17 +42,6 @@ interface RoundSettlementProps {
   /** 点击「下一局」 */
   onNextRound: () => void;
 }
-
-const BUTTON_STYLE: CSSProperties = {
-  padding: '7px 20px',
-  fontSize: 14,
-  fontWeight: 700,
-  cursor: 'pointer',
-  border: '1px solid rgba(255,215,0,0.6)',
-  borderRadius: 7,
-  background: 'rgba(255,215,0,0.16)',
-  color: '#ffd700',
-};
 
 export default function RoundSettlement({
   trickCount,
@@ -96,93 +84,77 @@ export default function RoundSettlement({
         : `${bottom.tractorLength} 连对（拖拉机）`
     : '—';
 
+  const levelLineClass = levelSettlement?.lapUp
+    ? 'settlement__level-line settlement__level-line--gold'
+    : levelSettlement && levelSettlement.actualSteps > 0
+      ? 'settlement__level-line settlement__level-line--green'
+      : 'settlement__level-line';
+
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 12,
-      padding: '14px 20px',
-      borderRadius: 14,
-      background: 'linear-gradient(160deg, #12341d, #0b2113)',
-      border: '1px solid rgba(255,215,0,0.45)',
-      boxShadow: '0 12px 48px rgba(0,0,0,0.55)',
-      maxWidth: 520,
-    }}>
+    <div className="settlement">
       {/* 标题 */}
-      <div style={{ fontSize: 17, fontWeight: 700, color: '#ffd700' }}>
+      <div className="settlement__title">
         🏁 本局结束 · 共 {trickCount} 墩
       </div>
 
       {/* 得分行 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>闲家得分</span>
-          <b style={{ fontSize: 22, color: '#7ee787', fontVariantNumeric: 'tabular-nums' }}>
+      <div className="settlement__scores">
+        <span className="settlement__score-group">
+          <span className="settlement__label">闲家得分</span>
+          <b className="settlement__value settlement__value--green">
             {defendingPoints}
           </b>
           {taken && (
-            <span style={{ fontSize: 12, color: '#7ee787' }}>（含抠底）</span>
+            <span className="settlement__note">（含抠底）</span>
           )}
         </span>
-        <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.15)' }} />
-        <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>庄家逃分</span>
-          <b style={{ fontSize: 22, color: '#ffd700', fontVariantNumeric: 'tabular-nums' }}>
+        <span className="settlement__divider settlement__divider--vertical" />
+        <span className="settlement__score-group">
+          <span className="settlement__label">庄家逃分</span>
+          <b className="settlement__value settlement__value--gold">
             {bankerPoints}
           </b>
         </span>
-        <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
+        <span className="settlement__spacer" />
+        <span className="settlement__total">
           合计 {total}
         </span>
       </div>
 
-      <span style={{ height: 1, background: 'rgba(255,255,255,0.12)' }} />
+      <span className="settlement__divider" />
 
       {/* 抠底明细 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-          🂠 底牌 · 底分 <b style={{ color: '#ffd700' }}>{bottom?.bottomCardPoints ?? 0}</b>
+      <div className="settlement__bottom-row">
+        <span className="settlement__bottom-title">
+          🂠 底牌 · 底分
+          {' '}
+          <b className="settlement__bottom-points">{bottom?.bottomCardPoints ?? 0}</b>
         </span>
         {taken && (
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+          <span className="settlement__bottom-meta">
             末墩（按领出）{tractorLabel} · 倍数 ×{bottom?.multiplier ?? 2}
           </span>
         )}
         {taken ? (
-          <span style={{
-            fontSize: 13,
-            fontWeight: 700,
-            color: '#052e16',
-            padding: '2px 10px',
-            borderRadius: 999,
-            background: '#7ee787',
-          }}>
+          <span className="settlement__pill settlement__pill--taken">
             ✅ 闲家抠底成功 +{bottom?.points ?? 0} 分
           </span>
         ) : (
-          <span style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: 'rgba(255,255,255,0.75)',
-            padding: '2px 10px',
-            borderRadius: 999,
-            background: 'rgba(255,255,255,0.12)',
-          }}>
+          <span className="settlement__pill settlement__pill--missed">
             ✗ 闲家未抠底 · 底分不计（×0 倍）
           </span>
         )}
       </div>
 
       {/* 底牌牌面 */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div className="settlement__cards">
         {bottomCards.map(c => (
           <CardComponent key={c.id} card={c} small={true} scale={0.62} />
         ))}
       </div>
 
       {bottom && (
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+        <div className="settlement__winner">
           末墩赢家：{bottom.winner ? `${POSITION_NAME_ZH[bottom.winner]}家` : '—'}
         </div>
       )}
@@ -190,19 +162,13 @@ export default function RoundSettlement({
       {/* 升级明细（按闲家得分判定） */}
       {levelSettlement && (
         <>
-          <span style={{ height: 1, background: 'rgba(255,255,255,0.12)' }} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+          <span className="settlement__divider" />
+          <div className="settlement__level">
+            <div className="settlement__level-title">
               📈 升级判定 · 闲家方 {defendingPoints} 分 →
               {levelSettlement.side === 'banker' ? ' 庄家连庄' : ' 闲家上台（换庄）'}
             </div>
-            <div style={{
-              fontSize: 15,
-              fontWeight: 700,
-              color: levelSettlement.lapUp
-                ? '#ffd700'
-                : levelSettlement.actualSteps > 0 ? '#7ee787' : 'rgba(255,255,255,0.85)',
-            }}>
+            <div className={levelLineClass}>
               {TEAM_NAME_ZH[levelSettlement.upgradingTeam]}队
               {levelSettlement.lapUp
                 ? ` 升过 A · 🏆 完成${formatLap(laps[levelSettlement.upgradingTeam])}周目`
@@ -211,12 +177,12 @@ export default function RoundSettlement({
                   : ' 不升级'}
             </div>
             {levelSettlement.lapUp && (
-              <div style={{ fontSize: 13, color: '#7ee787' }}>
+              <div className="settlement__level-detail">
                 进入第{formatLap(laps[levelSettlement.upgradingTeam] + levelSettlement.lapsGained)}周目
                 （从打 {RANK_NAME[levelSettlement.toLevel]} 开始）
               </div>
             )}
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+            <div className="settlement__level-next">
               升级后级牌：南北 打{RANK_NAME[nextBoard[Team.NS]]} · 东西 打{RANK_NAME[nextBoard[Team.EW]]}
               ｜下一局庄家：{POSITION_NAME_ZH[levelSettlement.nextBanker]}家
               （本局 {banker ? `${POSITION_NAME_ZH[banker]}家` : '—'}）
@@ -226,27 +192,22 @@ export default function RoundSettlement({
       )}
 
       {/* 操作按钮 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+      <div className="settlement__footer">
+        <span className="settlement__footer-text">
           下一局打「{nextTeamName}队」的级牌（{nextLevelName}）
           ｜周目 南北 {formatLap(nextLaps[Team.NS])} · 东西 {formatLap(nextLaps[Team.EW])}
         </span>
-        <span style={{ flex: 1 }} />
+        <span className="settlement__spacer" />
         <button
+          className="settlement__button settlement__button--ghost"
           onClick={onViewPlayLog}
-          style={{
-            ...BUTTON_STYLE,
-            border: '1px solid rgba(255,255,255,0.35)',
-            background: 'rgba(255,255,255,0.1)',
-            color: '#fff',
-          }}
         >
           📄 完整日志
         </button>
         <button
+          className="settlement__button"
           onClick={onNextRound}
           disabled={!levelSettlement}
-          style={{ ...BUTTON_STYLE, opacity: levelSettlement ? 1 : 0.5 }}
         >
           ▶ 下一局
         </button>

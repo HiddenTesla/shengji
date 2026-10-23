@@ -1,0 +1,69 @@
+// ============================================================
+// 复用 mixin —— 只放「多个组件确实重复」的样式块
+// ============================================================
+
+@use 'tokens' as *;
+
+/// 浅色操作面板（出牌栏 / 埋底栏 / 报主栏共用的白色卡片）
+@mixin light-panel {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: $light-panel-bg;
+  border: 1px solid $light-panel-border;
+  box-shadow: $light-panel-shadow;
+}
+
+/// 浅色面板上的次要按钮（提示 / 清空）
+@mixin light-secondary-button {
+  padding: 7px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+/// 浅色面板上的金色主按钮（出牌 / 埋底）
+@mixin gold-primary-button {
+  padding: 7px 22px;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  background: linear-gradient(135deg, $color-gold, $color-gold-deep);
+  color: $color-text-strong;
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.4);
+
+  &:disabled {
+    background: #e0e0e0;
+    color: $color-text-disabled;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+}
+
+/// 深色面板上的次要按钮（弹窗底部）
+@mixin dark-ghost-button {
+  padding: 7px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+/// 深色面板上的金色按钮
+@mixin dark-gold-button {
+  @include dark-ghost-button;
+
+  border-color: rgba(255, 215, 0, 0.6);
+  background: rgba(255, 215, 0, 0.16);
+  color: $color-gold;
+}

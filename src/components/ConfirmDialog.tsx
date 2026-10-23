@@ -3,6 +3,7 @@
 // ============================================================
 
 import { useEffect, type ReactNode } from 'react';
+import { cssVars } from '../utils/cssVars.ts';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -51,97 +52,47 @@ export default function ConfirmDialog({
 
   return (
     <div
+      className="dialog-overlay"
       onClick={onCancel}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 100,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(0,0,0,0.55)',
-      }}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
         onClick={event => event.stopPropagation()}
-        style={{
-          width,
-          maxWidth: 'calc(100vw - 40px)',
-          padding: '20px 22px 16px',
-          borderRadius: 12,
-          background: '#1e2b1e',
-          border: '1px solid rgba(255,255,255,0.2)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
-          color: 'rgba(255,255,255,0.88)',
-        }}
+        className="dialog"
+        style={cssVars({ '--dialog-width': `${width}px` })}
       >
-        <div style={{
-          fontSize: 19,
-          fontWeight: 700,
-          marginBottom: 10,
-          color: '#fff',
-        }}>
+        <div className="dialog__title">
           {title}
         </div>
 
         {description && (
-          <div style={{
-            fontSize: 14,
-            lineHeight: 1.6,
-            color: 'rgba(255,255,255,0.65)',
-            whiteSpace: 'pre-line',
-          }}>
+          <div className="dialog__desc">
             {description}
           </div>
         )}
 
         {children && (
-          <div style={{ marginTop: 16 }}>
+          <div className="dialog__content">
             {children}
           </div>
         )}
 
-        <div style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: 10,
-          marginTop: 20,
-        }}>
+        <div className="dialog__footer">
           {!hideCancel && (
             <button
+              className="dialog__button"
               onClick={onCancel}
-              style={{
-                padding: '8px 18px',
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: 'pointer',
-                border: '1px solid rgba(255,255,255,0.25)',
-                borderRadius: 6,
-                background: 'rgba(255,255,255,0.08)',
-                color: 'rgba(255,255,255,0.85)',
-              }}
             >
               {cancelLabel}
             </button>
           )}
           <button
+            className={danger
+              ? 'dialog__button dialog__button--confirm dialog__button--danger'
+              : 'dialog__button dialog__button--confirm'}
             onClick={onConfirm}
-            style={{
-              padding: '8px 20px',
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: 'pointer',
-              border: 'none',
-              borderRadius: 6,
-              background: danger
-                ? 'linear-gradient(135deg, #e53935, #c62828)'
-                : 'linear-gradient(135deg, #ffd700, #ffb300)',
-              color: danger ? '#fff' : '#1a1a1a',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
-            }}
           >
             {confirmLabel}
           </button>

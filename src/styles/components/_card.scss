@@ -1,0 +1,22 @@
+// ============================================================
+// CardComponent —— 单张卡牌（SVG）
+// 几何与字号仍是 SVG 属性；这里只管交互态（可点 / 选中）。
+// ============================================================
+
+@use '../tokens' as *;
+
+.card {
+  cursor: default;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+  transform: translateY(0);
+  transition: transform 0.15s, filter 0.15s;
+
+  &--clickable {
+    cursor: pointer;
+  }
+
+  &--selected {
+    filter: drop-shadow(0 0 6px $color-gold);
+    transform: translateY(-8px);
+  }
+}

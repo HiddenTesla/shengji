@@ -357,19 +357,19 @@ export default function CardComponent({
   const markAtTop = mark?.position === 'top-right';
   const markX = markAtTop ? 49 : 3;
   const markY = markAtTop ? (badge ? 21 : 3) : (badge ? 61 : 78);
+  const className = [
+    'card',
+    onClick && 'card--clickable',
+    selected && 'card--selected',
+  ].filter(Boolean).join(' ');
 
   return (
     <svg
       width={w}
       height={h}
       viewBox={`0 0 ${CARD_WIDTH} ${CARD_HEIGHT}`}
-      style={{
-        cursor: onClick ? 'pointer' : 'default',
-        filter: selected ? 'drop-shadow(0 0 6px #ffd700)' : 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))',
-        transform: selected ? 'translateY(-8px)' : 'translateY(0)',
-        transition: 'transform 0.15s, filter 0.15s',
-        ...style,
-      }}
+      className={className}
+      style={style}
       onClick={onClick}
     >
       {faceUp

@@ -1,0 +1,79 @@
+// ============================================================
+// ScoreBoard —— 闲家得分 / 庄家逃分（当前未被 App 引用，样式保留）
+// ============================================================
+
+@use '../tokens' as *;
+
+.score-board {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 5px 16px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.score-board__group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.score-board__label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.score-board__value {
+  font-size: 21px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+
+  &--defending {
+    color: $color-green-bright;
+  }
+
+  &--reached {
+    color: $color-red-bright;
+  }
+
+  &--banker {
+    color: $color-gold;
+  }
+}
+
+.score-board__bar {
+  width: 104px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.score-board__bar-fill {
+  width: var(--score-pct, 0%);
+  height: 100%;
+  background: $color-green-bright;
+  transition: width 0.25s;
+
+  &--reached {
+    background: $color-red-bright;
+  }
+}
+
+.score-board__target {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.score-board__divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.score-board__total {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+}

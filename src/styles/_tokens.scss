@@ -1,0 +1,51 @@
+// ============================================================
+// 设计令牌 —— 颜色 / 层级 / 字号
+// 只放「跨组件复用」的值；组件独有的尺寸写在各自文件里。
+// ============================================================
+
+// 层级
+$z-menu-bar: 40;
+
+// 字号
+$menu-font-size: clamp(13px, 1.6vh, 17px);
+
+// 文本
+$color-text-strong: #1a1a1a;
+$color-text-muted: #666;
+$color-text-dim: #888;
+$color-text-disabled: #999;
+
+// 语义色
+$color-success: #2e7d32;
+$color-error: #c62828;
+$color-neutral: #7a7a7a;
+$color-gold: #ffd700;
+$color-gold-deep: #ffb300;
+
+// 菜单栏 / 浮层
+$color-menu-bg: #20301f;
+$color-menu-hover: rgba(255, 255, 255, 0.14);
+$color-menu-active: rgba(255, 255, 255, 0.18);
+
+// 绿色系（闲家 / 成功 / 补牌）
+$color-green-bright: #7ee787;
+$color-green-deep: #2e7d32;
+$color-red-bright: #ff5252;
+
+// 深色面板（结算 / 底牌 / 日志弹窗）
+$panel-bg-dark: #1e2b1e;
+$panel-gradient: linear-gradient(160deg, #12341d, #0b2113);
+$panel-border-gold: rgba(255, 215, 0, 0.45);
+$panel-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+$dialog-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+
+// 浅色操作面板（出牌栏 / 埋底栏 / 报主栏）
+$light-panel-bg: rgba(255, 255, 255, 0.93);
+$light-panel-border: rgba(0, 0, 0, 0.15);
+$light-panel-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+
+// 深色背景上的文字 / 分隔线
+$text-on-dark: rgba(255, 255, 255, 0.85);
+$text-on-dark-muted: rgba(255, 255, 255, 0.6);
+$text-on-dark-dim: rgba(255, 255, 255, 0.45);
+$divider-on-dark: rgba(255, 255, 255, 0.15);

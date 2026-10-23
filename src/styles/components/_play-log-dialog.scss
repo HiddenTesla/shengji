@@ -1,0 +1,206 @@
+// ============================================================
+// PlayLogDialog —— 出牌记录 / 完整日志弹窗
+// ============================================================
+
+@use '../tokens' as *;
+@use '../mixins' as *;
+
+.log-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.log-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 40px));
+  max-height: 84vh;
+  padding: 16px 18px 14px;
+  border-radius: 12px;
+  background: $panel-bg-dark;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: $dialog-shadow;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.log-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.log-panel__title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.log-panel__count {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.log-panel__close {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: transparent;
+}
+
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding-right: 4px;
+  overflow: auto;
+}
+
+.log-list__empty {
+  padding: 28px 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+}
+
+.log-trick {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.log-trick__header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.log-trick__no {
+  color: $color-gold;
+}
+
+.log-trick__meta {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.log-trick__points {
+  color: $color-green-bright;
+}
+
+.log-trick__score {
+  margin-left: auto;
+  font-size: 12px;
+  color: $text-on-dark-dim;
+}
+
+.log-play {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  margin-top: 6px;
+}
+
+.log-play__player {
+  width: 34px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.log-play__cards {
+  display: flex;
+  gap: 3px;
+}
+
+.log-play__shape {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.log-play__points {
+  font-size: 12px;
+  color: $color-gold;
+}
+
+.log-play__throw {
+  font-size: 12px;
+  color: #ff8a80;
+}
+
+.log-text {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d7e6d7;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre;
+  /* App 根节点禁止框选；日志文本单独放开，方便手动选中复制 */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+.log-panel__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.log-panel__chip-group {
+  display: flex;
+  gap: 4px;
+}
+
+.log-panel__spacer {
+  flex: 1;
+}
+
+.log-panel__button {
+  @include dark-ghost-button;
+}
+
+.log-panel__button--primary {
+  @include dark-gold-button;
+}
+
+.log-panel__chip {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+
+  &--active {
+    color: $color-gold;
+    background: rgba(255, 215, 0, 0.18);
+    border-color: rgba(255, 215, 0, 0.55);
+  }
+}

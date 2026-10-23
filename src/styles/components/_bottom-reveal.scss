@@ -1,0 +1,77 @@
+// ============================================================
+// BottomReveal —— 底牌查看（触发按钮 + 弹窗）
+// ============================================================
+
+@use '../tokens' as *;
+
+.bottom-reveal__trigger {
+  padding: 4px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(255, 215, 0, 0.55);
+  border-radius: 5px;
+  background: rgba(255, 215, 0, 0.15);
+  color: $color-gold;
+}
+
+.bottom-reveal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.bottom-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px;
+  border-radius: 14px;
+  background: $panel-gradient;
+  border: 1px solid $panel-border-gold;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+
+.bottom-reveal__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bottom-reveal__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: $color-gold;
+}
+
+.bottom-reveal__points {
+  padding: 2px 10px;
+  font-size: 14px;
+  color: $color-gold;
+  border-radius: 6px;
+  background: rgba(255, 215, 0, 0.12);
+}
+
+.bottom-reveal__spacer {
+  flex: 1;
+}
+
+.bottom-reveal__close {
+  padding: 5px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.bottom-reveal__cards {
+  display: flex;
+  gap: 8px;
+}

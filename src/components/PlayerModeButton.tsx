@@ -19,17 +19,8 @@ export default function PlayerModeButton({
 
   return (
     <button
+      className={isManual ? 'mode-button mode-button--manual' : 'mode-button'}
       onClick={onToggle}
-      style={{
-        padding: '3px 9px',
-        fontSize: 13,
-        cursor: 'pointer',
-        border: '1px solid rgba(255,255,255,0.25)',
-        borderRadius: 4,
-        background: isManual ? 'rgba(255,215,0,0.2)' : 'rgba(100,200,255,0.15)',
-        color: isManual ? '#ffd700' : '#90caf9',
-        whiteSpace: 'nowrap',
-      }}
     >
       {POSITION_NAME_ZH[position]}家·{isManual ? '手动' : '托管'}
     </button>
