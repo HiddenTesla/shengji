@@ -6,26 +6,26 @@
 //   mode="full" ：本局结算时显示完整日志，并可复制 / 导出 JSON / JSONC
 // ============================================================
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   type PlayRecord,
   type RoundRecord,
   decodeCardId,
-} from '../core/playlog.ts'
+} from '../core/playlog.ts';
 import {
   HandType,
   POSITION_NAME_ZH,
-} from '../core/types.ts'
-import CardComponent from './CardComponent.tsx'
+} from '../core/types.ts';
+import CardComponent from './CardComponent.tsx';
 
 interface PlayLogDialogProps {
-  open: boolean
-  mode: 'plays' | 'full'
-  record: RoundRecord | null
+  open: boolean;
+  mode: 'plays' | 'full';
+  record: RoundRecord | null;
   /** 生成完整日志文本（默认 JSON） */
-  serialize: (format: 'json' | 'jsonc') => string
-  onExport: (format: 'json' | 'jsonc') => void
-  onClose: () => void
+  serialize: (format: 'json' | 'jsonc') => string;
+  onExport: (format: 'json' | 'jsonc') => void;
+  onClose: () => void;
 }
 
 const OVERLAY_STYLE: CSSProperties = {
@@ -36,7 +36,7 @@ const OVERLAY_STYLE: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   background: 'rgba(0,0,0,0.6)',
-}
+};
 
 const PANEL_STYLE: CSSProperties = {
   display: 'flex',
@@ -49,20 +49,20 @@ const PANEL_STYLE: CSSProperties = {
   border: '1px solid rgba(255,255,255,0.2)',
   boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
   color: 'rgba(255,255,255,0.88)',
-}
+};
 
 const HEADER_STYLE: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 10,
   marginBottom: 12,
-}
+};
 
 const TITLE_STYLE: CSSProperties = {
   fontSize: 19,
   fontWeight: 700,
   color: '#fff',
-}
+};
 
 const CLOSE_STYLE: CSSProperties = {
   marginLeft: 'auto',
@@ -77,14 +77,14 @@ const CLOSE_STYLE: CSSProperties = {
   color: 'rgba(255,255,255,0.75)',
   fontSize: 16,
   cursor: 'pointer',
-}
+};
 
 const FOOTER_STYLE: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
   marginTop: 12,
-}
+};
 
 const BUTTON_STYLE: CSSProperties = {
   padding: '7px 16px',
@@ -95,14 +95,14 @@ const BUTTON_STYLE: CSSProperties = {
   border: '1px solid rgba(255,255,255,0.25)',
   background: 'rgba(255,255,255,0.08)',
   color: '#fff',
-}
+};
 
 const PRIMARY_BUTTON_STYLE: CSSProperties = {
   ...BUTTON_STYLE,
   border: '1px solid rgba(255,215,0,0.6)',
   background: 'rgba(255,215,0,0.16)',
   color: '#ffd700',
-}
+};
 
 /** 小号切换按钮（倒序/正序、JSON/JSONC 等） */
 function chipStyle(active: boolean): CSSProperties {
@@ -113,22 +113,22 @@ function chipStyle(active: boolean): CSSProperties {
     background: active ? 'rgba(255,215,0,0.18)' : 'rgba(255,255,255,0.06)',
     color: active ? '#ffd700' : 'rgba(255,255,255,0.7)',
     borderColor: active ? 'rgba(255,215,0,0.55)' : 'rgba(255,255,255,0.2)',
-  }
+  };
 }
 
 function shapeLabel(shape: PlayRecord['shape'], isLead: boolean): string {
   switch (shape.type) {
     case HandType.Single:
-      return '单张'
+      return '单张';
     case HandType.Pair:
-      return '对子'
+      return '对子';
     case HandType.Tractor:
-      return '拖拉机'
+      return '拖拉机';
     case HandType.Throw:
-      if (!isLead) return shape.pairs ? `多张 · ${shape.pairs} 对` : '多张'
-      return shape.pairs ? `甩牌 · ${shape.pairs} 对` : '甩牌'
+      if (!isLead) return shape.pairs ? `多张 · ${shape.pairs} 对` : '多张';
+      return shape.pairs ? `甩牌 · ${shape.pairs} 对` : '甩牌';
     default:
-      return String(shape.type)
+      return String(shape.type);
   }
 }
 
@@ -140,81 +140,81 @@ export default function PlayLogDialog({
   onExport,
   onClose,
 }: PlayLogDialogProps) {
-  const [format, setFormat] = useState<'json' | 'jsonc'>('json')
+  const [format, setFormat] = useState<'json' | 'jsonc'>('json');
   /** 墩的显示顺序：默认倒序（最新一墩在最上面） */
-  const [order, setOrder] = useState<'desc' | 'asc'>('desc')
+  const [order, setOrder] = useState<'desc' | 'asc'>('desc');
   /** plays 模式：是否切换到 JSON / JSONC 文本视图 */
-  const [showJson, setShowJson] = useState(false)
+  const [showJson, setShowJson] = useState(false);
   /** 复制成功提示（短暂显示「已复制」） */
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [open, onClose])
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
 
   // 每次打开都回到默认视图：对局中 = 图形记录，结算 = JSON 文本
   useEffect(() => {
-    if (!open) return
-    setShowJson(mode === 'full')
-    setCopied(false)
-  }, [open, mode])
+    if (!open) return;
+    setShowJson(mode === 'full');
+    setCopied(false);
+  }, [open, mode]);
 
   useEffect(() => {
-    setCopied(false)
-  }, [format, showJson])
+    setCopied(false);
+  }, [format, showJson]);
 
   /** 是否显示 JSON / JSONC 文本视图（两种模式都可自由切换） */
-  const showingJson = showJson
+  const showingJson = showJson;
 
   const fullText = useMemo(
     () => (showingJson && open ? serialize(format) : ''),
     // serialize 每次渲染都是新函数（依赖 logRef），保留 record 作为刷新信号
     [showingJson, open, format, serialize, record],
-  )
+  );
 
   /** 复制当前文本到剪贴板（非安全上下文时回退 execCommand） */
   async function copyLog() {
-    const text = fullText
-    if (!text) return
-    let done = false
+    const text = fullText;
+    if (!text) return;
+    let done = false;
     try {
-      await navigator.clipboard.writeText(text)
-      done = true
+      await navigator.clipboard.writeText(text);
+      done = true;
     }
     catch {
       // 权限被拒 / 非安全上下文：走下面的回退
     }
     if (!done) {
-      const area = document.createElement('textarea')
-      area.value = text
-      area.style.position = 'fixed'
-      area.style.opacity = '0'
-      document.body.appendChild(area)
-      area.select()
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
       try {
-        document.execCommand('copy')
+        document.execCommand('copy');
       }
       finally {
-        area.remove()
+        area.remove();
       }
     }
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1600)
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
   }
 
-  if (!open) return null
+  if (!open) return null;
 
   const hasPlays = record !== null
-    && record.tricks.some(trick => trick.plays.length > 0)
+    && record.tricks.some(trick => trick.plays.length > 0);
 
   // 只反转「墩」的顺序；墩内仍按出牌顺序（领出 → 跟出）
-  const trickItems = (record?.tricks ?? []).map((trick, index) => ({ trick, index }))
-  if (order === 'desc') trickItems.reverse()
+  const trickItems = (record?.tricks ?? []).map((trick, index) => ({ trick, index }));
+  if (order === 'desc') trickItems.reverse();
 
   return (
     <div style={OVERLAY_STYLE} onClick={onClose}>
@@ -324,8 +324,8 @@ export default function PlayLogDialog({
                         <CardComponent
                           key={id}
                           card={decodeCardId(id)}
-                          faceUp
-                          small
+                          faceUp={true}
+                          small={true}
                           scale={0.52}
                         />
                       ))}
@@ -401,17 +401,17 @@ export default function PlayLogDialog({
             ] as const).map(([value, label]) => {
               const active = value === 'log'
                 ? !showJson
-                : showJson && format === value
+                : showJson && format === value;
               return (
                 <button
                   key={value}
                   onClick={() => {
                     if (value === 'log') {
-                      setShowJson(false)
+                      setShowJson(false);
                     }
                     else {
-                      setShowJson(true)
-                      setFormat(value)
+                      setShowJson(true);
+                      setFormat(value);
                     }
                   }}
                   title={value === 'log'
@@ -421,7 +421,7 @@ export default function PlayLogDialog({
                 >
                   {label}
                 </button>
-              )
+              );
             })}
           </div>
 
@@ -450,5 +450,5 @@ export default function PlayLogDialog({
         </div>
       </div>
     </div>
-  )
+  );
 }

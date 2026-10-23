@@ -9,37 +9,37 @@ import {
   Rank,
   Suit,
   SUIT_SYMBOL,
-} from '../core/types.ts'
+} from '../core/types.ts';
 import {
   type Declaration,
   BidStrength,
   canOverride,
   isSelfOverride,
-} from '../core/bidding.ts'
+} from '../core/bidding.ts';
 
 interface BiddingBarProps {
   /** 该栏归属玩家（南家） */
-  player: PlayerPosition
+  player: PlayerPosition;
   /** 当前手牌（发牌阶段会逐张增长） */
-  hand: Card[]
+  hand: Card[];
   /** 当前级牌 */
-  levelRank: Rank
+  levelRank: Rank;
   /** 当前最高声明 */
-  current: Declaration | null
+  current: Declaration | null;
   /** 是否可操作（发牌/叫主阶段均可报主） */
-  canAct: boolean
+  canAct: boolean;
   /** 叫主相关的规则开关 */
-  rules: RuleOptions
-  onBid: (d: Declaration) => void
+  rules: RuleOptions;
+  onBid: (d: Declaration) => void;
   /**
    * 「不反主」：立即结束等待反主。
    * 仅在「发牌结束 + 已有人报主」时由 App 传入；未传则不显示按钮。
    */
-  onPass?: () => void
+  onPass?: () => void;
 }
 
 /** 四门花色顺序 */
-const SUIT_LIST: readonly Suit[] = [Suit.Spade, Suit.Heart, Suit.Club, Suit.Diamond]
+const SUIT_LIST: readonly Suit[] = [Suit.Spade, Suit.Heart, Suit.Club, Suit.Diamond];
 
 /** 花色颜色（与牌面一致） */
 const SUIT_COLORS: Record<string, string> = {
@@ -48,7 +48,7 @@ const SUIT_COLORS: Record<string, string> = {
   [Suit.Club]: '#1b5e20',    // 梅花：墨绿
   [Suit.Diamond]: '#e65100', // 方块：橙红
   [Suit.Joker]: '#7c3aed',   // 王：紫色
-}
+};
 
 /** 构建某花色的叫主声明 */
 function buildSuitDecls(
@@ -57,15 +57,15 @@ function buildSuitDecls(
   levelRank: Rank,
   player: PlayerPosition,
 ) {
-  const levels = hand.filter(c => c.suit === suit && c.rank === levelRank)
-  const nonLevel = hand.filter(c => c.suit === suit && c.rank !== levelRank)
+  const levels = hand.filter(c => c.suit === suit && c.rank === levelRank);
+  const nonLevel = hand.filter(c => c.suit === suit && c.rank !== levelRank);
   const single: Declaration | null = levels.length >= 1
     ? { player, suit, strength: BidStrength.Single, cardIds: [levels[0].id] }
-    : null
+    : null;
   const pair: Declaration | null = levels.length >= 2
     ? { player, suit, strength: BidStrength.Pair, cardIds: [levels[0].id, levels[1].id] }
-    : null
-  return { levelCount: levels.length, nonLevelCount: nonLevel.length, single, pair }
+    : null;
+  return { levelCount: levels.length, nonLevelCount: nonLevel.length, single, pair };
 }
 
 export default function BiddingBar({
@@ -81,10 +81,10 @@ export default function BiddingBar({
   // 无主（对小王 / 对大王；必须同大小，优先用更强的对大王）
   const smallJokers = hand.filter(
     c => c.suit === Suit.Joker && c.rank === Rank.SmallJoker,
-  )
+  );
   const bigJokers = hand.filter(
     c => c.suit === Suit.Joker && c.rank === Rank.BigJoker,
-  )
+  );
   const jokerDecl: Declaration | null = bigJokers.length >= 2
     ? {
         player,
@@ -99,12 +99,12 @@ export default function BiddingBar({
           strength: BidStrength.SmallJokerPair,
           cardIds: [smallJokers[0].id, smallJokers[1].id],
         }
-      : null
+      : null;
 
   // 无主（对小王 / 对大王）若是在压自己先前的有主声明，且规则不允许反自己，则禁用
   const jokerBlocked = jokerDecl !== null && current !== null
     && isSelfOverride(jokerDecl, current)
-    && !rules.allowSelfOverride
+    && !rules.allowSelfOverride;
 
   return (
     <div style={{
@@ -174,7 +174,7 @@ export default function BiddingBar({
         )}
       </div>
     </div>
-  )
+  );
 }
 
 // ------------------------------------------------------------
@@ -189,36 +189,36 @@ function SuitColumn({
   rules,
   onBid,
 }: {
-  suit: Suit
-  hand: Card[]
-  levelRank: Rank
-  player: PlayerPosition
-  current: Declaration | null
-  canAct: boolean
-  rules: RuleOptions
-  onBid: (d: Declaration) => void
+  suit: Suit;
+  hand: Card[];
+  levelRank: Rank;
+  player: PlayerPosition;
+  current: Declaration | null;
+  canAct: boolean;
+  rules: RuleOptions;
+  onBid: (d: Declaration) => void;
 }) {
-  const color = SUIT_COLORS[suit]
+  const color = SUIT_COLORS[suit];
   const { levelCount, nonLevelCount, single, pair } =
-    buildSuitDecls(hand, suit, levelRank, player)
+    buildSuitDecls(hand, suit, levelRank, player);
 
   const pairBlocked = pair !== null && current !== null
     && isSelfOverride(pair, current)
-    && !rules.allowSelfOverride
+    && !rules.allowSelfOverride;
   const pairSelfProtect = pair !== null && current !== null
     && current.player === player
     && pair.suit === current.suit
-    && pair.strength > current.strength
+    && pair.strength > current.strength;
   const pairTitle = pairBlocked
     ? '不允许反自己亮的主'
     : pairSelfProtect
       ? '自保：同花色补成对子'
-      : '以对子反主'
+      : '以对子反主';
 
-  const singleEnabled = canAct && single !== null && canOverride(single, current, rules)
-  const pairEnabled = canAct && pair !== null && canOverride(pair, current, rules)
+  const singleEnabled = canAct && single !== null && canOverride(single, current, rules);
+  const pairEnabled = canAct && pair !== null && canOverride(pair, current, rules);
 
-  const singleTitle = levelCount >= 1 ? '报主该花色（亮一张）' : '无该花色级牌'
+  const singleTitle = levelCount >= 1 ? '报主该花色（亮一张）' : '无该花色级牌';
 
   return (
     <div style={{
@@ -273,7 +273,7 @@ function SuitColumn({
         />
       )}
     </div>
-  )
+  );
 }
 
 function BarButton({
@@ -283,11 +283,11 @@ function BarButton({
   onClick,
   title,
 }: {
-  label: string
-  color: string
-  enabled: boolean
-  onClick: () => void
-  title?: string
+  label: string;
+  color: string;
+  enabled: boolean;
+  onClick: () => void;
+  title?: string;
 }) {
   return (
     <button
@@ -310,5 +310,5 @@ function BarButton({
     >
       {label}
     </button>
-  )
+  );
 }

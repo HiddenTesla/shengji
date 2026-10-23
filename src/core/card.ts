@@ -10,21 +10,21 @@ import {
   RANK_NAME,
   SUIT_SYMBOL,
   SUIT_NAME_ZH,
-} from './types.ts'
+} from './types.ts';
 
 // ---- 工厂函数 ----
 
-let _idCounter = 0
+let _idCounter = 0;
 
 /** 创建一张牌（自动分配唯一 ID） */
 export function createCard(suit: Suit, rank: Rank): Card {
-  const id = `${suit}-${rank}-${_idCounter++}` as CardId
-  return { id, suit, rank }
+  const id = `${suit}-${rank}-${_idCounter++}` as CardId;
+  return { id, suit, rank };
 }
 
 /** 重置 ID 计数器（仅用于测试） */
 export function resetCardIdCounter(): void {
-  _idCounter = 0
+  _idCounter = 0;
 }
 
 // ---- 显示 ----
@@ -32,17 +32,17 @@ export function resetCardIdCounter(): void {
 /** 卡牌的显示文本，如 "♠A"、"♥10"、"🃏小王" */
 export function cardDisplayName(card: Card): string {
   if (card.suit === Suit.Joker) {
-    return RANK_NAME[card.rank]
+    return RANK_NAME[card.rank];
   }
-  return `${SUIT_SYMBOL[card.suit]}${RANK_NAME[card.rank]}`
+  return `${SUIT_SYMBOL[card.suit]}${RANK_NAME[card.rank]}`;
 }
 
 /** 卡牌的简要标识，如 "SA"、"H10" */
 export function cardShortName(card: Card): string {
   if (card.suit === Suit.Joker) {
-    return `J-${RANK_NAME[card.rank]}`
+    return `J-${RANK_NAME[card.rank]}`;
   }
-  return `${card.suit}${RANK_NAME[card.rank]}`
+  return `${card.suit}${RANK_NAME[card.rank]}`;
 }
 
 // ---- 排序（升级规则） ----
@@ -56,7 +56,7 @@ const SUIT_ORDER: Record<Suit, number> = {
   [Suit.Club]: 2,
   [Suit.Diamond]: 3,
   [Suit.Joker]: 4,
-}
+};
 
 /**
  * 升级手牌排序 —— 适用于 UI 展示
@@ -72,8 +72,8 @@ export function sortCards(
   levelRank: Rank,
 ): Card[] {
   return [...cards].sort((a, b) => {
-    return compareForDisplay(a, b, trumpSuit, levelRank)
-  })
+    return compareForDisplay(a, b, trumpSuit, levelRank);
+  });
 }
 
 /**
@@ -90,14 +90,14 @@ function compareForDisplay(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  const ag = getDisplayGroup(a, trumpSuit, levelRank)
-  const bg = getDisplayGroup(b, trumpSuit, levelRank)
+  const ag = getDisplayGroup(a, trumpSuit, levelRank);
+  const bg = getDisplayGroup(b, trumpSuit, levelRank);
 
-  if (ag !== bg) return ag - bg
+  if (ag !== bg) return ag - bg;
   // 同组内：点数降序
-  if (a.rank !== b.rank) return b.rank - a.rank
+  if (a.rank !== b.rank) return b.rank - a.rank;
   // 同点数：按花色顺序
-  return (SUIT_ORDER[a.suit] ?? 99) - (SUIT_ORDER[b.suit] ?? 99)
+  return (SUIT_ORDER[a.suit] ?? 99) - (SUIT_ORDER[b.suit] ?? 99);
 }
 
 /**
@@ -122,30 +122,30 @@ function getDisplayGroup(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  const isJoker = card.suit === Suit.Joker
-  const isLevel = card.rank === levelRank
-  const isTrumpSuit = card.suit === trumpSuit
+  const isJoker = card.suit === Suit.Joker;
+  const isLevel = card.rank === levelRank;
+  const isTrumpSuit = card.suit === trumpSuit;
 
-  if (isJoker && card.rank === Rank.BigJoker) return 0
-  if (isJoker && card.rank === Rank.SmallJoker) return 1
+  if (isJoker && card.rank === Rank.BigJoker) return 0;
+  if (isJoker && card.rank === Rank.SmallJoker) return 1;
   // 无主 / 未定主：级牌均为同级主牌
-  if (isLevel && trumpSuit === null) return 3
+  if (isLevel && trumpSuit === null) return 3;
   // 主级牌（主花色的级牌）
-  if (isLevel && isTrumpSuit) return 2
+  if (isLevel && isTrumpSuit) return 2;
   // 副级牌（其余花色的级牌）—— 大于主花色普通牌
-  if (isLevel) return 3
+  if (isLevel) return 3;
   // 主花色非级牌
-  if (isTrumpSuit) return 4
+  if (isTrumpSuit) return 4;
   // 副牌：花色序号 × 100 确保按花色分组
-  return 100 + (SUIT_ORDER[card.suit] ?? 99) * 10
+  return 100 + (SUIT_ORDER[card.suit] ?? 99) * 10;
 }
 
 /** 升级手牌分组结果 */
 export interface CardGroup {
-  label: string
+  label: string;
   /** 'trump' 表示主牌组，其他为花色 */
-  kind: Suit | 'trump'
-  cards: Card[]
+  kind: Suit | 'trump';
+  cards: Card[];
 }
 
 /**
@@ -161,37 +161,37 @@ export function groupCardsForDisplay(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): CardGroup[] {
-  const sorted = sortCards(cards, trumpSuit, levelRank)
-  const suitOrder = [Suit.Spade, Suit.Heart, Suit.Club, Suit.Diamond]
+  const sorted = sortCards(cards, trumpSuit, levelRank);
+  const suitOrder = [Suit.Spade, Suit.Heart, Suit.Club, Suit.Diamond];
 
   // 主牌：王 + 全部级牌 + 主花色
   const trumpCards = sorted.filter(c =>
     c.suit === Suit.Joker
     || c.rank === levelRank
     || (trumpSuit !== null && c.suit === trumpSuit),
-  )
+  );
 
-  const groups: CardGroup[] = []
+  const groups: CardGroup[] = [];
   if (trumpCards.length > 0) {
-    groups.push({ label: '主牌', kind: 'trump', cards: trumpCards })
+    groups.push({ label: '主牌', kind: 'trump', cards: trumpCards });
   }
   for (const suit of suitOrder) {
-    const sc = sorted.filter(c => c.suit === suit && !trumpCards.includes(c))
+    const sc = sorted.filter(c => c.suit === suit && !trumpCards.includes(c));
     if (sc.length > 0) {
-      groups.push({ label: SUIT_SYMBOL[suit], kind: suit, cards: sc })
+      groups.push({ label: SUIT_SYMBOL[suit], kind: suit, cards: sc });
     }
   }
-  return groups
+  return groups;
 }
 
 /** 判断两张牌是否点数相同（用于检测对子） */
 export function sameRank(a: Card, b: Card): boolean {
-  return a.rank === b.rank
+  return a.rank === b.rank;
 }
 
 /** 判断两张牌是否同花色 */
 export function sameSuit(a: Card, b: Card): boolean {
-  return a.suit === b.suit
+  return a.suit === b.suit;
 }
 
 /** 判断一张牌是否为主牌 */
@@ -200,8 +200,8 @@ export function isTrumpCard(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): boolean {
-  if (card.suit === Suit.Joker) return true
-  if (card.rank === levelRank) return true
-  if (card.suit === trumpSuit) return true
-  return false
+  if (card.suit === Suit.Joker) return true;
+  if (card.rank === levelRank) return true;
+  if (card.suit === trumpSuit) return true;
+  return false;
 }

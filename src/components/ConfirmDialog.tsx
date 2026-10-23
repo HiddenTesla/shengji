@@ -2,25 +2,25 @@
 // 通用确认对话框（模态）
 // ============================================================
 
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react';
 
 interface ConfirmDialogProps {
-  open: boolean
-  title: string
+  open: boolean;
+  title: string;
   /** 说明文字（可多行） */
-  description?: string
-  confirmLabel?: string
-  cancelLabel?: string
+  description?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
   /** 隐藏取消按钮（只读信息框：只有一个「知道了」） */
-  hideCancel?: boolean
+  hideCancel?: boolean;
   /** 对话框宽度（默认 360） */
-  width?: number
+  width?: number;
   /** 确认按钮是否为危险操作（红色） */
-  danger?: boolean
+  danger?: boolean;
   /** 附加内容（如规则选项），渲染在说明文字与按钮之间 */
-  children?: ReactNode
-  onConfirm: () => void
-  onCancel: () => void
+  children?: ReactNode;
+  onConfirm: () => void;
+  onCancel: () => void;
 }
 
 export default function ConfirmDialog({
@@ -38,16 +38,16 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   // Esc 关闭
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancel()
-      if (event.key === 'Enter') onConfirm()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [open, onCancel, onConfirm])
+      if (event.key === 'Escape') onCancel();
+      if (event.key === 'Enter') onConfirm();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, onCancel, onConfirm]);
 
-  if (!open) return null
+  if (!open) return null;
 
   return (
     <div
@@ -148,5 +148,5 @@ export default function ConfirmDialog({
         </div>
       </div>
     </div>
-  )
+  );
 }

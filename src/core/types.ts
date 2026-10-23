@@ -17,7 +17,7 @@ export const SUIT_ORDER: Record<Suit, number> = {
   [Suit.Club]: 2,
   [Suit.Diamond]: 3,
   [Suit.Joker]: 4,
-}
+};
 
 export const SUIT_SYMBOL: Record<Suit, string> = {
   [Suit.Spade]: '♠',
@@ -25,7 +25,7 @@ export const SUIT_SYMBOL: Record<Suit, string> = {
   [Suit.Club]: '♣',
   [Suit.Diamond]: '♦',
   [Suit.Joker]: '🃏',
-}
+};
 
 export const SUIT_NAME_ZH: Record<Suit, string> = {
   [Suit.Spade]: '黑桃',
@@ -33,7 +33,7 @@ export const SUIT_NAME_ZH: Record<Suit, string> = {
   [Suit.Club]: '梅花',
   [Suit.Diamond]: '方块',
   [Suit.Joker]: '王',
-}
+};
 
 // ---- 牌面值 ----
 export enum Rank {
@@ -70,18 +70,18 @@ export const RANK_NAME: Record<Rank, string> = {
   [Rank.Ace]: 'A',
   [Rank.SmallJoker]: '小王',
   [Rank.BigJoker]: '大王',
-}
+};
 
 /** 牌面值是否为分牌（5/10/K） */
 export function isPointCard(rank: Rank): boolean {
-  return rank === Rank.Five || rank === Rank.Ten || rank === Rank.King
+  return rank === Rank.Five || rank === Rank.Ten || rank === Rank.King;
 }
 
 /** 分牌对应的分值 */
 export function pointValue(rank: Rank): number {
-  if (rank === Rank.Five) return 5
-  if (rank === Rank.Ten || rank === Rank.King) return 10
-  return 0
+  if (rank === Rank.Five) return 5;
+  if (rank === Rank.Ten || rank === Rank.King) return 10;
+  return 0;
 }
 
 // ---- 卡牌标识 ----
@@ -101,26 +101,26 @@ export const POSITION_NAME_ZH: Record<PlayerPosition, string> = {
   [PlayerPosition.South]: '南',
   [PlayerPosition.West]: '西',
   [PlayerPosition.North]: '北',
-}
+};
 
 export const ALL_POSITIONS: readonly PlayerPosition[] = [
   PlayerPosition.East,
   PlayerPosition.North,
   PlayerPosition.West,
   PlayerPosition.South,
-]
+];
 
 /** 返回对家方位 */
 export function partnerOf(pos: PlayerPosition): PlayerPosition {
   switch (pos) {
     case PlayerPosition.East:
-      return PlayerPosition.West
+      return PlayerPosition.West;
     case PlayerPosition.South:
-      return PlayerPosition.North
+      return PlayerPosition.North;
     case PlayerPosition.West:
-      return PlayerPosition.East
+      return PlayerPosition.East;
     case PlayerPosition.North:
-      return PlayerPosition.South
+      return PlayerPosition.South;
   }
 }
 
@@ -128,13 +128,13 @@ export function partnerOf(pos: PlayerPosition): PlayerPosition {
 export function nextPlayer(pos: PlayerPosition): PlayerPosition {
   switch (pos) {
     case PlayerPosition.East:
-      return PlayerPosition.North
+      return PlayerPosition.North;
     case PlayerPosition.North:
-      return PlayerPosition.West
+      return PlayerPosition.West;
     case PlayerPosition.West:
-      return PlayerPosition.South
+      return PlayerPosition.South;
     case PlayerPosition.South:
-      return PlayerPosition.East
+      return PlayerPosition.East;
   }
 }
 
@@ -142,7 +142,7 @@ export function nextPlayer(pos: PlayerPosition): PlayerPosition {
 export function teamOf(pos: PlayerPosition): Team {
   return (pos === PlayerPosition.South || pos === PlayerPosition.North)
     ? Team.NS
-    : Team.EW
+    : Team.EW;
 }
 
 // ---- 队伍 ----
@@ -154,11 +154,11 @@ export enum Team {
 export const TEAM_NAME_ZH: Record<Team, string> = {
   [Team.NS]: '南北',
   [Team.EW]: '东西',
-}
+};
 
 /** 返回对方队伍 */
 export function oppositeTeam(t: Team): Team {
-  return t === Team.NS ? Team.EW : Team.NS
+  return t === Team.NS ? Team.EW : Team.NS;
 }
 
 // ---- 玩家操控模式 ----
@@ -184,85 +184,85 @@ export enum HandType {
 // ---- 卡牌接口 ----
 export interface Card {
   /** 唯一标识，如 "S-2-0" */
-  id: CardId
+  id: CardId;
   /** 花色 */
-  suit: Suit
+  suit: Suit;
   /** 牌面值 */
-  rank: Rank
+  rank: Rank;
 }
 
 // ---- 出牌记录 ----
 export interface PlayedCards {
-  player: PlayerPosition
-  cards: Card[]
-  handType: HandType
+  player: PlayerPosition;
+  cards: Card[];
+  handType: HandType;
 }
 
 // ---- 墩（一回合出牌） ----
 export interface Trick {
   /** 本墩出牌记录（按出牌顺序） */
-  plays: PlayedCards[]
+  plays: PlayedCards[];
   /** 首出方位 */
-  leadPlayer: PlayerPosition
+  leadPlayer: PlayerPosition;
   /** 谁赢了这墩 */
-  winner: PlayerPosition | null
+  winner: PlayerPosition | null;
   /** 本墩总分数 */
-  points: number
+  points: number;
 }
 
 // ---- 叫主 ----
 export interface BidRecord {
-  player: PlayerPosition
+  player: PlayerPosition;
   /** 叫的花色（null 表示"无主"） */
-  suit: Suit | null
+  suit: Suit | null;
   /** 是否反主 */
-  isReverse: boolean
+  isReverse: boolean;
 }
 
 // ---- 计分 ----
 export interface RoundScore {
   /** 这轮防守方得分 */
-  defendingPoints: number
+  defendingPoints: number;
   /** 底牌分（含抠底倍数） */
-  bottomPoints: number
+  bottomPoints: number;
   /** 抠底倍数 */
-  bottomMultiplier: number
+  bottomMultiplier: number;
   /** 是否抠底 */
-  isBottomTaken: boolean
+  isBottomTaken: boolean;
   /** 庄家是否升级 */
-  bankerUpgrade: number // 0=不升级换庄, 1=升1级, 2=升2级, 3=升3级
+  bankerUpgrade: number; // 0=不升级换庄, 1=升1级, 2=升2级, 3=升3级
 }
 
 // ---- 牌局回放 ----
 export interface ReplayData {
-  version: number
-  timestamp: number
-  seed?: number
-  players: PlayerPosition[]
-  levelStart: Rank
-  levelEnd: Rank
-  rounds: RoundRecord[]
+  version: number;
+  timestamp: number;
+  seed?: number;
+  players: PlayerPosition[];
+  levelStart: Rank;
+  levelEnd: Rank;
+  rounds: RoundRecord[];
 }
 
 export interface RoundRecord {
   /** 当前级牌 */
-  level: Rank
+  level: Rank;
   /** 庄家 */
-  banker: PlayerPosition
+  banker: PlayerPosition;
   /** 主花色 */
-  trumpSuit: Suit | null
+  trumpSuit: Suit | null;
   /** 叫主记录 */
-  bids: BidRecord[]
+  bids: BidRecord[];
   /** 每个玩家的手牌（用于回放展示） */
-  hands: Record<PlayerPosition, Card[]>
+  hands: Record<PlayerPosition, Card[]>;
   /** 底牌 */
-  bottomCards: Card[]
+  bottomCards: Card[];
   /** 扣底后底牌（庄家埋的） */
-  buriedCards: Card[]
+  buriedCards: Card[];
   /** 所有墩 */
-  tricks: Trick[]
+  tricks: Trick[];
   /** 得分 */
-  score: RoundScore
+  score: RoundScore;
 }
 
 // ---- 游戏阶段 ----
@@ -292,31 +292,31 @@ export type PlayerModeSettings = Record<PlayerPosition, PlayerMode>
 // ---- 可选规则（在「新游戏」对话框中设置） ----
 export interface RuleOptions {
   /** 是否允许反自己亮的主（同一报品内的自保始终允许，不受此开关影响） */
-  allowSelfOverride: boolean
+  allowSelfOverride: boolean;
 }
 
 export const DEFAULT_RULE_OPTIONS: RuleOptions = {
   allowSelfOverride: false,
-}
+};
 
 // ---- 游戏全局配置 ----
 export interface GameConfig {
   /** 初始等级 */
-  startLevel: Rank
+  startLevel: Rank;
   /** 目标等级（打到这个即胜利） */
-  targetLevel: Rank
+  targetLevel: Rank;
   /** 每局底牌数 */
-  bottomCount: number
+  bottomCount: number;
   /** 是否允许甩牌 */
-  allowThrow: boolean
+  allowThrow: boolean;
   /** 抠底倍数：单张 */
-  bottomMultiplierSingle: number
+  bottomMultiplierSingle: number;
   /** 抠底倍数：对子 */
-  bottomMultiplierPair: number
+  bottomMultiplierPair: number;
   /** 抠底倍数：拖拉机（基础） */
-  bottomMultiplierTractor: number
+  bottomMultiplierTractor: number;
   /** 每多一个对子追加倍数 */
-  bottomMultiplierPerPair: number
+  bottomMultiplierPerPair: number;
 }
 
 export const DEFAULT_GAME_CONFIG: GameConfig = {
@@ -328,5 +328,5 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   bottomMultiplierPair: 4,
   bottomMultiplierTractor: 8,
   bottomMultiplierPerPair: 2,
-}
+};
 

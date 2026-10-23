@@ -4,36 +4,36 @@
 // 仅当南家为庄（canReveal）时可查看
 // ============================================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react';
 import {
   type Card,
   pointValue,
-} from '../core/types.ts'
-import CardComponent from './CardComponent.tsx'
+} from '../core/types.ts';
+import CardComponent from './CardComponent.tsx';
 
 interface BottomRevealProps {
   /** 底牌（8 张） */
-  cards: Card[]
+  cards: Card[];
   /** 是否允许查看（南家为庄） */
-  canReveal: boolean
+  canReveal: boolean;
 }
 
 export default function BottomReveal({ cards, canReveal }: BottomRevealProps) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(false);
 
   // Esc 关闭弹窗
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
-  if (!canReveal || cards.length === 0) return null
+  if (!canReveal || cards.length === 0) return null;
 
-  const points = cards.reduce((sum, c) => sum + pointValue(c.rank), 0)
+  const points = cards.reduce((sum, c) => sum + pointValue(c.rank), 0);
 
   return (
     <>
@@ -128,5 +128,5 @@ export default function BottomReveal({ cards, canReveal }: BottomRevealProps) {
         </div>
       )}
     </>
-  )
+  );
 }

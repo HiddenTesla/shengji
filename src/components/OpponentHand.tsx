@@ -6,7 +6,7 @@
 //   - 东/西家按「门」分为若干竖列，同一门内竖排，逐张可见点数与花色
 // ============================================================
 
-import { useMemo } from 'react'
+import { useMemo } from 'react';
 import {
   type Card,
   type PlayerPosition,
@@ -14,47 +14,47 @@ import {
   type Suit,
   type PlayerMode,
   POSITION_NAME_ZH,
-} from '../core/types.ts'
-import { type CardGroup, groupCardsForDisplay } from '../core/card.ts'
-import { type HandMark, handMarks } from '../core/hand.ts'
-import CardComponent from './CardComponent.tsx'
-import PlayerHand from './PlayerHand.tsx'
-import PlayerModeButton from './PlayerModeButton.tsx'
+} from '../core/types.ts';
+import { type CardGroup, groupCardsForDisplay } from '../core/card.ts';
+import { type HandMark, handMarks } from '../core/hand.ts';
+import CardComponent from './CardComponent.tsx';
+import PlayerHand from './PlayerHand.tsx';
+import PlayerModeButton from './PlayerModeButton.tsx';
 
 interface OpponentHandProps {
-  position: PlayerPosition
+  position: PlayerPosition;
   /** 该家手牌 */
-  cards: Card[]
+  cards: Card[];
   /** 当前级牌 */
-  levelRank: Rank
+  levelRank: Rank;
   /** 主花色（null = 无主 / 尚未定主） */
-  trumpSuit: Suit | null
-  faceUp: boolean
-  showToggle?: boolean
-  onToggleVisibility?: () => void
-  playerMode: PlayerMode
-  onToggleMode: () => void
-  selectedIndices?: Set<number>
-  onToggleCard?: (index: number) => void
-  sourceCardIds?: Set<string>
+  trumpSuit: Suit | null;
+  faceUp: boolean;
+  showToggle?: boolean;
+  onToggleVisibility?: () => void;
+  playerMode: PlayerMode;
+  onToggleMode: () => void;
+  selectedIndices?: Set<number>;
+  onToggleCard?: (index: number) => void;
+  sourceCardIds?: Set<string>;
 }
 
 /** 牌背重叠偏移 */
-const OVERLAP_H = 26 // 水平（北/南）
-const OVERLAP_V = 22 // 垂直（东/西）
-const CARD_W = 71 * 0.95
-const CARD_H = 96 * 0.95
+const OVERLAP_H = 26; // 水平（北/南）
+const OVERLAP_V = 22; // 垂直（东/西）
+const CARD_W = 71 * 0.95;
+const CARD_H = 96 * 0.95;
 
 /** 东/西家翻开时：同一门内竖排的步长（保证点数与花色可见） */
-const SIDE_STEP_Y = 42
+const SIDE_STEP_Y = 42;
 /**
  * 东/西家翻开时：每列最多张数，超出则同一门拆成多列。
  * 取 6 使翻开后的竖列不高于牌背竖排，避免挤占南家手牌空间。
  */
-const SIDE_ROWS_PER_COL = 6
+const SIDE_ROWS_PER_COL = 6;
 
 /** 北家翻开时的固定高度（与南家分组展示等高，避免切换时位置跳动） */
-const TOP_REVEAL_H = 142
+const TOP_REVEAL_H = 142;
 
 /** 门标签颜色 */
 const GROUP_COLORS: Record<string, string> = {
@@ -63,7 +63,7 @@ const GROUP_COLORS: Record<string, string> = {
   C: '#1b5e20',
   D: '#e65100',
   trump: '#ffd700',
-}
+};
 
 export default function OpponentHand({
   position,
@@ -79,18 +79,18 @@ export default function OpponentHand({
   onToggleCard,
   sourceCardIds,
 }: OpponentHandProps) {
-  const label = POSITION_NAME_ZH[position]
-  const isSide = position === 'E' || position === 'W'
-  const cardCount = cards.length
-  const maxShow = Math.min(cardCount, 12)
-  const groups = groupCardsForDisplay(cards, trumpSuit, levelRank)
-  const isSelectable = onToggleCard !== undefined
-  const showCardsFaceUp = faceUp || isSelectable
+  const label = POSITION_NAME_ZH[position];
+  const isSide = position === 'E' || position === 'W';
+  const cardCount = cards.length;
+  const maxShow = Math.min(cardCount, 12);
+  const groups = groupCardsForDisplay(cards, trumpSuit, levelRank);
+  const isSelectable = onToggleCard !== undefined;
+  const showCardsFaceUp = faceUp || isSelectable;
   /** 对子 / 拖拉机标记（东/西竖排与北家横排共用） */
   const marks = useMemo(
     () => handMarks(cards, trumpSuit, levelRank),
     [cards, trumpSuit, levelRank],
-  )
+  );
 
   if (cardCount === 0) {
     return (
@@ -115,12 +115,12 @@ export default function OpponentHand({
           无手牌
         </div>
       </div>
-    )
+    );
   }
 
   // ---- 横排（北家） ----
   if (!isSide) {
-    const width = maxShow * OVERLAP_H + CARD_W
+    const width = maxShow * OVERLAP_H + CARD_W;
     return (
       <div style={{
         display: 'flex',
@@ -170,7 +170,7 @@ export default function OpponentHand({
                   <CardComponent
                     card={{ id: `h-${idx}`, suit: 'S' as any, rank: 2 as any }}
                     faceUp={false}
-                    small
+                    small={true}
                   />
                 </div>
               ))}
@@ -180,18 +180,18 @@ export default function OpponentHand({
         </div>
         <CardCount count={cardCount} />
       </div>
-    )
+    );
   }
 
   // ---- 竖排（东/西） ----
-  const backHeight = maxShow * OVERLAP_V + CARD_H
+  const backHeight = maxShow * OVERLAP_V + CARD_H;
   const revealHeight =
-    (Math.min(cardCount, SIDE_ROWS_PER_COL) - 1) * SIDE_STEP_Y + CARD_H
+    (Math.min(cardCount, SIDE_ROWS_PER_COL) - 1) * SIDE_STEP_Y + CARD_H;
   // 固定高度 + 以外缘为锚点：显示/隐藏切换时按钮位置不变
   const sideAreaHeight = isSelectable
     ? revealHeight
-    : Math.max(backHeight, revealHeight)
-  const sideAlign = position === 'W' ? 'flex-start' : 'flex-end'
+    : Math.max(backHeight, revealHeight);
+  const sideAlign = position === 'W' ? 'flex-start' : 'flex-end';
 
   return (
     <div style={{
@@ -239,17 +239,17 @@ export default function OpponentHand({
                 <CardComponent
                   card={{ id: `v-${idx}`, suit: 'S' as any, rank: 2 as any }}
                   faceUp={false}
-                  small
+                  small={true}
                 />
               </div>
             ))}
-            {cardCount > 12 && <ExtraBadge count={cardCount - 12} side />}
+            {cardCount > 12 && <ExtraBadge count={cardCount - 12} side={true} />}
           </div>
         )}
       </div>
       <CardCount count={cardCount} />
     </div>
-  )
+  );
 }
 
 // ---- 子组件 ----
@@ -262,13 +262,13 @@ function SideGroupColumns({
   onToggleCard,
   sourceCardIds,
 }: {
-  groups: CardGroup[]
-  marks: Map<string, HandMark>
-  selectedIndices?: Set<number>
-  onToggleCard?: (index: number) => void
-  sourceCardIds?: Set<string>
+  groups: CardGroup[];
+  marks: Map<string, HandMark>;
+  selectedIndices?: Set<number>;
+  onToggleCard?: (index: number) => void;
+  sourceCardIds?: Set<string>;
 }) {
-  if (groups.length === 0) return null
+  if (groups.length === 0) return null;
 
   return (
     <div style={{
@@ -282,11 +282,11 @@ function SideGroupColumns({
       {groups.map((group, groupIndex) => {
         const groupStart = groups
           .slice(0, groupIndex)
-          .reduce((count, previous) => count + previous.cards.length, 0)
-        const n = group.cards.length
-        const colCount = Math.max(1, Math.ceil(n / SIDE_ROWS_PER_COL))
-        const rows = Math.min(n, SIDE_ROWS_PER_COL)
-        const height = (rows - 1) * SIDE_STEP_Y + CARD_H
+          .reduce((count, previous) => count + previous.cards.length, 0);
+        const n = group.cards.length;
+        const colCount = Math.max(1, Math.ceil(n / SIDE_ROWS_PER_COL));
+        const rows = Math.min(n, SIDE_ROWS_PER_COL);
+        const height = (rows - 1) * SIDE_STEP_Y + CARD_H;
 
         return (
           <div
@@ -309,9 +309,9 @@ function SideGroupColumns({
                   {group.cards
                     .slice(ci * SIDE_ROWS_PER_COL, (ci + 1) * SIDE_ROWS_PER_COL)
                     .map((card, i) => {
-                      const cardIndex = groupStart + ci * SIDE_ROWS_PER_COL + i
-                      const selected = selectedIndices?.has(cardIndex) ?? false
-                      const mark = marks.get(card.id)
+                      const cardIndex = groupStart + ci * SIDE_ROWS_PER_COL + i;
+                      const selected = selectedIndices?.has(cardIndex) ?? false;
+                      const mark = marks.get(card.id);
                       return (
                         <div
                           key={card.id}
@@ -324,9 +324,9 @@ function SideGroupColumns({
                         >
                           <CardComponent
                             card={card}
-                            faceUp
-                            small
-                            inlineSuit
+                            faceUp={true}
+                            small={true}
+                            inlineSuit={true}
                             badge={sourceCardIds?.has(card.id) ? '底' : undefined}
                             badgePosition="top-right"
                             mark={mark
@@ -342,21 +342,21 @@ function SideGroupColumns({
                               : undefined}
                           />
                         </div>
-                      )
+                      );
                     })}
                 </div>
               ))}
             </div>
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 
 /** 门标签：主牌 / ♠ 等 + 张数 */
 function GroupLabel({ group }: { group: CardGroup }) {
-  const color = GROUP_COLORS[group.kind] ?? 'rgba(255,255,255,0.7)'
+  const color = GROUP_COLORS[group.kind] ?? 'rgba(255,255,255,0.7)';
   return (
     <div style={{
       display: 'flex',
@@ -379,7 +379,7 @@ function GroupLabel({ group }: { group: CardGroup }) {
         {group.cards.length}
       </span>
     </div>
-  )
+  );
 }
 
 function LabelRow({
@@ -390,12 +390,12 @@ function LabelRow({
   playerMode,
   onToggleMode,
 }: {
-  position: PlayerPosition
-  faceUp: boolean
-  showToggle?: boolean
-  onToggleVisibility?: () => void
-  playerMode: PlayerMode
-  onToggleMode: () => void
+  position: PlayerPosition;
+  faceUp: boolean;
+  showToggle?: boolean;
+  onToggleVisibility?: () => void;
+  playerMode: PlayerMode;
+  onToggleMode: () => void;
 }) {
   return (
     <div style={{
@@ -434,7 +434,7 @@ function LabelRow({
         </button>
       )}
     </div>
-  )
+  );
 }
 
 function CardCount({ count }: { count: number }) {
@@ -445,7 +445,7 @@ function CardCount({ count }: { count: number }) {
     }}>
       {count} 张
     </div>
-  )
+  );
 }
 
 function ExtraBadge({ count, side }: { count: number; side?: boolean }) {
@@ -464,5 +464,5 @@ function ExtraBadge({ count, side }: { count: number; side?: boolean }) {
     }}>
       +{count}
     </div>
-  )
+  );
 }

@@ -3,36 +3,36 @@
 // 布局：北在上、南在下、西在左、东在右，中央为墩信息
 // ============================================================
 
-import { useState } from 'react'
+import { useState } from 'react';
 import {
   type Card,
   PlayerPosition,
   POSITION_NAME_ZH,
   type Rank,
   type Suit,
-} from '../core/types.ts'
+} from '../core/types.ts';
 import {
   type PlayState,
   currentTrickLeader,
   doorLabel,
-} from '../core/play.ts'
-import { trickPoints } from '../core/scoring.ts'
-import CardComponent from './CardComponent.tsx'
+} from '../core/play.ts';
+import { trickPoints } from '../core/scoring.ts';
+import CardComponent from './CardComponent.tsx';
 
 interface TrickAreaProps {
-  state: PlayState
-  trumpSuit: Suit | null
-  levelRank: Rank
+  state: PlayState;
+  trumpSuit: Suit | null;
+  levelRank: Rank;
 }
 
 /** 出牌区用的牌缩放（比手牌更小） */
-const CARD_SCALE = 0.62
-const CARD_W = 71 * CARD_SCALE
-const CARD_H = 96 * CARD_SCALE
+const CARD_SCALE = 0.62;
+const CARD_W = 71 * CARD_SCALE;
+const CARD_H = 96 * CARD_SCALE;
 /** 一手多张牌时的重叠步长上限 */
-const STEP_MAX = 26
+const STEP_MAX = 26;
 /** 每手牌区域宽度（多张牌在此宽度内压缩重叠） */
-const SLOT_W = 168
+const SLOT_W = 168;
 
 /** 四家在本墩中的方位 */
 const SLOTS: { player: PlayerPosition; col: number; row: number }[] = [
@@ -40,7 +40,7 @@ const SLOTS: { player: PlayerPosition; col: number; row: number }[] = [
   { player: PlayerPosition.West, col: 1, row: 2 },
   { player: PlayerPosition.East, col: 3, row: 2 },
   { player: PlayerPosition.South, col: 2, row: 3 },
-]
+];
 
 /** 「轮到谁出牌」箭头：指向该玩家所在方位（牌未出，空位上显示） */
 const TURN_ARROW: Record<PlayerPosition, string> = {
@@ -48,16 +48,16 @@ const TURN_ARROW: Record<PlayerPosition, string> = {
   [PlayerPosition.South]: '▼',
   [PlayerPosition.West]: '◀',
   [PlayerPosition.East]: '▶',
-}
+};
 
 export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProps) {
-  const { trick } = state
-  const trickNo = state.tricks.length + 1
-  const leadLabel = trick.leadDoor ? doorLabel(trick.leadDoor) : null
-  const curPoints = trickPoints(trick.plays.flatMap(p => p.cards))
-  const currentLeader = currentTrickLeader(trick, trumpSuit, levelRank)
+  const { trick } = state;
+  const trickNo = state.tricks.length + 1;
+  const leadLabel = trick.leadDoor ? doorLabel(trick.leadDoor) : null;
+  const curPoints = trickPoints(trick.plays.flatMap(p => p.cards));
+  const currentLeader = currentTrickLeader(trick, trumpSuit, levelRank);
   // 折叠框：记录「当前展开的是哪一墩」，换墩后自然回到收起
-  const [openTrick, setOpenTrick] = useState<number | null>(null)
+  const [openTrick, setOpenTrick] = useState<number | null>(null);
 
   return (
     <div style={{
@@ -73,8 +73,8 @@ export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProp
       border: '1px solid rgba(255,255,255,0.1)',
     }}>
       {SLOTS.map(slot => {
-        const play = trick.plays.find(p => p.player === slot.player)
-        const isLeadSlot = play && play.player === trick.leadPlayer
+        const play = trick.plays.find(p => p.player === slot.player);
+        const isLeadSlot = play && play.player === trick.leadPlayer;
         return (
           <div key={slot.player} style={{ gridColumn: slot.col, gridRow: slot.row }}>
             <PlaySlot
@@ -89,7 +89,7 @@ export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProp
               isTurn={!trick.complete && state.turn === slot.player}
             />
           </div>
-        )
+        );
       })}
 
       {/* 中央：墩信息 */}
@@ -125,7 +125,7 @@ export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProp
         )}
       </div>
     </div>
-  )
+  );
 }
 
 // ------------------------------------------------------------
@@ -141,25 +141,25 @@ function PlaySlot({
   isLead,
   isTurn,
 }: {
-  player: PlayerPosition
-  cards: Card[]
+  player: PlayerPosition;
+  cards: Card[];
   /** 甩牌失败时「原本想甩的牌」（本墩内展示在实际出牌旁） */
-  attempt: Card[]
+  attempt: Card[];
   /** 「欲甩的牌」折叠框是否展开 */
-  attemptOpen: boolean
-  onToggleAttempt: () => void
-  isCurrentMax: boolean
-  isWinner: boolean
-  isLead: boolean
+  attemptOpen: boolean;
+  onToggleAttempt: () => void;
+  isCurrentMax: boolean;
+  isWinner: boolean;
+  isLead: boolean;
   /** 是否轮到该玩家出牌（空位上显示箭头） */
-  isTurn: boolean
+  isTurn: boolean;
 }) {
-  const n = cards.length
-  const step = n > 1 ? Math.min(STEP_MAX, (SLOT_W - CARD_W) / (n - 1)) : 0
-  const cardsWidth = n > 0 ? (n - 1) * step + CARD_W : CARD_W
+  const n = cards.length;
+  const step = n > 1 ? Math.min(STEP_MAX, (SLOT_W - CARD_W) / (n - 1)) : 0;
+  const cardsWidth = n > 0 ? (n - 1) * step + CARD_W : CARD_W;
 
   // 折叠框浮层：往牌桌外侧展开（西家向左，其余向右），不影响布局
-  const sideLeft = player === PlayerPosition.West
+  const sideLeft = player === PlayerPosition.West;
 
   return (
     <div style={{
@@ -202,7 +202,7 @@ function PlaySlot({
                 zIndex: i,
               }}
             >
-              <CardComponent card={c} faceUp small scale={CARD_SCALE} />
+              <CardComponent card={c} faceUp={true} small={true} scale={CARD_SCALE} />
             </div>
           ))}
 
@@ -255,7 +255,7 @@ function PlaySlot({
                     maxWidth: 4 * (CARD_W + 3),
                   }}>
                     {attempt.map(c => (
-                      <CardComponent key={c.id} card={c} faceUp small scale={CARD_SCALE} />
+                      <CardComponent key={c.id} card={c} faceUp={true} small={true} scale={CARD_SCALE} />
                     ))}
                   </div>
                 </div>
@@ -284,5 +284,5 @@ function PlaySlot({
         )}
       </div>
     </div>
-  )
+  );
 }

@@ -11,8 +11,8 @@ import {
   Rank,
   SUIT_SYMBOL,
   DEFAULT_RULE_OPTIONS,
-} from './types.ts'
-import { evaluateTrumpStrength } from './trump.ts'
+} from './types.ts';
+import { evaluateTrumpStrength } from './trump.ts';
 
 /**
  * 叫主强度（越大越强）
@@ -30,24 +30,24 @@ export enum BidStrength {
 
 /** 一次叫主声明 */
 export interface Declaration {
-  player: PlayerPosition
+  player: PlayerPosition;
   /** 主花色；null 表示无主 */
-  suit: Suit | null
-  strength: BidStrength
+  suit: Suit | null;
+  strength: BidStrength;
   /** 用于亮主的牌 ID */
-  cardIds: CardId[]
+  cardIds: CardId[];
 }
 
 /** 叫主回合状态 */
 export interface BidState {
   /** 当前最高声明（null = 尚无人叫主） */
-  current: Declaration | null
+  current: Declaration | null;
   /** 自上次声明后的连续过牌数 */
-  passes: number
+  passes: number;
   /** 当前轮到 ALL_POSITIONS 中的索引 */
-  turnIndex: number
+  turnIndex: number;
   /** 全部声明记录 */
-  history: Declaration[]
+  history: Declaration[];
 }
 
 /** 初始叫主状态 */
@@ -57,7 +57,7 @@ export function createBidState(firstTurnIndex = 0): BidState {
     passes: 0,
     turnIndex: firstTurnIndex,
     history: [],
-  }
+  };
 }
 
 // ------------------------------------------------------------
@@ -77,15 +77,15 @@ export function getPossibleDeclarations(
   levelRank: Rank,
   player: PlayerPosition,
 ): Declaration[] {
-  const decls: Declaration[] = []
+  const decls: Declaration[] = [];
 
   // 按花色归集级牌
-  const levelBySuit = new Map<Suit, Card[]>()
+  const levelBySuit = new Map<Suit, Card[]>();
   for (const c of hand) {
     if (c.rank === levelRank && c.suit !== Suit.Joker) {
-      const arr = levelBySuit.get(c.suit) ?? []
-      arr.push(c)
-      levelBySuit.set(c.suit, arr)
+      const arr = levelBySuit.get(c.suit) ?? [];
+      arr.push(c);
+      levelBySuit.set(c.suit, arr);
     }
   }
   for (const [suit, cards] of levelBySuit) {
@@ -95,7 +95,7 @@ export function getPossibleDeclarations(
       suit,
       strength: BidStrength.Single,
       cardIds: [cards[0].id],
-    })
+    });
     // 对子反主
     if (cards.length >= 2) {
       decls.push({
@@ -103,35 +103,35 @@ export function getPossibleDeclarations(
         suit,
         strength: BidStrength.Pair,
         cardIds: [cards[0].id, cards[1].id],
-      })
+      });
     }
   }
 
   // 对王 → 无主（必须同大小；大对 > 小对；单大王+单小王不能报）
   const smallJokers = hand.filter(
     c => c.suit === Suit.Joker && c.rank === Rank.SmallJoker,
-  )
+  );
   if (smallJokers.length >= 2) {
     decls.push({
       player,
       suit: null,
       strength: BidStrength.SmallJokerPair,
       cardIds: [smallJokers[0].id, smallJokers[1].id],
-    })
+    });
   }
   const bigJokers = hand.filter(
     c => c.suit === Suit.Joker && c.rank === Rank.BigJoker,
-  )
+  );
   if (bigJokers.length >= 2) {
     decls.push({
       player,
       suit: null,
       strength: BidStrength.BigJokerPair,
       cardIds: [bigJokers[0].id, bigJokers[1].id],
-    })
+    });
   }
 
-  return decls
+  return decls;
 }
 
 /**
@@ -142,10 +142,10 @@ export function getPossibleDeclarations(
  * - 换成别的主门 / 有主与无主互换，同样属于自反。
  */
 export function isSelfOverride(decl: Declaration, current: Declaration): boolean {
-  if (decl.player !== current.player) return false
+  if (decl.player !== current.player) return false;
   // 无主只有两档报品，且互不相同；能覆盖时必然是换档
-  if (decl.suit === null) return true
-  return decl.suit !== current.suit
+  if (decl.suit === null) return true;
+  return decl.suit !== current.suit;
 }
 
 /** 新声明能否覆盖当前声明（无当前声明时总是可以） */
@@ -154,21 +154,21 @@ export function canOverride(
   current: Declaration | null,
   rules: RuleOptions = DEFAULT_RULE_OPTIONS,
 ): boolean {
-  if (!current) return true
-  if (next.strength <= current.strength) return false
-  if (next.player !== current.player) return true
+  if (!current) return true;
+  if (next.strength <= current.strength) return false;
+  if (next.player !== current.player) return true;
   // 同一报品补强（自保）允许；换门 / 改无主属「反自己」，由规则控制
-  if (!isSelfOverride(next, current)) return true
-  return rules.allowSelfOverride
+  if (!isSelfOverride(next, current)) return true;
+  return rules.allowSelfOverride;
 }
 
 /** 声明的中文标签，如 "亮主 ♠"、"反主 ♥"、"无主" */
 export function declarationLabel(d: Declaration): string {
   if (d.suit === null) {
-    return d.strength === BidStrength.BigJokerPair ? '无主（大王）' : '无主（小王）'
+    return d.strength === BidStrength.BigJokerPair ? '无主（大王）' : '无主（小王）';
   }
-  const sym = SUIT_SYMBOL[d.suit]
-  return d.strength === BidStrength.Pair ? `反主 ${sym}` : `亮主 ${sym}`
+  const sym = SUIT_SYMBOL[d.suit];
+  return d.strength === BidStrength.Pair ? `反主 ${sym}` : `亮主 ${sym}`;
 }
 
 // ------------------------------------------------------------
@@ -193,39 +193,39 @@ export function aiChooseDeclare(
   rules: RuleOptions = DEFAULT_RULE_OPTIONS,
 ): Declaration | null {
   const options = getPossibleDeclarations(hand, levelRank, player)
-    .filter(d => canOverride(d, current, rules))
+    .filter(d => canOverride(d, current, rules));
 
-  if (options.length === 0) return null
+  if (options.length === 0) return null;
 
-  let best: Declaration | null = null
-  let bestScore = -Infinity
+  let best: Declaration | null = null;
+  let bestScore = -Infinity;
 
   for (const d of options) {
-    let score: number
+    let score: number;
     if (d.suit === null) {
       // 无主：依赖手中的王和级牌数量（对大王略优于对小王）
-      const jokers = hand.filter(c => c.suit === Suit.Joker).length
-      const levels = hand.filter(c => c.rank === levelRank).length
-      score = 60 + jokers * 20 + levels * 10
-      if (d.strength === BidStrength.BigJokerPair) score += 10
+      const jokers = hand.filter(c => c.suit === Suit.Joker).length;
+      const levels = hand.filter(c => c.rank === levelRank).length;
+      score = 60 + jokers * 20 + levels * 10;
+      if (d.strength === BidStrength.BigJokerPair) score += 10;
     }
     else {
-      const info = evaluateTrumpStrength(hand, d.suit as Suit, levelRank)
-      score = info.score
-      if (d.strength === BidStrength.Pair) score += 25
+      const info = evaluateTrumpStrength(hand, d.suit as Suit, levelRank);
+      score = info.score;
+      if (d.strength === BidStrength.Pair) score += 25;
     }
 
     // 抢庄优势
-    if (current === null) score += 45
+    if (current === null) score += 45;
 
     if (score > bestScore) {
-      bestScore = score
-      best = d
+      bestScore = score;
+      best = d;
     }
   }
 
-  const threshold = current === null ? 110 : 150
-  return bestScore >= threshold ? best : null
+  const threshold = current === null ? 110 : 150;
+  return bestScore >= threshold ? best : null;
 }
 
 /**
@@ -237,12 +237,12 @@ export function declarationScore(
   levelRank: Rank,
 ): number {
   if (decl.suit === null) {
-    const jokers = hand.filter(c => c.suit === Suit.Joker).length
-    const levels = hand.filter(c => c.rank === levelRank).length
-    return 60 + jokers * 20 + levels * 10 + decl.strength * 30
+    const jokers = hand.filter(c => c.suit === Suit.Joker).length;
+    const levels = hand.filter(c => c.rank === levelRank).length;
+    return 60 + jokers * 20 + levels * 10 + decl.strength * 30;
   }
-  const info = evaluateTrumpStrength(hand, decl.suit as Suit, levelRank)
-  return info.score + decl.strength * 30
+  const info = evaluateTrumpStrength(hand, decl.suit as Suit, levelRank);
+  return info.score + decl.strength * 30;
 }
 
 // ------------------------------------------------------------
@@ -264,15 +264,15 @@ export function determineTrumpFromBottom(
   levelRank: Rank,
 ): Suit | null {
   for (const card of bottom) {
-    if (card.rank === levelRank) return card.suit
-    if (card.suit === Suit.Joker) return null
+    if (card.rank === levelRank) return card.suit;
+    if (card.suit === Suit.Joker) return null;
   }
 
-  let best: Card | null = null
+  let best: Card | null = null;
   for (const card of bottom) {
-    if (best === null || card.rank > best.rank) best = card
+    if (best === null || card.rank > best.rank) best = card;
   }
-  return best ? best.suit : null
+  return best ? best.suit : null;
 }
 
 /**
@@ -281,9 +281,9 @@ export function determineTrumpFromBottom(
  */
 export function decisiveBottomIndex(bottom: Card[], levelRank: Rank): number {
   for (let i = 0; i < bottom.length; i++) {
-    const card = bottom[i]
-    if (card.rank === levelRank) return i
-    if (card.suit === Suit.Joker) return i
+    const card = bottom[i];
+    if (card.rank === levelRank) return i;
+    if (card.suit === Suit.Joker) return i;
   }
-  return -1
+  return -1;
 }

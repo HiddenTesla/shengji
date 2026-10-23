@@ -5,11 +5,11 @@
 
 interface ScoreBoardProps {
   /** 闲家（进攻方）得分 */
-  defendingPoints: number
+  defendingPoints: number;
   /** 庄家（防守方）逃分 */
-  bankerPoints: number
+  bankerPoints: number;
   /** 上台线（默认 80） */
-  target?: number
+  target?: number;
 }
 
 export default function ScoreBoard({
@@ -17,9 +17,9 @@ export default function ScoreBoard({
   bankerPoints,
   target = 80,
 }: ScoreBoardProps) {
-  const total = defendingPoints + bankerPoints
-  const reached = defendingPoints >= target
-  const pct = Math.min(100, (defendingPoints / target) * 100)
+  const total = defendingPoints + bankerPoints;
+  const reached = defendingPoints >= target;
+  const pct = Math.min(100, (defendingPoints / target) * 100);
 
   return (
     <div style={{
@@ -78,5 +78,5 @@ export default function ScoreBoard({
         合计 {total}
       </span>
     </div>
-  )
+  );
 }

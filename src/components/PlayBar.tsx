@@ -5,29 +5,29 @@
 import {
   type PlayerPosition,
   POSITION_NAME_ZH,
-} from '../core/types.ts'
+} from '../core/types.ts';
 
 interface PlayBarProps {
   /** 由谁出牌 */
-  player: PlayerPosition
+  player: PlayerPosition;
   /** 是否领出（首出） */
-  isLeading: boolean
+  isLeading: boolean;
   /** 跟出时需要的张数（领出为 null） */
-  requiredCount: number | null
+  requiredCount: number | null;
   /** 已选张数 */
-  selectedCount: number
+  selectedCount: number;
   /** 校验未通过的原因（null = 合法） */
-  reason: string | null
+  reason: string | null;
   /** 确认出牌 */
-  onPlay: () => void
+  onPlay: () => void;
   /** 清空选择 */
-  onClear: () => void
+  onClear: () => void;
   /** 提示：由 AI 选出建议的牌（只选中，不出牌） */
-  onHint: () => void
-  compact?: boolean
-  canBeatCurrent?: boolean | null
+  onHint: () => void;
+  compact?: boolean;
+  canBeatCurrent?: boolean | null;
   /** 当前本墩最大者是自己的对家（队友） */
-  leaderIsPartner?: boolean
+  leaderIsPartner?: boolean;
 }
 
 export default function PlayBar({
@@ -43,11 +43,11 @@ export default function PlayBar({
   canBeatCurrent = null,
   leaderIsPartner = false,
 }: PlayBarProps) {
-  const canPlay = selectedCount > 0 && reason === null
+  const canPlay = selectedCount > 0 && reason === null;
   // 打不过队友时不报警：换成中性颜色与柔和措辞
   const beatTone = canBeatCurrent
     ? '#2e7d32'
-    : leaderIsPartner ? '#7a7a7a' : '#c62828'
+    : leaderIsPartner ? '#7a7a7a' : '#c62828';
 
   return (
     <div style={{
@@ -168,5 +168,5 @@ export default function PlayBar({
         </button>
       </div>
     </div>
-  )
+  );
 }

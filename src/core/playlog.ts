@@ -20,129 +20,129 @@ import {
   Rank as R,
   Suit as S,
   teamOf,
-} from './types.ts'
-import { type Door, analyzeShape } from './hand.ts'
-import { trickPoints } from './scoring.ts'
+} from './types.ts';
+import { type Door, analyzeShape } from './hand.ts';
+import { trickPoints } from './scoring.ts';
 
 /** JSON 中的稳定卡牌 ID，如 "S5#0"、"J17#1" */
 export type JsonCardId = string
 
 /** shape 只记录非默认字段：单张就是 { type: "single" } */
 export interface ShapeRecord {
-  type: HandType
+  type: HandType;
   /** 省略 = 混门 / 垫牌 */
-  door?: Door
+  door?: Door;
   /** 只在无法由 type 推出且 > 0 时出现（含对子的甩牌） */
-  pairs?: number
+  pairs?: number;
   /** 省略 = 0 */
-  points?: number
+  points?: number;
 }
 
 /** 甩牌被拦：记录原本想甩的牌（不记录谁拦的） */
 export interface ThrowRecord {
-  blocked: boolean
-  attempted: JsonCardId[]
+  blocked: boolean;
+  attempted: JsonCardId[];
 }
 
 export interface PlayRecord {
-  player: PlayerPosition
+  player: PlayerPosition;
   /** 实际打出的牌 */
-  cards: JsonCardId[]
-  shape: ShapeRecord
-  throw?: ThrowRecord
+  cards: JsonCardId[];
+  shape: ShapeRecord;
+  throw?: ThrowRecord;
 }
 
 export interface ScoreAfter {
-  defending: number
-  banker: number
+  defending: number;
+  banker: number;
 }
 
 export interface TrickRecord {
   /** 显式领出者（读取方不应靠 plays[0] 推断） */
-  leadPlayer: PlayerPosition
+  leadPlayer: PlayerPosition;
   /** 以下四项在收墩后写入；进行中的最后一墩没有 */
-  winner?: PlayerPosition
-  winnerTeam?: Team
-  points?: number
-  scoreAfter?: ScoreAfter
-  plays: PlayRecord[]
+  winner?: PlayerPosition;
+  winnerTeam?: Team;
+  points?: number;
+  scoreAfter?: ScoreAfter;
+  plays: PlayRecord[];
 }
 
 export interface DealRecord {
-  mode: 'shuffle' | 'sameDeal'
-  seed?: number
-  hands: Record<PlayerPosition, JsonCardId[]>
-  bottom: JsonCardId[]
+  mode: 'shuffle' | 'sameDeal';
+  seed?: number;
+  hands: Record<PlayerPosition, JsonCardId[]>;
+  bottom: JsonCardId[];
 }
 
 export interface TrumpRecord {
-  suit: Suit | null
-  declaredBy: PlayerPosition
+  suit: Suit | null;
+  declaredBy: PlayerPosition;
   /** 报品；翻底定主为 null */
-  strength: 1 | 2 | 3 | 4 | null
-  cards: JsonCardId[]
-  decidedBy: 'bid' | 'bottomFlip'
+  strength: 1 | 2 | 3 | 4 | null;
+  cards: JsonCardId[];
+  decidedBy: 'bid' | 'bottomFlip';
   /** 亮主时已发出的总张数（0..100） */
-  atDealt: number
+  atDealt: number;
 }
 
 export interface BuriedRecord {
-  player: PlayerPosition
-  cards: JsonCardId[]
-  points: number
+  player: PlayerPosition;
+  cards: JsonCardId[];
+  points: number;
 }
 
 export interface BottomRecord {
-  taken: boolean
-  winner: PlayerPosition | null
-  tractorLength: number
-  multiplier: number
-  cardPoints: number
-  points: number
+  taken: boolean;
+  winner: PlayerPosition | null;
+  tractorLength: number;
+  multiplier: number;
+  cardPoints: number;
+  points: number;
 }
 
 export interface LevelChangeRecord {
-  upgradingTeam: Team
-  side: 'banker' | 'defender'
-  steps: number
-  switchBanker: boolean
+  upgradingTeam: Team;
+  side: 'banker' | 'defender';
+  steps: number;
+  switchBanker: boolean;
 }
 
 export interface RoundResult {
-  defendingPoints: number
-  bankerPoints: number
-  levelChange: LevelChangeRecord
-  fromLevel: Rank
-  toLevel: Rank
-  lapsGained: number
-  nextBanker: PlayerPosition
+  defendingPoints: number;
+  bankerPoints: number;
+  levelChange: LevelChangeRecord;
+  fromLevel: Rank;
+  toLevel: Rank;
+  lapsGained: number;
+  nextBanker: PlayerPosition;
 }
 
 export interface RoundRecord {
-  level: Rank
-  playerModes: Record<PlayerPosition, PlayerMode>
-  deal: DealRecord
-  trump?: TrumpRecord
-  buried?: BuriedRecord
-  tricks: TrickRecord[]
-  bottom?: BottomRecord
-  result?: RoundResult
+  level: Rank;
+  playerModes: Record<PlayerPosition, PlayerMode>;
+  deal: DealRecord;
+  trump?: TrumpRecord;
+  buried?: BuriedRecord;
+  tricks: TrickRecord[];
+  bottom?: BottomRecord;
+  result?: RoundResult;
 }
 
 export interface PlayLog {
-  schemaVersion: 1
-  gameId: string
-  appVersion?: string
-  rules: RuleOptions
-  startLevel: Rank
-  rounds: RoundRecord[]
+  schemaVersion: 1;
+  gameId: string;
+  appVersion?: string;
+  rules: RuleOptions;
+  startLevel: Rank;
+  rounds: RoundRecord[];
 }
 
 // ------------------------------------------------------------
 // 卡牌 ID
 // ------------------------------------------------------------
 
-const CARD_ID_RE = /^([SHCDJ])(\d+)#([01])$/
+const CARD_ID_RE = /^([SHCDJ])(\d+)#([01])$/;
 
 /**
  * 建立「运行时 card.id → 稳定 ID」的映射。
@@ -152,38 +152,38 @@ export function buildCardIdMap(
   hands: Record<PlayerPosition, Card[]>,
   bottom: Card[],
 ): Map<string, string> {
-  const map = new Map<string, string>()
-  const used = new Map<string, number>()
-  const all = [...ALL_POSITIONS.flatMap(pos => hands[pos]), ...bottom]
+  const map = new Map<string, string>();
+  const used = new Map<string, number>();
+  const all = [...ALL_POSITIONS.flatMap(pos => hands[pos]), ...bottom];
   for (const card of all) {
-    if (map.has(card.id)) continue
-    const face = `${card.suit}${card.rank}`
-    const copy = used.get(face) ?? 0
-    used.set(face, copy + 1)
-    map.set(card.id, `${face}#${copy}`)
+    if (map.has(card.id)) continue;
+    const face = `${card.suit}${card.rank}`;
+    const copy = used.get(face) ?? 0;
+    used.set(face, copy + 1);
+    map.set(card.id, `${face}#${copy}`);
   }
-  return map
+  return map;
 }
 
 export function encodeCardId(map: Map<string, string>, card: Card): string {
-  return map.get(card.id) ?? `${card.suit}${card.rank}#0`
+  return map.get(card.id) ?? `${card.suit}${card.rank}#0`;
 }
 
 export function encodeCards(map: Map<string, string>, cards: Card[]): string[] {
-  return cards.map(card => encodeCardId(map, card))
+  return cards.map(card => encodeCardId(map, card));
 }
 
 /** 稳定 ID → 展示用 Card（只用于渲染，不参与规则） */
 export function decodeCardId(id: string): Card {
-  const match = CARD_ID_RE.exec(id)
+  const match = CARD_ID_RE.exec(id);
   if (!match) {
-    return { id, suit: S.Spade, rank: R.Two }
+    return { id, suit: S.Spade, rank: R.Two };
   }
   return {
     id,
     suit: match[1] as Suit,
     rank: Number(match[2]) as Rank,
-  }
+  };
 }
 
 // ------------------------------------------------------------
@@ -195,21 +195,21 @@ export function makeShape(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): ShapeRecord {
-  const shape = analyzeShape(cards, trumpSuit, levelRank)
-  const record: ShapeRecord = { type: shape.type }
-  if (shape.door !== null) record.door = shape.door
+  const shape = analyzeShape(cards, trumpSuit, levelRank);
+  const record: ShapeRecord = { type: shape.type };
+  if (shape.door !== null) record.door = shape.door;
   if (shape.type === HandType.Throw && shape.pairs > 0) {
-    record.pairs = shape.pairs
+    record.pairs = shape.pairs;
   }
-  const points = trickPoints(cards)
-  if (points > 0) record.points = points
-  return record
+  const points = trickPoints(cards);
+  if (points > 0) record.points = points;
+  return record;
 }
 
 export function createRoundRecord(params: {
-  level: Rank
-  playerModes: Record<PlayerPosition, PlayerMode>
-  deal: DealRecord
+  level: Rank;
+  playerModes: Record<PlayerPosition, PlayerMode>;
+  deal: DealRecord;
 }): RoundRecord {
   return {
     level: params.level,
@@ -221,7 +221,7 @@ export function createRoundRecord(params: {
     tricks: [],
     bottom: undefined,
     result: undefined,
-  }
+  };
 }
 
 /**
@@ -240,23 +240,23 @@ export function appendPlay(
   cardIdMap: Map<string, string>,
 ): void {
   if (isLead || record.tricks.length === 0) {
-    record.tricks.push({ leadPlayer: player, plays: [] })
+    record.tricks.push({ leadPlayer: player, plays: [] });
   }
-  const trick = record.tricks[record.tricks.length - 1]
-  if (!trick) return
+  const trick = record.tricks[record.tricks.length - 1];
+  if (!trick) return;
 
   const play: PlayRecord = {
     player,
     cards: encodeCards(cardIdMap, cards),
     shape: makeShape(cards, trumpSuit, levelRank),
-  }
+  };
   if (isLead && throwAttempt.length > 0) {
     play.throw = {
       blocked: true,
       attempted: encodeCards(cardIdMap, throwAttempt),
-    }
+    };
   }
-  trick.plays.push(play)
+  trick.plays.push(play);
 }
 
 /** 收墩：补齐本墩结果（日志里最后一墩一定就是刚收的这墩） */
@@ -267,12 +267,12 @@ export function closeLastTrick(
   defendingPoints: number,
   bankerPoints: number,
 ): void {
-  const trick = record.tricks[record.tricks.length - 1]
-  if (!trick || trick.plays.length !== 4) return
-  trick.winner = winner
-  trick.winnerTeam = teamOf(winner)
-  trick.points = points
-  trick.scoreAfter = { defending: defendingPoints, banker: bankerPoints }
+  const trick = record.tricks[record.tricks.length - 1];
+  if (!trick || trick.plays.length !== 4) return;
+  trick.winner = winner;
+  trick.winnerTeam = teamOf(winner);
+  trick.points = points;
+  trick.scoreAfter = { defending: defendingPoints, banker: bankerPoints };
 }
 
 /**
@@ -287,21 +287,21 @@ export function truncateRecord(
   lastPlayCount: number,
   clearBuried: boolean,
 ): void {
-  record.tricks.length = Math.max(0, Math.min(record.tricks.length, trickCount))
-  const last = record.tricks[record.tricks.length - 1]
+  record.tricks.length = Math.max(0, Math.min(record.tricks.length, trickCount));
+  const last = record.tricks[record.tricks.length - 1];
   if (last && last.plays.length > lastPlayCount) {
-    last.plays.length = lastPlayCount
+    last.plays.length = lastPlayCount;
   }
   // 被缩短的最后一墩重新变成「进行中」：清掉已收墩的结果
   if (last && last.plays.length < 4) {
-    delete last.winner
-    delete last.winnerTeam
-    delete last.points
-    delete last.scoreAfter
+    delete last.winner;
+    delete last.winnerTeam;
+    delete last.points;
+    delete last.scoreAfter;
   }
-  delete record.bottom
-  delete record.result
-  if (clearBuried) delete record.buried
+  delete record.bottom;
+  delete record.result;
+  if (clearBuried) delete record.buried;
 }
 
 // ------------------------------------------------------------
@@ -309,11 +309,11 @@ export function truncateRecord(
 // ------------------------------------------------------------
 
 export function buildPlayLog(params: {
-  gameId: string
-  rules: RuleOptions
-  startLevel: Rank
-  record: RoundRecord | null
-  appVersion?: string
+  gameId: string;
+  rules: RuleOptions;
+  startLevel: Rank;
+  record: RoundRecord | null;
+  appVersion?: string;
 }): PlayLog {
   return {
     schemaVersion: 1,
@@ -322,7 +322,7 @@ export function buildPlayLog(params: {
     rules: { ...params.rules },
     startLevel: params.startLevel,
     rounds: params.record ? [params.record] : [],
-  }
+  };
 }
 
 /**
@@ -330,30 +330,30 @@ export function buildPlayLog(params: {
  * （不输出注释；注释只在手写文件里出现）
  */
 export function toJsonc(value: unknown): string {
-  const lines = JSON.stringify(value, null, 2).split('\n')
-  const out: string[] = []
+  const lines = JSON.stringify(value, null, 2).split('\n');
+  const out: string[] = [];
   for (const line of lines) {
-    const trimmed = line.trim()
+    const trimmed = line.trim();
     if ((trimmed === '}' || trimmed === ']') && out.length > 0) {
-      const prev = out[out.length - 1]
-      const prevTrimmed = prev.trim()
+      const prev = out[out.length - 1];
+      const prevTrimmed = prev.trim();
       if (
         !prevTrimmed.endsWith(',')
         && !prevTrimmed.endsWith('{')
         && !prevTrimmed.endsWith('[')
       ) {
-        out[out.length - 1] = `${prev},`
+        out[out.length - 1] = `${prev},`;
       }
     }
-    out.push(line)
+    out.push(line);
   }
-  return `${out.join('\n')}\n`
+  return `${out.join('\n')}\n`;
 }
 
 /** 默认严格 JSON；`jsonc` = 带尾逗号 */
 export function serializePlayLog(log: PlayLog, format: 'json' | 'jsonc'): string {
   return format === 'jsonc'
     ? toJsonc(log)
-    : `${JSON.stringify(log, null, 2)}\n`
+    : `${JSON.stringify(log, null, 2)}\n`;
 }
 

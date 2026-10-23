@@ -11,7 +11,7 @@ import {
   oppositeTeam,
   partnerOf,
   teamOf,
-} from './types.ts'
+} from './types.ts';
 
 /** 可打的等级列表（从小到大） */
 export const LEVEL_RANKS: readonly Rank[] = [
@@ -28,12 +28,12 @@ export const LEVEL_RANKS: readonly Rank[] = [
   Rank.Queen,
   Rank.King,
   Rank.Ace,
-]
+];
 
 /** 等级在 LEVEL_RANKS 中的索引 */
 const LEVEL_INDEX_MAP: Map<Rank, number> = new Map(
   LEVEL_RANKS.map((r, i) => [r, i]),
-)
+);
 
 /**
  * 等级管理器
@@ -41,39 +41,39 @@ const LEVEL_INDEX_MAP: Map<Rank, number> = new Map(
  */
 export class RankManager {
   /** 当前等级索引（0=打2，12=打A） */
-  private _index: number
+  private _index: number;
 
   constructor(startLevel: Rank = Rank.Two) {
-    const idx = LEVEL_INDEX_MAP.get(startLevel)
+    const idx = LEVEL_INDEX_MAP.get(startLevel);
     if (idx === undefined) {
-      throw new Error(`无效起始等级: ${RANK_NAME[startLevel]}`)
+      throw new Error(`无效起始等级: ${RANK_NAME[startLevel]}`);
     }
-    this._index = idx
+    this._index = idx;
   }
 
   /** 当前等级（如 Rank.Five = 打 5） */
   get currentLevel(): Rank {
-    return LEVEL_RANKS[this._index]
+    return LEVEL_RANKS[this._index];
   }
 
   /** 当前等级名称（如 "5"） */
   get currentLevelName(): string {
-    return RANK_NAME[this.currentLevel]
+    return RANK_NAME[this.currentLevel];
   }
 
   /** 当前等级在排行榜中的索引（0-based） */
   get index(): number {
-    return this._index
+    return this._index;
   }
 
   /** 是否已达到最高等级（A） */
   get isMaxLevel(): boolean {
-    return this._index >= LEVEL_RANKS.length - 1
+    return this._index >= LEVEL_RANKS.length - 1;
   }
 
   /** 是否已通关（打到 A 并胜利） */
   get isGameWon(): boolean {
-    return this._index >= LEVEL_RANKS.length
+    return this._index >= LEVEL_RANKS.length;
   }
 
   /**
@@ -82,29 +82,29 @@ export class RankManager {
    * @returns 实际升级的级数（可能因到达 A 后不足）
    */
   upgrade(steps: number): number {
-    const oldIndex = this._index
-    this._index = Math.min(this._index + steps, LEVEL_RANKS.length)
-    const actual = this._index - oldIndex
+    const oldIndex = this._index;
+    this._index = Math.min(this._index + steps, LEVEL_RANKS.length);
+    const actual = this._index - oldIndex;
 
     // 如果正好升到 A 之后，标记为通关
     if (this._index === LEVEL_RANKS.length && oldIndex < LEVEL_RANKS.length) {
       // 已经到达通关状态
     }
 
-    return actual
+    return actual;
   }
 
   /** 重置到指定等级 */
   reset(level: Rank = Rank.Two): void {
-    const idx = LEVEL_INDEX_MAP.get(level)
+    const idx = LEVEL_INDEX_MAP.get(level);
     if (idx !== undefined) {
-      this._index = idx
+      this._index = idx;
     }
   }
 
   /** 获取可读状态字符串 */
   toString(): string {
-    return `打 ${this.currentLevelName}`
+    return `打 ${this.currentLevelName}`;
   }
 }
 
@@ -124,13 +124,13 @@ export type LevelBoard = Record<Team, Rank>
  * 「新的一局」对话框可选起始级牌，两队的级牌始终相同。
  */
 export function initialLevelBoard(startLevel: Rank = Rank.Two): LevelBoard {
-  const level = LEVEL_INDEX_MAP.has(startLevel) ? startLevel : Rank.Two
-  return { [Team.NS]: level, [Team.EW]: level }
+  const level = LEVEL_INDEX_MAP.has(startLevel) ? startLevel : Rank.Two;
+  return { [Team.NS]: level, [Team.EW]: level };
 }
 
 /** 某队当前的级牌 */
 export function levelOf(board: LevelBoard, team: Team): Rank {
-  return board[team]
+  return board[team];
 }
 
 // ============================================================
@@ -145,30 +145,30 @@ export type LapBoard = Record<Team, number>
 
 /** 初始周目：两队都是第 1 周目 */
 export function initialLapBoard(): LapBoard {
-  return { [Team.NS]: 1, [Team.EW]: 1 }
+  return { [Team.NS]: 1, [Team.EW]: 1 };
 }
 
 /** 1 – 10 的繁体大写数字 */
 const LAP_NAMES_ZH: readonly string[] = [
   '壹', '貳', '參', '肆', '伍', '陸', '柒', '捌', '玖', '拾',
-]
+];
 
 /** 周目数的显示：1 – 10 用繁体大写数字，超过 10 用阿拉伯数字 */
 export function formatLap(lap: number): string {
-  const value = Math.max(1, Math.floor(lap))
+  const value = Math.max(1, Math.floor(lap));
   return value <= LAP_NAMES_ZH.length
     ? LAP_NAMES_ZH[value - 1]
-    : String(value)
+    : String(value);
 }
 
 /** 升级结果（纯规则，不含「谁升」） */
 export interface LevelChange {
   /** 升级方：'banker' = 庄家连庄升级；'defender' = 闲家上台升级 */
-  side: 'banker' | 'defender'
+  side: 'banker' | 'defender';
   /** 是否换庄（闲家方成为下局庄家方） */
-  switchBanker: boolean
+  switchBanker: boolean;
   /** 升级方升几级（0 = 只换庄、不升级） */
-  steps: number
+  steps: number;
 }
 
 /**
@@ -186,19 +186,19 @@ export interface LevelChange {
  */
 export function calculateLevelChange(defendingPoints: number): LevelChange {
   if (defendingPoints <= 0) {
-    return { side: 'banker', switchBanker: false, steps: 3 }
+    return { side: 'banker', switchBanker: false, steps: 3 };
   }
   if (defendingPoints < 40) {
-    return { side: 'banker', switchBanker: false, steps: 2 }
+    return { side: 'banker', switchBanker: false, steps: 2 };
   }
   if (defendingPoints < 80) {
-    return { side: 'banker', switchBanker: false, steps: 1 }
+    return { side: 'banker', switchBanker: false, steps: 1 };
   }
   return {
     side: 'defender',
     switchBanker: true,
     steps: Math.floor((defendingPoints - 80) / 40),
-  }
+  };
 }
 
 /**
@@ -212,36 +212,36 @@ export function advanceLevel(
   current: Rank,
   steps: number,
 ): { level: Rank; actualSteps: number; lapsGained: number } {
-  const from = LEVEL_INDEX_MAP.get(current) ?? 0
-  const total = from + Math.max(0, steps)
-  const lapsGained = Math.floor(total / LEVEL_RANKS.length)
-  const level = LEVEL_RANKS[total % LEVEL_RANKS.length]
+  const from = LEVEL_INDEX_MAP.get(current) ?? 0;
+  const total = from + Math.max(0, steps);
+  const lapsGained = Math.floor(total / LEVEL_RANKS.length);
+  const level = LEVEL_RANKS[total % LEVEL_RANKS.length];
   const actualSteps = lapsGained > 0
     ? LEVEL_RANKS.length - from // 升到 A 为止（展示用）
-    : Math.max(0, steps)
-  return { level, actualSteps, lapsGained }
+    : Math.max(0, steps);
+  return { level, actualSteps, lapsGained };
 }
 
 /** 一局的等级结算（含升级方、新级牌、下一局庄家） */
 export interface LevelSettlement extends LevelChange {
   /** 升级方（队伍） */
-  upgradingTeam: Team
+  upgradingTeam: Team;
   /** 升级前的级牌 */
-  fromLevel: Rank
+  fromLevel: Rank;
   /** 升级后的级牌 */
-  toLevel: Rank
+  toLevel: Rank;
   /** 实际升了几级（升过 A 时只算到 A，用于展示） */
-  actualSteps: number
+  actualSteps: number;
   /** 是否升过 A（= 完成一周目：级牌从 2 重新开始、周目 +1） */
-  lapUp: boolean
+  lapUp: boolean;
   /** 本次完成了几周目（一般 0 或 1） */
-  lapsGained: number
+  lapsGained: number;
   /**
    * 下一局庄家：
    *   - **连庄**（庄家方获胜）→ 换到原庄的**对家**（同队两人轮流坐庄）
    *   - **换庄**（闲家上台）  → 原庄的**下家**（座位顺序的下一家，必属上台方）
    */
-  nextBanker: PlayerPosition
+  nextBanker: PlayerPosition;
 }
 
 /**
@@ -258,13 +258,13 @@ export function settleLevel(
   banker: PlayerPosition,
   board: LevelBoard,
 ): LevelSettlement {
-  const change = calculateLevelChange(defendingPoints)
-  const bankerTeam = teamOf(banker)
+  const change = calculateLevelChange(defendingPoints);
+  const bankerTeam = teamOf(banker);
   const upgradingTeam = change.side === 'banker'
     ? bankerTeam
-    : oppositeTeam(bankerTeam)
-  const fromLevel = board[upgradingTeam]
-  const { level, actualSteps, lapsGained } = advanceLevel(fromLevel, change.steps)
+    : oppositeTeam(bankerTeam);
+  const fromLevel = board[upgradingTeam];
+  const { level, actualSteps, lapsGained } = advanceLevel(fromLevel, change.steps);
   return {
     ...change,
     upgradingTeam,
@@ -274,6 +274,6 @@ export function settleLevel(
     lapUp: lapsGained > 0,
     lapsGained,
     nextBanker: change.switchBanker ? nextPlayer(banker) : partnerOf(banker),
-  }
+  };
 }
 

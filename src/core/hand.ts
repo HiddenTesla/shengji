@@ -21,8 +21,8 @@ import {
   HandType as HT,
   Rank as R,
   Suit as S,
-} from './types.ts'
-import { isTrump } from './trump.ts'
+} from './types.ts';
+import { isTrump } from './trump.ts';
 
 // ------------------------------------------------------------
 // 门
@@ -37,12 +37,12 @@ export function doorOf(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): Door {
-  return isTrump(card, trumpSuit, levelRank) ? 'trump' : card.suit
+  return isTrump(card, trumpSuit, levelRank) ? 'trump' : card.suit;
 }
 
 /** 门的显示名 */
 export function doorLabel(door: Door): string {
-  return door === 'trump' ? '主牌' : SUIT_SYMBOL[door]
+  return door === 'trump' ? '主牌' : SUIT_SYMBOL[door];
 }
 
 // ------------------------------------------------------------
@@ -53,11 +53,11 @@ export function doorLabel(door: Door): string {
 const BASE_RANKS: readonly Rank[] = [
   R.Two, R.Three, R.Four, R.Five, R.Six, R.Seven, R.Eight,
   R.Nine, R.Ten, R.Jack, R.Queen, R.King, R.Ace,
-]
+];
 
 /** 去掉级牌后的点数序列（升序）——级牌从副花色中抽走后，两侧视为相邻（搭桥） */
 function levelFreeRanks(levelRank: Rank): Rank[] {
-  return BASE_RANKS.filter(r => r !== levelRank)
+  return BASE_RANKS.filter(r => r !== levelRank);
 }
 
 /**
@@ -74,22 +74,22 @@ export function slotOf(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  const lf = levelFreeRanks(levelRank)
-  const isLevel = card.rank === levelRank
+  const lf = levelFreeRanks(levelRank);
+  const isLevel = card.rank === levelRank;
 
   if (card.suit === S.Joker) {
     if (trumpSuit === null) {
-      return card.rank === R.BigJoker ? 2 : 1
+      return card.rank === R.BigJoker ? 2 : 1;
     }
-    return card.rank === R.BigJoker ? lf.length + 3 : lf.length + 2
+    return card.rank === R.BigJoker ? lf.length + 3 : lf.length + 2;
   }
 
   if (isLevel) {
-    if (trumpSuit === null) return 0
-    return card.suit === trumpSuit ? lf.length + 1 : lf.length
+    if (trumpSuit === null) return 0;
+    return card.suit === trumpSuit ? lf.length + 1 : lf.length;
   }
 
-  return lf.indexOf(card.rank)
+  return lf.indexOf(card.rank);
 }
 
 /** 按「门内强弱」升序排序（副牌在前、主牌在后，用于 AI 出小牌） */
@@ -99,14 +99,14 @@ export function sortByStrengthAsc(
   levelRank: Rank,
 ): Card[] {
   return [...cards].sort((a, b) => {
-    const at = a.suit === S.Joker || isTrump(a, trumpSuit, levelRank) ? 1 : 0
-    const bt = b.suit === S.Joker || isTrump(b, trumpSuit, levelRank) ? 1 : 0
-    if (at !== bt) return at - bt
-    const as = slotOf(a, trumpSuit, levelRank)
-    const bs = slotOf(b, trumpSuit, levelRank)
-    if (as !== bs) return as - bs
-    return a.rank - b.rank
-  })
+    const at = a.suit === S.Joker || isTrump(a, trumpSuit, levelRank) ? 1 : 0;
+    const bt = b.suit === S.Joker || isTrump(b, trumpSuit, levelRank) ? 1 : 0;
+    if (at !== bt) return at - bt;
+    const as = slotOf(a, trumpSuit, levelRank);
+    const bs = slotOf(b, trumpSuit, levelRank);
+    if (as !== bs) return as - bs;
+    return a.rank - b.rank;
+  });
 }
 
 // ------------------------------------------------------------
@@ -115,19 +115,19 @@ export function sortByStrengthAsc(
 
 /** 一手牌的构成 */
 export interface HandShape {
-  type: HandType
+  type: HandType;
   /** 所属门；null 表示混门（非法） */
-  door: Door | null
-  count: number
+  door: Door | null;
+  count: number;
   /** 含有的对子数 */
-  pairs: number
+  pairs: number;
   /** 拖拉机长度（对数）；0 = 非拖拉机 */
-  tractor: number
+  tractor: number;
 }
 
 interface PairUnit {
-  slot: number
-  cards: Card[]
+  slot: number;
+  cards: Card[];
 }
 
 /** 把牌拆成「对子单元」（同花色同点数 2 张） */
@@ -136,37 +136,37 @@ function pairUnits(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): PairUnit[] {
-  const byKey = new Map<string, Card[]>()
+  const byKey = new Map<string, Card[]>();
   for (const c of cards) {
-    const k = `${c.suit}|${c.rank}`
-    const arr = byKey.get(k) ?? []
-    arr.push(c)
-    byKey.set(k, arr)
+    const k = `${c.suit}|${c.rank}`;
+    const arr = byKey.get(k) ?? [];
+    arr.push(c);
+    byKey.set(k, arr);
   }
-  const units: PairUnit[] = []
+  const units: PairUnit[] = [];
   for (const arr of byKey.values()) {
     if (arr.length >= 2) {
-      units.push({ slot: slotOf(arr[0], trumpSuit, levelRank), cards: arr.slice(0, 2) })
+      units.push({ slot: slotOf(arr[0], trumpSuit, levelRank), cards: arr.slice(0, 2) });
     }
   }
-  return units
+  return units;
 }
 
 /** 在给定对子单元中找一段「连续槽位」的拖拉机 */
 function findTractorRun(units: PairUnit[], length: number): PairUnit[] | null {
-  if (length < 2 || units.length < length) return null
-  const sorted = [...units].sort((a, b) => a.slot - b.slot)
+  if (length < 2 || units.length < length) return null;
+  const sorted = [...units].sort((a, b) => a.slot - b.slot);
   for (let i = 0; i + length <= sorted.length; i++) {
-    let ok = true
+    let ok = true;
     for (let j = 1; j < length; j++) {
       if (sorted[i + j].slot !== sorted[i + j - 1].slot + 1) {
-        ok = false
-        break
+        ok = false;
+        break;
       }
     }
-    if (ok) return sorted.slice(i, i + length)
+    if (ok) return sorted.slice(i, i + length);
   }
-  return null
+  return null;
 }
 
 /**
@@ -179,15 +179,15 @@ export function maxPairRunLength(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  const units = pairUnits(cards, trumpSuit, levelRank)
-  const slots = [...new Set(units.map(u => u.slot))].sort((a, b) => a - b)
-  let best = 0
-  let cur = 0
+  const units = pairUnits(cards, trumpSuit, levelRank);
+  const slots = [...new Set(units.map(u => u.slot))].sort((a, b) => a - b);
+  let best = 0;
+  let cur = 0;
   for (let i = 0; i < slots.length; i++) {
-    cur = (i > 0 && slots[i] === slots[i - 1] + 1) ? cur + 1 : 1
-    if (cur > best) best = cur
+    cur = (i > 0 && slots[i] === slots[i - 1] + 1) ? cur + 1 : 1;
+    if (cur > best) best = cur;
   }
-  return best
+  return best;
 }
 
 /** 该门手牌里最长的拖拉机长度（对数）；不足 2 返回 0 */
@@ -196,8 +196,8 @@ export function maxTractorLength(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  const best = maxPairRunLength(cards, trumpSuit, levelRank)
-  return best >= 2 ? best : 0
+  const best = maxPairRunLength(cards, trumpSuit, levelRank);
+  return best >= 2 ? best : 0;
 }
 
 // ------------------------------------------------------------
@@ -208,9 +208,9 @@ export function maxTractorLength(
 export type HandMarkKind = 'pair' | 'tractor'
 
 export interface HandMark {
-  kind: HandMarkKind
+  kind: HandMarkKind;
   /** 所在连续对子段的长度（对数）：1 = 单独对子，≥2 = 拖拉机 */
-  runLength: number
+  runLength: number;
 }
 
 /**
@@ -225,49 +225,49 @@ export function handMarks(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): Map<string, HandMark> {
-  const marks = new Map<string, HandMark>()
+  const marks = new Map<string, HandMark>();
 
-  const byDoor = new Map<Door, Card[]>()
+  const byDoor = new Map<Door, Card[]>();
   for (const c of cards) {
-    const door = doorOf(c, trumpSuit, levelRank)
-    const arr = byDoor.get(door)
-    if (arr) arr.push(c)
-    else byDoor.set(door, [c])
+    const door = doorOf(c, trumpSuit, levelRank);
+    const arr = byDoor.get(door);
+    if (arr) arr.push(c);
+    else byDoor.set(door, [c]);
   }
 
   for (const doorCards of byDoor.values()) {
-    const units = pairUnits(doorCards, trumpSuit, levelRank)
-    if (units.length === 0) continue
+    const units = pairUnits(doorCards, trumpSuit, levelRank);
+    if (units.length === 0) continue;
 
     // 同一槽位只取一个单元参与「连续段」判定
-    const firstOfSlot = new Map<number, PairUnit>()
+    const firstOfSlot = new Map<number, PairUnit>();
     for (const unit of units) {
-      if (!firstOfSlot.has(unit.slot)) firstOfSlot.set(unit.slot, unit)
+      if (!firstOfSlot.has(unit.slot)) firstOfSlot.set(unit.slot, unit);
     }
-    const slots = [...firstOfSlot.keys()].sort((a, b) => a - b)
+    const slots = [...firstOfSlot.keys()].sort((a, b) => a - b);
 
-    let i = 0
+    let i = 0;
     while (i < slots.length) {
-      let j = i
-      while (j + 1 < slots.length && slots[j + 1] === slots[j] + 1) j++
-      const runLength = j - i + 1
-      const kind: HandMarkKind = runLength >= 2 ? 'tractor' : 'pair'
+      let j = i;
+      while (j + 1 < slots.length && slots[j + 1] === slots[j] + 1) j++;
+      const runLength = j - i + 1;
+      const kind: HandMarkKind = runLength >= 2 ? 'tractor' : 'pair';
       for (let k = i; k <= j; k++) {
-        const unit = firstOfSlot.get(slots[k])
-        if (!unit) continue
-        for (const c of unit.cards) marks.set(c.id, { kind, runLength })
+        const unit = firstOfSlot.get(slots[k]);
+        if (!unit) continue;
+        for (const c of unit.cards) marks.set(c.id, { kind, runLength });
       }
-      i = j + 1
+      i = j + 1;
     }
 
     // 同槽位的其它对子（不同花色的副级牌）：只算单独的对子
     for (const unit of units) {
-      if (firstOfSlot.get(unit.slot) === unit) continue
-      for (const c of unit.cards) marks.set(c.id, { kind: 'pair', runLength: 1 })
+      if (firstOfSlot.get(unit.slot) === unit) continue;
+      for (const c of unit.cards) marks.set(c.id, { kind: 'pair', runLength: 1 });
     }
   }
 
-  return marks
+  return marks;
 }
 
 /** 分析一手牌的构成 */
@@ -276,34 +276,34 @@ export function analyzeShape(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): HandShape {
-  const count = cards.length
+  const count = cards.length;
   if (count === 0) {
-    return { type: HT.Throw, door: null, count: 0, pairs: 0, tractor: 0 }
+    return { type: HT.Throw, door: null, count: 0, pairs: 0, tractor: 0 };
   }
 
-  const door = doorOf(cards[0], trumpSuit, levelRank)
-  const mixed = cards.some(c => doorOf(c, trumpSuit, levelRank) !== door)
+  const door = doorOf(cards[0], trumpSuit, levelRank);
+  const mixed = cards.some(c => doorOf(c, trumpSuit, levelRank) !== door);
   if (mixed) {
-    return { type: HT.Throw, door: null, count, pairs: 0, tractor: 0 }
+    return { type: HT.Throw, door: null, count, pairs: 0, tractor: 0 };
   }
 
-  const units = pairUnits(cards, trumpSuit, levelRank)
-  const pairs = units.length
+  const units = pairUnits(cards, trumpSuit, levelRank);
+  const pairs = units.length;
 
   // 全部由对子组成且连续 → 拖拉机
-  let tractor = 0
-  const allPairs = count % 2 === 0 && pairs === count / 2
+  let tractor = 0;
+  const allPairs = count % 2 === 0 && pairs === count / 2;
   if (allPairs && pairs >= 2) {
-    if (findTractorRun(units, pairs)) tractor = pairs
+    if (findTractorRun(units, pairs)) tractor = pairs;
   }
 
-  let type: HandType
-  if (count === 1) type = HT.Single
-  else if (count === 2 && pairs === 1) type = HT.Pair
-  else if (tractor >= 2) type = HT.Tractor
-  else type = HT.Throw
+  let type: HandType;
+  if (count === 1) type = HT.Single;
+  else if (count === 2 && pairs === 1) type = HT.Pair;
+  else if (tractor >= 2) type = HT.Tractor;
+  else type = HT.Throw;
 
-  return { type, door, count, pairs, tractor }
+  return { type, door, count, pairs, tractor };
 }
 
 // ------------------------------------------------------------
@@ -313,15 +313,15 @@ export function analyzeShape(
 /** 同门内一段连续对子：长度 1 = 独立对子，长度 ≥2 = 拖拉机 */
 interface SlotRun {
   /** 连续槽位个数（即对子数） */
-  length: number
+  length: number;
   /** 起始（最小）槽位 */
-  minSlot: number
+  minSlot: number;
   /** 末尾（最大）槽位 */
-  maxSlot: number
+  maxSlot: number;
   /** 该段包含的牌（按槽位升序；长度 1 为 2 张，长度 L 为 2L 张） */
-  cards: Card[]
+  cards: Card[];
   /** 代表牌（用于提示信息） */
-  sample: Card
+  sample: Card;
 }
 
 /**
@@ -329,39 +329,39 @@ interface SlotRun {
  * 同槽位的不同花色副级牌只保留一个（与 maxTractorLength 一致：不算连续）。
  */
 function slotRuns(units: PairUnit[]): SlotRun[] {
-  const bySlot = new Map<number, PairUnit>()
+  const bySlot = new Map<number, PairUnit>();
   for (const u of units) {
-    if (!bySlot.has(u.slot)) bySlot.set(u.slot, u)
+    if (!bySlot.has(u.slot)) bySlot.set(u.slot, u);
   }
-  const slots = [...bySlot.keys()].sort((a, b) => a - b)
-  const runs: SlotRun[] = []
-  let start = 0
+  const slots = [...bySlot.keys()].sort((a, b) => a - b);
+  const runs: SlotRun[] = [];
+  let start = 0;
   for (let i = 1; i <= slots.length; i++) {
     if (i === slots.length || slots[i] !== slots[i - 1] + 1) {
-      const runUnits = slots.slice(start, i).map(sl => bySlot.get(sl)!)
+      const runUnits = slots.slice(start, i).map(sl => bySlot.get(sl)!);
       runs.push({
         length: i - start,
         minSlot: slots[start],
         maxSlot: slots[i - 1],
         cards: runUnits.flatMap(u => u.cards),
         sample: runUnits[0].cards[0],
-      })
-      start = i
+      });
+      start = i;
     }
   }
-  return runs
+  return runs;
 }
 
 /** 拖拉机强弱比较：长度优先（越长越大），同长度比点数 */
 function tractorBigger(a: SlotRun, b: SlotRun): boolean {
-  return a.length !== b.length ? a.length > b.length : a.maxSlot > b.maxSlot
+  return a.length !== b.length ? a.length > b.length : a.maxSlot > b.maxSlot;
 }
 
 /** 甩牌被拦时的「自动出小」结果 */
 export interface ThrowFallback {
   /** 改为实际出这个组 */
-  cards: Card[]
-  group: 'single' | 'pair' | 'tractor'
+  cards: Card[];
+  group: 'single' | 'pair' | 'tractor';
 }
 
 /**
@@ -388,37 +388,37 @@ export function throwFallback(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): ThrowFallback | null {
-  const door = analyzeShape(cards, trumpSuit, levelRank).door
-  if (door === null) return null
+  const door = analyzeShape(cards, trumpSuit, levelRank).door;
+  if (door === null) return null;
 
-  const slot = (c: Card) => slotOf(c, trumpSuit, levelRank)
-  const units = pairUnits(cards, trumpSuit, levelRank)
-  const pairedIds = new Set(units.flatMap(u => u.cards.map(c => c.id)))
-  const singles = cards.filter(c => !pairedIds.has(c.id))
-  const runs = slotRuns(units)
-  const alonePairs = runs.filter(r => r.length === 1)
-  const tractors = runs.filter(r => r.length >= 2)
+  const slot = (c: Card) => slotOf(c, trumpSuit, levelRank);
+  const units = pairUnits(cards, trumpSuit, levelRank);
+  const pairedIds = new Set(units.flatMap(u => u.cards.map(c => c.id)));
+  const singles = cards.filter(c => !pairedIds.has(c.id));
+  const runs = slotRuns(units);
+  const alonePairs = runs.filter(r => r.length === 1);
+  const tractors = runs.filter(r => r.length >= 2);
 
   const oppInDoor = opponents.map(h =>
-    h.filter(c => doorOf(c, trumpSuit, levelRank) === door))
-  const oppPairs = oppInDoor.flatMap(h => pairUnits(h, trumpSuit, levelRank))
+    h.filter(c => doorOf(c, trumpSuit, levelRank) === door));
+  const oppPairs = oppInDoor.flatMap(h => pairUnits(h, trumpSuit, levelRank));
   const oppTractors = oppInDoor.flatMap(h =>
-    slotRuns(pairUnits(h, trumpSuit, levelRank)).filter(r => r.length >= 2))
+    slotRuns(pairUnits(h, trumpSuit, levelRank)).filter(r => r.length >= 2));
 
   // 1) 单张：有更大的牌 → 被拦，取最小的被拦单张
   const blockedSingles = singles
     .filter(s => oppInDoor.some(h => h.some(c => slot(c) > slot(s))))
-    .sort((a, b) => slot(a) - slot(b))
+    .sort((a, b) => slot(a) - slot(b));
   if (blockedSingles.length > 0) {
-    return { cards: [blockedSingles[0]], group: 'single' }
+    return { cards: [blockedSingles[0]], group: 'single' };
   }
 
   // 2) 独立对子：有更大的对子 → 被拦，取最小的被拦对子
   const blockedPairs = alonePairs
     .filter(p => oppPairs.some(u => u.slot > p.maxSlot))
-    .sort((a, b) => a.maxSlot - b.maxSlot)
+    .sort((a, b) => a.maxSlot - b.maxSlot);
   if (blockedPairs.length > 0) {
-    return { cards: [...blockedPairs[0].cards], group: 'pair' }
+    return { cards: [...blockedPairs[0].cards], group: 'pair' };
   }
 
   // 3) 拖拉机：有更大（更长，或同长更大）的拖拉机 → 被拦，取最小的被拦拖拉机
@@ -426,12 +426,12 @@ export function throwFallback(
     .filter(t => oppTractors.some(r => tractorBigger(r, t)))
     .sort((a, b) => (a.length !== b.length
       ? a.length - b.length
-      : a.maxSlot - b.maxSlot))
+      : a.maxSlot - b.maxSlot));
   if (blockedTractors.length > 0) {
-    return { cards: [...blockedTractors[0].cards], group: 'tractor' }
+    return { cards: [...blockedTractors[0].cards], group: 'tractor' };
   }
 
-  return null
+  return null;
 }
 
 // ------------------------------------------------------------
@@ -439,8 +439,8 @@ export function throwFallback(
 // ------------------------------------------------------------
 
 export interface PlayValidation {
-  ok: boolean
-  reason?: string
+  ok: boolean;
+  reason?: string;
 }
 
 /**
@@ -455,12 +455,12 @@ export function validateLead(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): PlayValidation {
-  if (cards.length === 0) return { ok: false, reason: '请先选牌' }
-  const shape = analyzeShape(cards, trumpSuit, levelRank)
+  if (cards.length === 0) return { ok: false, reason: '请先选牌' };
+  const shape = analyzeShape(cards, trumpSuit, levelRank);
   if (shape.door === null) {
-    return { ok: false, reason: '领出必须同一门（主牌算一门）' }
+    return { ok: false, reason: '领出必须同一门（主牌算一门）' };
   }
-  return { ok: true }
+  return { ok: true };
 }
 
 /**
@@ -478,28 +478,28 @@ function checkGroup(
   levelRank: Rank,
   doorName: string,
 ): PlayValidation {
-  const need = played.length
-  const availUnits = pairUnits(available, trumpSuit, levelRank)
-  const playedUnits = pairUnits(played, trumpSuit, levelRank)
-  const maxPairsFit = Math.floor(need / 2)
+  const need = played.length;
+  const availUnits = pairUnits(available, trumpSuit, levelRank);
+  const playedUnits = pairUnits(played, trumpSuit, levelRank);
+  const maxPairsFit = Math.floor(need / 2);
 
   // 有对必对
-  const needPairs = Math.min(leadPairs, availUnits.length, maxPairsFit)
+  const needPairs = Math.min(leadPairs, availUnits.length, maxPairsFit);
   if (playedUnits.length < needPairs) {
-    return { ok: false, reason: `${doorName}内有对子，必须跟对子` }
+    return { ok: false, reason: `${doorName}内有对子，必须跟对子` };
   }
 
   // 有拖必拖（仅在"出得下"时才要求；且手里确实有同长度拖拉机）
   if (leadTractor >= 2 && need >= leadTractor * 2) {
     if (findTractorRun(availUnits, leadTractor)) {
-      const playedTractor = maxTractorLength(played, trumpSuit, levelRank)
+      const playedTractor = maxTractorLength(played, trumpSuit, levelRank);
       if (playedTractor < leadTractor) {
-        return { ok: false, reason: `${doorName}内有${leadTractor}连对，必须跟拖拉机` }
+        return { ok: false, reason: `${doorName}内有${leadTractor}连对，必须跟拖拉机` };
       }
     }
   }
 
-  return { ok: true }
+  return { ok: true };
 }
 
 /** 跟牌校验 */
@@ -510,26 +510,26 @@ export function validateFollow(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): PlayValidation {
-  if (cards.length === 0) return { ok: false, reason: '请先选牌' }
+  if (cards.length === 0) return { ok: false, reason: '请先选牌' };
   if (cards.length !== lead.count) {
-    return { ok: false, reason: `需出 ${lead.count} 张` }
+    return { ok: false, reason: `需出 ${lead.count} 张` };
   }
   if (lead.door === null) {
-    return { ok: false, reason: '首出门不明' }
+    return { ok: false, reason: '首出门不明' };
   }
 
-  const door = lead.door
-  const name = doorLabel(door)
-  const handInDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
-  const playedInDoor = cards.filter(c => doorOf(c, trumpSuit, levelRank) === door)
-  const playedOutDoor = cards.filter(c => doorOf(c, trumpSuit, levelRank) !== door)
+  const door = lead.door;
+  const name = doorLabel(door);
+  const handInDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door);
+  const playedInDoor = cards.filter(c => doorOf(c, trumpSuit, levelRank) === door);
+  const playedOutDoor = cards.filter(c => doorOf(c, trumpSuit, levelRank) !== door);
 
   // ---- 该门足够：必须全部跟该门 ----
   if (handInDoor.length >= lead.count) {
     if (playedOutDoor.length > 0) {
-      return { ok: false, reason: `手上还有${name}，必须跟${name}` }
+      return { ok: false, reason: `手上还有${name}，必须跟${name}` };
     }
-    return checkGroup(playedInDoor, handInDoor, lead.pairs, lead.tractor, trumpSuit, levelRank, name)
+    return checkGroup(playedInDoor, handInDoor, lead.pairs, lead.tractor, trumpSuit, levelRank, name);
   }
 
   // ---- 该门不足：必须出完该门，补牌可任意垫 / 毙 ----
@@ -537,12 +537,12 @@ export function validateFollow(
     return {
       ok: false,
       reason: `必须先出完手上的${name}（共 ${handInDoor.length} 张）`,
-    }
+    };
   }
 
   // 补牌（其余张数）不限：可垫任意牌，也可用主牌毙。
   // 是否「毙」成功由 trick.ts 按牌型/大小判定：想大出必须用主牌同型毙。
-  return { ok: true }
+  return { ok: true };
 }
 
 // ------------------------------------------------------------
@@ -551,26 +551,26 @@ export function validateFollow(
 
 /** 该门内全部长度为 length 的连续对子段（滑动窗口） */
 function tractorWindows(units: PairUnit[], length: number): PairUnit[][] {
-  if (length < 2) return []
-  const bySlot = new Map<number, PairUnit>()
+  if (length < 2) return [];
+  const bySlot = new Map<number, PairUnit>();
   for (const u of units) {
-    if (!bySlot.has(u.slot)) bySlot.set(u.slot, u)
+    if (!bySlot.has(u.slot)) bySlot.set(u.slot, u);
   }
-  const slots = [...bySlot.keys()].sort((a, b) => a - b)
-  const windows: PairUnit[][] = []
+  const slots = [...bySlot.keys()].sort((a, b) => a - b);
+  const windows: PairUnit[][] = [];
   for (let i = 0; i + length <= slots.length; i++) {
-    let ok = true
+    let ok = true;
     for (let j = 1; j < length; j++) {
       if (slots[i + j] !== slots[i + j - 1] + 1) {
-        ok = false
-        break
+        ok = false;
+        break;
       }
     }
     if (ok) {
-      windows.push(slots.slice(i, i + length).map(sl => bySlot.get(sl)!))
+      windows.push(slots.slice(i, i + length).map(sl => bySlot.get(sl)!));
     }
   }
-  return windows
+  return windows;
 }
 
 /**
@@ -591,55 +591,55 @@ export function mandatoryFollowCards(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): Card[] {
-  if (lead.door === null || lead.count <= 0) return []
-  const need = lead.count
+  if (lead.door === null || lead.count <= 0) return [];
+  const need = lead.count;
 
   // 最后一手：出完即空手 → 手上所有牌都必须出（即使不属同一门）
-  if (hand.length === need) return [...hand]
+  if (hand.length === need) return [...hand];
 
-  const door = lead.door
-  const handInDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
-  const forced = new Map<string, Card>()
+  const door = lead.door;
+  const handInDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door);
+  const forced = new Map<string, Card>();
   const add = (cards: Card[]) => {
-    for (const c of cards) forced.set(c.id, c)
-  }
+    for (const c of cards) forced.set(c.id, c);
+  };
 
   /** 对「某一组可用牌」推导唯一对子（与 validateFollow 的 checkGroup 一致） */
   const addPairsForced = (available: Card[], groupNeed: number) => {
-    const units = pairUnits(available, trumpSuit, levelRank)
-    const needPairs = Math.min(lead.pairs, units.length, Math.floor(groupNeed / 2))
+    const units = pairUnits(available, trumpSuit, levelRank);
+    const needPairs = Math.min(lead.pairs, units.length, Math.floor(groupNeed / 2));
     if (needPairs > 0 && units.length === needPairs) {
-      add(units.flatMap(u => u.cards))
+      add(units.flatMap(u => u.cards));
     }
-  }
+  };
 
   /** 对「某一组可用牌」推导必出的拖拉机（多个窗口取交集） */
   const addTractorForced = (available: Card[], groupNeed: number) => {
-    if (lead.tractor < 2 || groupNeed < lead.tractor * 2) return
-    const units = pairUnits(available, trumpSuit, levelRank)
-    const windows = tractorWindows(units, lead.tractor)
-    if (windows.length === 0) return
-    const commonIds = new Set(windows[0].flatMap(u => u.cards.map(c => c.id)))
+    if (lead.tractor < 2 || groupNeed < lead.tractor * 2) return;
+    const units = pairUnits(available, trumpSuit, levelRank);
+    const windows = tractorWindows(units, lead.tractor);
+    if (windows.length === 0) return;
+    const commonIds = new Set(windows[0].flatMap(u => u.cards.map(c => c.id)));
     for (const id of [...commonIds]) {
       const inAll = windows.every(win =>
-        win.some(u => u.cards.some(c => c.id === id)))
-      if (!inAll) commonIds.delete(id)
+        win.some(u => u.cards.some(c => c.id === id)));
+      if (!inAll) commonIds.delete(id);
     }
     add(windows[0]
       .flatMap(u => u.cards)
-      .filter(c => commonIds.has(c.id)))
-  }
+      .filter(c => commonIds.has(c.id)));
+  };
 
   // 该门不足或正好够：该门所有牌都必须打掉；补牌可任意选
   if (handInDoor.length <= need) {
-    add(handInDoor)
-    return [...forced.values()]
+    add(handInDoor);
+    return [...forced.values()];
   }
 
   // 该门够：只有「唯一对子 / 唯一拖拉机」是必出的
-  addPairsForced(handInDoor, need)
-  addTractorForced(handInDoor, need)
-  return [...forced.values()]
+  addPairsForced(handInDoor, need);
+  addTractorForced(handInDoor, need);
+  return [...forced.values()];
 }
 
 // ------------------------------------------------------------
@@ -656,44 +656,44 @@ function pickForGroup(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): Card[] {
-  const picked: Card[] = []
-  const rest = [...group]
+  const picked: Card[] = [];
+  const rest = [...group];
   const take = (cs: Card[]) => {
-    const ids = new Set(cs.map(c => c.id))
+    const ids = new Set(cs.map(c => c.id));
     for (let i = rest.length - 1; i >= 0; i--) {
-      if (ids.has(rest[i].id)) rest.splice(i, 1)
+      if (ids.has(rest[i].id)) rest.splice(i, 1);
     }
-    picked.push(...cs)
-  }
+    picked.push(...cs);
+  };
 
-  const availUnits = pairUnits(available, trumpSuit, levelRank)
+  const availUnits = pairUnits(available, trumpSuit, levelRank);
 
   // 1) 拖拉机
   if (leadTractor >= 2 && need >= leadTractor * 2) {
-    const unitsInGroup = pairUnits(group, trumpSuit, levelRank)
-    const run = findTractorRun(unitsInGroup, leadTractor)
-    if (run) take(run.flatMap(u => u.cards))
+    const unitsInGroup = pairUnits(group, trumpSuit, levelRank);
+    const run = findTractorRun(unitsInGroup, leadTractor);
+    if (run) take(run.flatMap(u => u.cards));
   }
 
   // 2) 对子
   if (picked.length === 0 && leadPairs >= 1) {
-    const needPairs = Math.min(leadPairs, availUnits.length, Math.floor(need / 2))
+    const needPairs = Math.min(leadPairs, availUnits.length, Math.floor(need / 2));
     if (needPairs > 0) {
       const unitsInGroup = pairUnits(group, trumpSuit, levelRank)
-        .sort((a, b) => a.slot - b.slot)
+        .sort((a, b) => a.slot - b.slot);
       for (let i = 0; i < needPairs && i < unitsInGroup.length; i++) {
-        take(unitsInGroup[i].cards)
+        take(unitsInGroup[i].cards);
       }
     }
   }
 
   // 3) 单张补齐（从小到大）
   for (const c of sortByStrengthAsc(rest, trumpSuit, levelRank)) {
-    if (picked.length >= need) break
-    picked.push(c)
+    if (picked.length >= need) break;
+    picked.push(c);
   }
 
-  return picked.slice(0, need)
+  return picked.slice(0, need);
 }
 
 /** AI 领出：优先出副牌中最小的一张 */
@@ -702,10 +702,10 @@ export function chooseLead(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): Card[] {
-  const side = hand.filter(c => doorOf(c, trumpSuit, levelRank) !== 'trump')
-  const pool = side.length > 0 ? side : hand
-  const sorted = sortByStrengthAsc(pool, trumpSuit, levelRank)
-  return sorted.length > 0 ? [sorted[0]] : []
+  const side = hand.filter(c => doorOf(c, trumpSuit, levelRank) !== 'trump');
+  const pool = side.length > 0 ? side : hand;
+  const sorted = sortByStrengthAsc(pool, trumpSuit, levelRank);
+  return sorted.length > 0 ? [sorted[0]] : [];
 }
 
 /** AI 跟牌：构造一手合法牌 */
@@ -715,57 +715,57 @@ export function chooseFollow(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): Card[] {
-  const door = lead.door
-  if (door === null) return []
+  const door = lead.door;
+  if (door === null) return [];
 
-  const need = lead.count
-  const handInDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
+  const need = lead.count;
+  const handInDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door);
 
   // 该门足够
   if (handInDoor.length >= need) {
     return pickForGroup(
       handInDoor, handInDoor, need,
       lead.pairs, lead.tractor, trumpSuit, levelRank,
-    )
+    );
   }
 
   // 该门不足：全部出完 + 补齐（补齐优先垫副牌，想大出再用主牌毙）
-  const picked = [...handInDoor]
-  const restNeed = need - handInDoor.length
-  const outDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) !== door)
+  const picked = [...handInDoor];
+  const restNeed = need - handInDoor.length;
+  const outDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) !== door);
   const sideFill = sortByStrengthAsc(
     outDoor.filter(c => doorOf(c, trumpSuit, levelRank) !== 'trump'),
     trumpSuit, levelRank,
-  )
-  const trumpFill = outDoor.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump')
+  );
+  const trumpFill = outDoor.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump');
 
-  const sideTaken = sideFill.slice(0, restNeed)
-  picked.push(...sideTaken)
+  const sideTaken = sideFill.slice(0, restNeed);
+  picked.push(...sideTaken);
 
-  const remain = restNeed - sideTaken.length
+  const remain = restNeed - sideTaken.length;
   if (remain > 0) {
-    const handTrump = hand.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump')
+    const handTrump = hand.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump');
     picked.push(...pickForGroup(
       trumpFill, handTrump, remain,
       lead.pairs, lead.tractor, trumpSuit, levelRank,
-    ))
+    ));
   }
 
   // 兜底：保证张数正好等于首出张数
   if (picked.length < need) {
-    const pickedIds = new Set(picked.map(c => c.id))
+    const pickedIds = new Set(picked.map(c => c.id));
     const rest = sortByStrengthAsc(
       hand.filter(c => !pickedIds.has(c.id)),
       trumpSuit,
       levelRank,
-    )
+    );
     for (const c of rest) {
-      if (picked.length >= need) break
-      picked.push(c)
+      if (picked.length >= need) break;
+      picked.push(c);
     }
   }
 
-  return picked.slice(0, need)
+  return picked.slice(0, need);
 }
 
 /** 牌的可读名（用于提示 / 日志） */
@@ -774,7 +774,7 @@ export function cardsLabel(cards: Card[]): string {
     .map(c => (c.suit === S.Joker
       ? RANK_NAME[c.rank]
       : `${SUIT_SYMBOL[c.suit]}${RANK_NAME[c.rank]}`))
-    .join(' ')
+    .join(' ');
 }
 
 // ============================================================

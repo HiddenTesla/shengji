@@ -6,13 +6,13 @@ import {
   type Card,
   Suit,
   Rank,
-} from './types.ts'
+} from './types.ts';
 
 export interface TrumpInfo {
   /** 主花色（null = 无主） */
-  suit: Suit | null
+  suit: Suit | null;
   /** 当前级牌点数 */
-  levelRank: Rank
+  levelRank: Rank;
 }
 
 /**
@@ -29,12 +29,12 @@ export function isTrump(
   levelRank: Rank,
 ): boolean {
   // 大小王永远是主牌
-  if (card.suit === Suit.Joker) return true
+  if (card.suit === Suit.Joker) return true;
   // 级牌（无论什么花色）是主牌
-  if (card.rank === levelRank) return true
+  if (card.rank === levelRank) return true;
   // 主花色是主牌
-  if (trumpSuit !== null && card.suit === trumpSuit) return true
-  return false
+  if (trumpSuit !== null && card.suit === trumpSuit) return true;
+  return false;
 }
 
 /**
@@ -48,24 +48,24 @@ export function getTrumpRank(
 ): number {
   // 大王 > 小王 > 级牌(主花色) > 级牌(非主花色) > 主花色(非级牌) > 副牌
 
-  const isJoker = card.suit === Suit.Joker
-  const isLevel = card.rank === levelRank
-  const isTrumpSuit = card.suit === trumpSuit
+  const isJoker = card.suit === Suit.Joker;
+  const isLevel = card.rank === levelRank;
+  const isTrumpSuit = card.suit === trumpSuit;
 
   // 大王
-  if (isJoker && card.rank === Rank.BigJoker) return 6
+  if (isJoker && card.rank === Rank.BigJoker) return 6;
   // 小王
-  if (isJoker && card.rank === Rank.SmallJoker) return 5
+  if (isJoker && card.rank === Rank.SmallJoker) return 5;
   // 级牌（主花色）
-  if (isLevel && isTrumpSuit) return 4
+  if (isLevel && isTrumpSuit) return 4;
   // 级牌（非主花色）— 仅在无主时出现
-  if (isLevel && trumpSuit === null) return 4
+  if (isLevel && trumpSuit === null) return 4;
   // 级牌（副花色）
-  if (isLevel) return 3
+  if (isLevel) return 3;
   // 主花色非级牌
-  if (isTrumpSuit) return 2
+  if (isTrumpSuit) return 2;
   // 副牌
-  return 1
+  return 1;
 }
 
 /**
@@ -80,8 +80,8 @@ export function canCardBeat(
   levelRank: Rank,
   leadSuit: Suit,
 ): boolean {
-  const cardTrumpRank = getTrumpRank(card, trumpSuit, levelRank)
-  const targetTrumpRank = getTrumpRank(target, trumpSuit, levelRank)
+  const cardTrumpRank = getTrumpRank(card, trumpSuit, levelRank);
+  const targetTrumpRank = getTrumpRank(target, trumpSuit, levelRank);
 
   // 如果目标不是首出花色也不是主牌（垫牌），任何牌都能压
   if (
@@ -90,21 +90,21 @@ export function canCardBeat(
     && target.rank !== levelRank
     && target.suit !== Suit.Joker
   ) {
-    return true
+    return true;
   }
 
   // 如果 card 是主牌，target 不是主牌
-  if (cardTrumpRank > 1 && targetTrumpRank === 1) return true
+  if (cardTrumpRank > 1 && targetTrumpRank === 1) return true;
   // 如果 card 不是主牌，target 是主牌
-  if (cardTrumpRank === 1 && targetTrumpRank > 1) return false
+  if (cardTrumpRank === 1 && targetTrumpRank > 1) return false;
 
   // 同级别（都是主牌或都是副牌），按点数比较
   if (card.suit === target.suit) {
-    return card.rank > target.rank
+    return card.rank > target.rank;
   }
 
   // 不同花色但同为主牌级别（如级牌 vs 主花色）
-  return cardTrumpRank > targetTrumpRank
+  return cardTrumpRank > targetTrumpRank;
 }
 
 /**
@@ -112,19 +112,19 @@ export function canCardBeat(
  */
 export interface TrumpStrengthInfo {
   /** 主花色 */
-  suit: Suit | null
+  suit: Suit | null;
   /** 该花色主牌数量 */
-  trumpCount: number
+  trumpCount: number;
   /** 大小王数量 */
-  jokerCount: number
+  jokerCount: number;
   /** 级牌数量 */
-  levelCount: number
+  levelCount: number;
   /** 主花 A 数量 */
-  aceCount: number
+  aceCount: number;
   /** 主花对子数量 */
-  pairCount: number
+  pairCount: number;
   /** 综合评分 */
-  score: number
+  score: number;
 }
 
 /**
@@ -135,25 +135,25 @@ export function evaluateTrumpStrength(
   suit: Suit,
   levelRank: Rank,
 ): TrumpStrengthInfo {
-  const suitCards = cards.filter(c => c.suit === suit)
-  const jokerCount = cards.filter(c => c.suit === Suit.Joker).length
-  const levelCount = cards.filter(c => c.rank === levelRank).length
-  const aceCount = suitCards.filter(c => c.rank === Rank.Ace).length
+  const suitCards = cards.filter(c => c.suit === suit);
+  const jokerCount = cards.filter(c => c.suit === Suit.Joker).length;
+  const levelCount = cards.filter(c => c.rank === levelRank).length;
+  const aceCount = suitCards.filter(c => c.rank === Rank.Ace).length;
 
   // 统计对子
-  const rankCounts = new Map<Rank, number>()
+  const rankCounts = new Map<Rank, number>();
   for (const c of suitCards) {
-    const count = rankCounts.get(c.rank) ?? 0
-    rankCounts.set(c.rank, count + 1)
+    const count = rankCounts.get(c.rank) ?? 0;
+    rankCounts.set(c.rank, count + 1);
   }
-  const pairCount = Array.from(rankCounts.values()).filter(v => v >= 2).length
+  const pairCount = Array.from(rankCounts.values()).filter(v => v >= 2).length;
 
   // 综合评分
   const score = suitCards.length * 10
     + jokerCount * 30
     + levelCount * 15
     + aceCount * 8
-    + pairCount * 5
+    + pairCount * 5;
 
   return {
     suit,
@@ -163,6 +163,6 @@ export function evaluateTrumpStrength(
     aceCount,
     pairCount,
     score,
-  }
+  };
 }
 

@@ -2,60 +2,60 @@
 // 单张卡牌 SVG 渲染组件
 // ============================================================
 
-import { type Card, Suit, Rank, SUIT_SYMBOL, RANK_NAME } from '../core/types.ts'
+import { type Card, Suit, Rank, SUIT_SYMBOL, RANK_NAME } from '../core/types.ts';
 
 interface CardComponentProps {
-  card: Card
-  faceUp?: boolean
-  selected?: boolean
-  small?: boolean
-  badge?: string
-  badgePosition?: 'top-right' | 'bottom-left'
+  card: Card;
+  faceUp?: boolean;
+  selected?: boolean;
+  small?: boolean;
+  badge?: string;
+  badgePosition?: 'top-right' | 'bottom-left';
   /** 额外标记（如手牌里的对子 / 拖拉机）；position 默认左下角 */
   mark?: {
-    text: string
-    color: string
+    text: string;
+    color: string;
     /** 竖排（东/西家）只露出牌顶，标记需要放到右上角 */
-    position?: 'bottom-left' | 'top-right'
-  }
+    position?: 'bottom-left' | 'top-right';
+  };
   /** 额外缩放（1 = 不缩放）；配合 small 可渲染更小的牌（如出牌区） */
-  scale?: number
+  scale?: number;
   /**
    * 花色 / 王牌标记显示在点数右侧（东西家竖排时只露出牌顶一小条，
    * 花色在点数下方会看不见）
    */
-  inlineSuit?: boolean
-  onClick?: () => void
-  style?: React.CSSProperties
+  inlineSuit?: boolean;
+  onClick?: () => void;
+  style?: React.CSSProperties;
 }
 
-const CARD_WIDTH = 71
-const CARD_HEIGHT = 96
-const CARD_RADIUS = 6
+const CARD_WIDTH = 71;
+const CARD_HEIGHT = 96;
+const CARD_RADIUS = 6;
 
 /** 牌面颜色 — 四花色各不同 */
 function cardColor(suit: Suit): string {
   switch (suit) {
-    case Suit.Spade:   return '#111111'   // 黑桃：纯黑
-    case Suit.Heart:   return '#c62828'   // 红心：深红
-    case Suit.Club:    return '#1b5e20'   // 梅花：墨绿
-    case Suit.Diamond: return '#e65100'   // 方块：橙红
-    case Suit.Joker:   return '#7c3aed'   // 王：紫色
+    case Suit.Spade:   return '#111111';   // 黑桃：纯黑
+    case Suit.Heart:   return '#c62828';   // 红心：深红
+    case Suit.Club:    return '#1b5e20';   // 梅花：墨绿
+    case Suit.Diamond: return '#e65100';   // 方块：橙红
+    case Suit.Joker:   return '#7c3aed';   // 王：紫色
   }
 }
 
 /** 牌面底色 */
 function cardBg(suit: Suit): string {
-  if (suit === Suit.Joker) return '#faf5ff'
-  return '#fff'
+  if (suit === Suit.Joker) return '#faf5ff';
+  return '#fff';
 }
 
 /** 渲染花色小符号 */
 function SuitSymbol({ suit, x, y, size }: {
-  suit: Suit
-  x: number
-  y: number
-  size: number
+  suit: Suit;
+  x: number;
+  y: number;
+  size: number;
 }) {
   return (
     <text
@@ -69,7 +69,7 @@ function SuitSymbol({ suit, x, y, size }: {
     >
       {SUIT_SYMBOL[suit]}
     </text>
-  )
+  );
 }
 
 /** 卡牌背面图案 */
@@ -128,18 +128,18 @@ function CardBack() {
         ♠♥♣♦
       </text>
     </g>
-  )
+  );
 }
 
 /** Joker 牌面 */
 function JokerFace({ card, small, inlineSuit }: {
-  card: Card
-  small?: boolean
-  inlineSuit?: boolean
+  card: Card;
+  small?: boolean;
+  inlineSuit?: boolean;
 }) {
-  const isBig = card.rank === Rank.BigJoker
-  const label = isBig ? '大\n王' : '小\n王'
-  const color = isBig ? '#c62828' : '#1565c0'
+  const isBig = card.rank === Rank.BigJoker;
+  const label = isBig ? '大\n王' : '小\n王';
+  const color = isBig ? '#c62828' : '#1565c0';
 
   return (
     <g>
@@ -213,32 +213,32 @@ function JokerFace({ card, small, inlineSuit }: {
         size={small ? 16 : 20}
       />
     </g>
-  )
+  );
 }
 
 /** 标准牌面 — 大号点数和花色 */
 function NormalFace({ card, small, inlineSuit }: {
-  card: Card
-  small?: boolean
-  inlineSuit?: boolean
+  card: Card;
+  small?: boolean;
+  inlineSuit?: boolean;
 }) {
-  const color = cardColor(card.suit)
-  const bg = cardBg(card.suit)
-  const rankName = RANK_NAME[card.rank]
-  const suitSymbol = SUIT_SYMBOL[card.suit]
+  const color = cardColor(card.suit);
+  const bg = cardBg(card.suit);
+  const rankName = RANK_NAME[card.rank];
+  const suitSymbol = SUIT_SYMBOL[card.suit];
 
   // 手牌（small）模式也保持足够大的点数/花色，并留出边距
-  const rankSize = small ? 23 : 20
-  const suitCornerSize = small ? 18 : 15
-  const centerSize = small ? 40 : 42
-  const cornerX = 12
-  const rankY = 26
-  const suitY = 43
+  const rankSize = small ? 23 : 20;
+  const suitCornerSize = small ? 18 : 15;
+  const centerSize = small ? 40 : 42;
+  const cornerX = 12;
+  const rankY = 26;
+  const suitY = 43;
   // 紧凑模式（花色在点数右侧）
-  const inlineRankSize = small ? 22 : 20
-  const inlineSuitSize = small ? 17 : 15
-  const inlineY = 21
-  const inlineSuitX = rankName.length > 1 ? 45 : 32
+  const inlineRankSize = small ? 22 : 20;
+  const inlineSuitSize = small ? 17 : 15;
+  const inlineY = 21;
+  const inlineSuitX = rankName.length > 1 ? 45 : 32;
 
   return (
     <g>
@@ -334,7 +334,7 @@ function NormalFace({ card, small, inlineSuit }: {
         </>
       )}
     </g>
-  )
+  );
 }
 
 export default function CardComponent({
@@ -350,13 +350,13 @@ export default function CardComponent({
   onClick,
   style,
 }: CardComponentProps) {
-  const s = scale ?? (small ? 0.95 : 1)
-  const w = CARD_WIDTH * s
-  const h = CARD_HEIGHT * s
+  const s = scale ?? (small ? 0.95 : 1);
+  const w = CARD_WIDTH * s;
+  const h = CARD_HEIGHT * s;
   // 标记位置：默认左下角；竖排时用右上角（底部会被下一张牌遮住）
-  const markAtTop = mark?.position === 'top-right'
-  const markX = markAtTop ? 49 : 3
-  const markY = markAtTop ? (badge ? 21 : 3) : (badge ? 61 : 78)
+  const markAtTop = mark?.position === 'top-right';
+  const markX = markAtTop ? 49 : 3;
+  const markY = markAtTop ? (badge ? 21 : 3) : (badge ? 61 : 78);
 
   return (
     <svg
@@ -430,5 +430,5 @@ export default function CardComponent({
         </g>
       )}
     </svg>
-  )
+  );
 }

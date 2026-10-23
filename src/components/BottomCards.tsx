@@ -5,27 +5,27 @@
 import {
   type PlayerPosition,
   POSITION_NAME_ZH,
-} from '../core/types.ts'
+} from '../core/types.ts';
 
 interface BottomCardsProps {
   /** 庄家方位 */
-  banker: PlayerPosition
+  banker: PlayerPosition;
   /** 是否托管（AI 自动埋底，无需玩家操作） */
-  auto: boolean
+  auto: boolean;
   /** 托管是否因撤销而暂停 */
-  paused?: boolean
+  paused?: boolean;
   /** 已选张数 */
-  selectedCount: number
+  selectedCount: number;
   /** 需选张数 */
-  requiredCount: number
+  requiredCount: number;
   /** 已选牌的总分 */
-  buriedPoints: number
+  buriedPoints: number;
   /** 确认埋底 */
-  onConfirm: () => void
+  onConfirm: () => void;
   /** 清空选择 */
-  onClear: () => void
+  onClear: () => void;
   /** 提示：由 AI 选出建议埋的牌（只选中，不确认） */
-  onHint: () => void
+  onHint: () => void;
 }
 
 export default function BottomCards({
@@ -39,7 +39,7 @@ export default function BottomCards({
   onClear,
   onHint,
 }: BottomCardsProps) {
-  const full = selectedCount === requiredCount && requiredCount > 0
+  const full = selectedCount === requiredCount && requiredCount > 0;
 
   return (
     <div style={{
@@ -159,5 +159,5 @@ export default function BottomCards({
         </>
       )}
     </div>
-  )
+  );
 }

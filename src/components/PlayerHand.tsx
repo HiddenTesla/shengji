@@ -2,34 +2,34 @@
 // 南家手牌（升级分组展示，可点击选中）
 // ============================================================
 
-import { useMemo } from 'react'
-import { type CardGroup } from '../core/card.ts'
-import { type HandMark, handMarks } from '../core/hand.ts'
-import { type Rank, type Suit } from '../core/types.ts'
-import CardComponent from './CardComponent.tsx'
+import { useMemo } from 'react';
+import { type CardGroup } from '../core/card.ts';
+import { type HandMark, handMarks } from '../core/hand.ts';
+import { type Rank, type Suit } from '../core/types.ts';
+import CardComponent from './CardComponent.tsx';
 
 interface PlayerHandProps {
-  groups: CardGroup[]
+  groups: CardGroup[];
   /** 主花色（null = 无主 / 尚未定主） */
-  trumpSuit: Suit | null
+  trumpSuit: Suit | null;
   /** 当前级牌 */
-  levelRank: Rank
+  levelRank: Rank;
   /** 选中项（只读展示时可省略） */
-  selectedIndices?: Set<number>
+  selectedIndices?: Set<number>;
   /** 点击选牌（只读展示时可省略） */
-  onToggleCard?: (index: number) => void
+  onToggleCard?: (index: number) => void;
   /** 当前埋底阶段标记为从原底牌拿起的牌 */
-  sourceCardIds?: Set<string>
+  sourceCardIds?: Set<string>;
 }
 
 /** 手牌重叠偏移量 */
-const OVERLAP = 34
+const OVERLAP = 34;
 /** 组间距 */
-const GROUP_GAP = 16
+const GROUP_GAP = 16;
 /** 手牌缩放后单牌宽度 */
-const CARD_W_SMALL = 71 * 0.95
+const CARD_W_SMALL = 71 * 0.95;
 /** 手牌缩放后单牌高度 */
-const CARD_H_SMALL = 96 * 0.95
+const CARD_H_SMALL = 96 * 0.95;
 
 /** 花色颜色映射 — 与卡牌一致 */
 const SUIT_COLORS: Record<string, string> = {
@@ -38,7 +38,7 @@ const SUIT_COLORS: Record<string, string> = {
   C: '#1b5e20',   // 梅花
   D: '#e65100',   // 方块
   trump: '#ffd700',
-}
+};
 
 export default function PlayerHand({
   groups,
@@ -52,7 +52,7 @@ export default function PlayerHand({
   const marks = useMemo(
     () => handMarks(groups.flatMap(g => g.cards), trumpSuit, levelRank),
     [groups, trumpSuit, levelRank],
-  )
+  );
 
   if (groups.length === 0) {
     return (
@@ -66,10 +66,10 @@ export default function PlayerHand({
       }}>
         无手牌
       </div>
-    )
+    );
   }
 
-  let globalIdx = 0
+  let globalIdx = 0;
 
   return (
     <div style={{
@@ -84,8 +84,8 @@ export default function PlayerHand({
       WebkitUserSelect: 'none',
     }}>
       {groups.map((group) => {
-        const groupStartIdx = globalIdx
-        globalIdx += group.cards.length
+        const groupStartIdx = globalIdx;
+        globalIdx += group.cards.length;
         return (
           <GroupSection
             key={String(group.kind)}
@@ -96,10 +96,10 @@ export default function PlayerHand({
             onToggleCard={onToggleCard}
             sourceCardIds={sourceCardIds}
           />
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 
 function GroupSection({
@@ -110,16 +110,16 @@ function GroupSection({
   onToggleCard,
   sourceCardIds,
 }: {
-  group: CardGroup
-  groupStartIdx: number
-  marks: Map<string, HandMark>
-  selectedIndices?: Set<number>
-  onToggleCard?: (index: number) => void
-  sourceCardIds?: Set<string>
+  group: CardGroup;
+  groupStartIdx: number;
+  marks: Map<string, HandMark>;
+  selectedIndices?: Set<number>;
+  onToggleCard?: (index: number) => void;
+  sourceCardIds?: Set<string>;
 }) {
-  const count = group.cards.length
-  const width = (count - 1) * OVERLAP + CARD_W_SMALL
-  const color = SUIT_COLORS[group.kind] ?? 'rgba(255,255,255,0.6)'
+  const count = group.cards.length;
+  const width = (count - 1) * OVERLAP + CARD_W_SMALL;
+  const color = SUIT_COLORS[group.kind] ?? 'rgba(255,255,255,0.6)';
 
   return (
     <div style={{
@@ -164,9 +164,9 @@ function GroupSection({
         height: CARD_H_SMALL + 8,
       }}>
         {group.cards.map((card, idx) => {
-          const globalIdx = groupStartIdx + idx
-          const isSelected = selectedIndices?.has(globalIdx) ?? false
-          const mark = marks.get(card.id)
+          const globalIdx = groupStartIdx + idx;
+          const isSelected = selectedIndices?.has(globalIdx) ?? false;
+          const mark = marks.get(card.id);
           return (
             <div
               key={card.id}
@@ -179,8 +179,8 @@ function GroupSection({
             >
               <CardComponent
                 card={card}
-                faceUp
-                small
+                faceUp={true}
+                small={true}
                 badge={sourceCardIds?.has(card.id) ? '底' : undefined}
                 mark={mark
                   ? {
@@ -194,9 +194,9 @@ function GroupSection({
                   : undefined}
               />
             </div>
-          )
+          );
         })}
       </div>
     </div>
-  )
+  );
 }

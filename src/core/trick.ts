@@ -20,13 +20,13 @@ import {
   type Rank,
   type Suit,
   HandType as HT,
-} from './types.ts'
+} from './types.ts';
 import {
   type Door,
   type HandShape,
   analyzeShape,
   slotOf,
-} from './hand.ts'
+} from './hand.ts';
 
 /**
  * 一手牌在本墩的层级：
@@ -40,11 +40,11 @@ function tierOf(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  const shape = analyzeShape(cards, trumpSuit, levelRank)
-  const door = shape.door
-  if (door === null) return 0
-  if (door === 'trump') return leadDoor === 'trump' ? 1 : 2
-  return door === leadDoor ? 1 : 0
+  const shape = analyzeShape(cards, trumpSuit, levelRank);
+  const door = shape.door;
+  if (door === null) return 0;
+  if (door === 'trump') return leadDoor === 'trump' ? 1 : 2;
+  return door === leadDoor ? 1 : 0;
 }
 
 /** 同层内比较用的强度 = 该手牌中最大的「门内槽位」 */
@@ -53,27 +53,27 @@ function strengthOf(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  let max = -Infinity
+  let max = -Infinity;
   for (const c of cards) {
-    const s = slotOf(c, trumpSuit, levelRank)
-    if (s > max) max = s
+    const s = slotOf(c, trumpSuit, levelRank);
+    if (s > max) max = s;
   }
-  return max
+  return max;
 }
 
 /** 牌型是否能与首出「争胜」（需同型同长度） */
 export function canCompete(shape: HandShape, lead: HandShape): boolean {
   switch (lead.type) {
     case HT.Single:
-      return shape.type === HT.Single
+      return shape.type === HT.Single;
     case HT.Pair:
-      return shape.type === HT.Pair
+      return shape.type === HT.Pair;
     case HT.Tractor:
-      return shape.type === HT.Tractor && shape.tractor === lead.tractor
+      return shape.type === HT.Tractor && shape.tractor === lead.tractor;
     default:
       // 甩牌：按「张数相同」参与比较；甩牌成立时同门跟牌一律压不过（见 beats），
       // 只有毙牌才可能大过（被拦时已在 play.ts 中「自动出小」改出）
-      return shape.count === lead.count
+      return shape.count === lead.count;
   }
 }
 
@@ -89,32 +89,32 @@ export function beats(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): boolean {
-  const leadDoor = lead.door
-  if (leadDoor === null) return false
+  const leadDoor = lead.door;
+  if (leadDoor === null) return false;
 
-  const cs = analyzeShape(candidate, trumpSuit, levelRank)
+  const cs = analyzeShape(candidate, trumpSuit, levelRank);
   // 不能与首出「同型同长度」→ 不能赢（如：不能拿主牌单张/非对子毙副牌对子）
-  if (!canCompete(cs, lead)) return false
+  if (!canCompete(cs, lead)) return false;
 
-  const ct = tierOf(candidate, leadDoor, trumpSuit, levelRank)
+  const ct = tierOf(candidate, leadDoor, trumpSuit, levelRank);
 
   // 甩牌成立时：同门跟牌一定小于领出（甩牌本身已保证该门要不上），
   // 只有主牌毙牌（跨门 tier = 2）才可能大过甩牌；主牌甩牌则无人能大过。
-  if (lead.type === HT.Throw && ct !== 2) return false
+  if (lead.type === HT.Throw && ct !== 2) return false;
 
-  const bs = analyzeShape(best, trumpSuit, levelRank)
+  const bs = analyzeShape(best, trumpSuit, levelRank);
   // 当前最大者若本身不能争胜（纯垫牌 / 无效毙牌），按垫牌处理
   const bt = canCompete(bs, lead)
     ? tierOf(best, leadDoor, trumpSuit, levelRank)
-    : 0
+    : 0;
 
   // 不同层：层级高的赢（主牌毙 > 同门 > 垫牌）
-  if (ct !== bt) return ct > bt
+  if (ct !== bt) return ct > bt;
   // 同为垫牌：谁也赢不了（先出者保持）
-  if (ct === 0) return false
+  if (ct === 0) return false;
 
   return strengthOf(candidate, trumpSuit, levelRank)
-    > strengthOf(best, trumpSuit, levelRank)
+    > strengthOf(best, trumpSuit, levelRank);
 }
 
 /** 判定本墩赢家（按出牌顺序，同大时先出者赢） */
@@ -125,13 +125,13 @@ export function judgePlays(
   levelRank: Rank,
 ): PlayerPosition {
   if (plays.length === 0) {
-    throw new Error('judgePlays: 没有出牌记录')
+    throw new Error('judgePlays: 没有出牌记录');
   }
-  let best = plays[0]
+  let best = plays[0];
   for (let i = 1; i < plays.length; i++) {
     if (beats(plays[i].cards, best.cards, lead, trumpSuit, levelRank)) {
-      best = plays[i]
+      best = plays[i];
     }
   }
-  return best.player
+  return best.player;
 }

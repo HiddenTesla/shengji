@@ -12,7 +12,7 @@ import {
   isPointCard,
   nextPlayer,
   teamOf,
-} from './types.ts'
+} from './types.ts';
 import {
   type HandShape,
   analyzeShape,
@@ -22,12 +22,12 @@ import {
   slotOf,
   throwFallback,
   validateFollow,
-} from './hand.ts'
-import { beats, judgePlays } from './trick.ts'
-import { trickPoints } from './scoring.ts'
-import type { Hands, PlayState } from './play.ts'
+} from './hand.ts';
+import { beats, judgePlays } from './trick.ts';
+import { trickPoints } from './scoring.ts';
+import type { Hands, PlayState } from './play.ts';
 
-const TRICK_WIN_VALUE = 1000
+const TRICK_WIN_VALUE = 1000;
 
 /**
  * 「安全 10 分牌」领出加成。
@@ -45,7 +45,7 @@ const TRICK_WIN_VALUE = 1000
  * 60 足以压过单张墩内最多约 40 分的分差，但远小于赢 / 输墩的 ±1000，
  * 因此只会改变「都能赢时先出哪张」的排序，不会去抢赢不了的墩。
  */
-const SAFE_POINT_LEAD_BONUS = 60
+const SAFE_POINT_LEAD_BONUS = 60;
 
 function safePointLeadBonus(
   card: Card,
@@ -55,37 +55,37 @@ function safePointLeadBonus(
   levelRank: Rank,
 ): number {
   // 只处理 10 分牌；该牌为级牌时是主牌，本技巧不适用
-  if (card.rank !== Rank.King && card.rank !== Rank.Ten) return 0
-  if (card.rank === levelRank) return 0
+  if (card.rank !== Rank.King && card.rank !== Rank.Ten) return 0;
+  if (card.rank === levelRank) return 0;
 
-  const door = doorOf(card, trumpSuit, levelRank)
-  if (door === 'trump') return 0
+  const door = doorOf(card, trumpSuit, levelRank);
+  if (door === 'trump') return 0;
 
   // 手里有同门同点数的另一张 → 优先按对子整体出，不奖励拆单张
   const hasPairMate = hands[player].some(c =>
-    c.id !== card.id && c.suit === card.suit && c.rank === card.rank)
-  if (hasPairMate) return 0
+    c.id !== card.id && c.suit === card.suit && c.rank === card.rank);
+  if (hasPairMate) return 0;
 
-  const slot = slotOf(card, trumpSuit, levelRank)
-  const opponents = ALL_POSITIONS.filter(pos => teamOf(pos) !== teamOf(player))
+  const slot = slotOf(card, trumpSuit, levelRank);
+  const opponents = ALL_POSITIONS.filter(pos => teamOf(pos) !== teamOf(player));
   for (const pos of opponents) {
-    const hand = hands[pos]
+    const hand = hands[pos];
     // 对手手里有更大的同门牌 → 这张 10 分牌不是最高牌
     if (hand.some(c =>
       doorOf(c, trumpSuit, levelRank) === door
-      && slotOf(c, trumpSuit, levelRank) > slot
+      && slotOf(c, trumpSuit, levelRank) > slot,
     )) {
-      return 0
+      return 0;
     }
     // 对手该门缺门且手里还有主牌 → 可能直接毙掉
-    const hasDoor = hand.some(c => doorOf(c, trumpSuit, levelRank) === door)
-    const canRuff = hand.some(c => doorOf(c, trumpSuit, levelRank) === 'trump')
+    const hasDoor = hand.some(c => doorOf(c, trumpSuit, levelRank) === door);
+    const canRuff = hand.some(c => doorOf(c, trumpSuit, levelRank) === 'trump');
     if (!hasDoor && canRuff) {
-      return 0
+      return 0;
     }
   }
 
-  return SAFE_POINT_LEAD_BONUS
+  return SAFE_POINT_LEAD_BONUS;
 }
 
 /**
@@ -94,23 +94,23 @@ function safePointLeadBonus(
  * 每钓出 1 张主牌按 1 墩估值；但组合本身每张主牌最多允许送 5 分，
  * 超过则不值得（如一对 5 = 10 分 / 2 张主牌，值得；K1010 = 30 分 / 3 张，不值得）。
  */
-const TRUMP_DRAW_VALUE = TRICK_WIN_VALUE
-const RUFF_BAIT_POINT_PER_TRUMP = 5
-const RUFF_BAIT_MAX_BONUS = 2 * TRICK_WIN_VALUE
-const RUFF_BAIT_OVER_POINT_PENALTY = 2
-const MAX_THROW_LEAD_CARDS = 5
-const MAX_THROW_LEAD_CANDIDATES = 20
+const TRUMP_DRAW_VALUE = TRICK_WIN_VALUE;
+const RUFF_BAIT_POINT_PER_TRUMP = 5;
+const RUFF_BAIT_MAX_BONUS = 2 * TRICK_WIN_VALUE;
+const RUFF_BAIT_OVER_POINT_PENALTY = 2;
+const MAX_THROW_LEAD_CARDS = 5;
+const MAX_THROW_LEAD_CANDIDATES = 20;
 /** AK 甩牌把某对手该门仅剩的 2 张全部抓获时，额外加成 */
-const AK_CAPTURE_BONUS = 60
+const AK_CAPTURE_BONUS = 60;
 /** 安全 KK 对子（外面无 AA）的领出加成 */
-const SAFE_PAIR_LEAD_BONUS = 60
+const SAFE_PAIR_LEAD_BONUS = 60;
 /** 对手的 AA 是其该门唯一对子时，拆 KK 领单张 K 的加成 */
-const SPLIT_KING_BONUS = 60
+const SPLIT_KING_BONUS = 60;
 /** 分牌例外：0 分墩、只有分牌能压、且受益方无法加分时，压牌的惩罚 */
-const PASS_POINT_CARD_PENALTY = 2 * TRICK_WIN_VALUE + 50
+const PASS_POINT_CARD_PENALTY = 2 * TRICK_WIN_VALUE + 50;
 /** 跟单张时拆对子 / 拆拖拉机的结构惩罚 */
-const BREAK_PAIR_PENALTY = 6
-const BREAK_TRACTOR_PENALTY = 7
+const BREAK_PAIR_PENALTY = 6;
+const BREAK_TRACTOR_PENALTY = 7;
 
 /**
  * 「领出主牌控制牌」惩罚。
@@ -124,8 +124,8 @@ const BREAK_TRACTOR_PENALTY = 7
  * 小主牌、级牌、普通主牌都不受影响，「吊主」和副牌的「安全大牌」领出照旧。
  * 只在领出单张时计入，跟牌不受影响。
  */
-const LEAD_BIG_JOKER_PENALTY = 2600
-const LEAD_SMALL_JOKER_PENALTY = 2200
+const LEAD_BIG_JOKER_PENALTY = 2600;
+const LEAD_SMALL_JOKER_PENALTY = 2200;
 
 /** 领出王（主牌里唯一的「永远安全」大牌）的保留惩罚；其它牌 → 0 */
 function leadJokerPenalty(
@@ -133,20 +133,20 @@ function leadJokerPenalty(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  if (doorOf(card, trumpSuit, levelRank) !== 'trump') return 0
-  if (card.rank === Rank.BigJoker) return LEAD_BIG_JOKER_PENALTY
-  if (card.rank === Rank.SmallJoker) return LEAD_SMALL_JOKER_PENALTY
-  return 0
+  if (doorOf(card, trumpSuit, levelRank) !== 'trump') return 0;
+  if (card.rank === Rank.BigJoker) return LEAD_BIG_JOKER_PENALTY;
+  if (card.rank === Rank.SmallJoker) return LEAD_SMALL_JOKER_PENALTY;
+  return 0;
 }
 
 function cardCost(card: Card, trumpSuit: Suit | null, levelRank: Rank): number {
-  const slot = slotOf(card, trumpSuit, levelRank)
-  return doorOf(card, trumpSuit, levelRank) === 'trump' ? 20 + slot : slot
+  const slot = slotOf(card, trumpSuit, levelRank);
+  return doorOf(card, trumpSuit, levelRank) === 'trump' ? 20 + slot : slot;
 }
 
 interface LeadPairUnit {
-  slot: number
-  cards: Card[]
+  slot: number;
+  cards: Card[];
 }
 
 /** 把一门手牌拆成对子单元（用于生成领出候选 / 判断能否毙牌） */
@@ -155,37 +155,37 @@ function leadPairUnits(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): LeadPairUnit[] {
-  const byKey = new Map<string, Card[]>()
+  const byKey = new Map<string, Card[]>();
   for (const card of cards) {
-    const key = `${card.suit}|${card.rank}`
-    const arr = byKey.get(key) ?? []
-    arr.push(card)
-    byKey.set(key, arr)
+    const key = `${card.suit}|${card.rank}`;
+    const arr = byKey.get(key) ?? [];
+    arr.push(card);
+    byKey.set(key, arr);
   }
-  const units: LeadPairUnit[] = []
+  const units: LeadPairUnit[] = [];
   for (const arr of byKey.values()) {
     if (arr.length >= 2) {
-      units.push({ slot: slotOf(arr[0], trumpSuit, levelRank), cards: arr.slice(0, 2) })
+      units.push({ slot: slotOf(arr[0], trumpSuit, levelRank), cards: arr.slice(0, 2) });
     }
   }
-  return units
+  return units;
 }
 
 /** 是否存在指定长度的连续对子段（拖拉机） */
 function hasConsecutivePairRun(units: LeadPairUnit[], length: number): boolean {
-  if (length < 2 || units.length < length) return false
-  const sorted = [...units].sort((a, b) => a.slot - b.slot)
+  if (length < 2 || units.length < length) return false;
+  const sorted = [...units].sort((a, b) => a.slot - b.slot);
   for (let i = 0; i + length <= sorted.length; i++) {
-    let ok = true
+    let ok = true;
     for (let j = 1; j < length; j++) {
       if (sorted[i + j].slot !== sorted[i + j - 1].slot + 1) {
-        ok = false
-        break
+        ok = false;
+        break;
       }
     }
-    if (ok) return true
+    if (ok) return true;
   }
-  return false
+  return false;
 }
 
 /**
@@ -199,23 +199,23 @@ function canRuffWithTrump(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): boolean {
-  if (lead.door === null || lead.door === 'trump') return false
-  if (hand.some(c => doorOf(c, trumpSuit, levelRank) === lead.door)) return false
+  if (lead.door === null || lead.door === 'trump') return false;
+  if (hand.some(c => doorOf(c, trumpSuit, levelRank) === lead.door)) return false;
 
-  const trumps = hand.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump')
-  if (trumps.length < lead.count) return false
+  const trumps = hand.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump');
+  if (trumps.length < lead.count) return false;
 
   if (lead.tractor >= 2) {
     return hasConsecutivePairRun(
       leadPairUnits(trumps, trumpSuit, levelRank),
       lead.tractor,
-    )
+    );
   }
   if (lead.pairs > 0) {
-    const needPairs = Math.min(lead.pairs, Math.floor(lead.count / 2))
-    return leadPairUnits(trumps, trumpSuit, levelRank).length >= needPairs
+    const needPairs = Math.min(lead.pairs, Math.floor(lead.count / 2));
+    return leadPairUnits(trumps, trumpSuit, levelRank).length >= needPairs;
   }
-  return true
+  return true;
 }
 
 /** 预估毙牌方需要消耗的主牌力（取最便宜的若干张主牌） */
@@ -229,21 +229,21 @@ function cheapestRuffCost(
     .filter(c => doorOf(c, trumpSuit, levelRank) === 'trump')
     .sort((a, b) =>
       cardCost(a, trumpSuit, levelRank) - cardCost(b, trumpSuit, levelRank),
-    )
+    );
   return trumps
     .slice(0, lead.count)
-    .reduce((sum, c) => sum + cardCost(c, trumpSuit, levelRank), 0)
+    .reduce((sum, c) => sum + cardCost(c, trumpSuit, levelRank), 0);
 }
 
 /** 从 leader 开始的四家出牌顺序 */
 function turnOrderFrom(player: PlayerPosition): PlayerPosition[] {
-  const order: PlayerPosition[] = [player]
-  let current = player
+  const order: PlayerPosition[] = [player];
+  let current = player;
   for (let i = 0; i < 3; i++) {
-    current = nextPlayer(current)
-    order.push(current)
+    current = nextPlayer(current);
+    order.push(current);
   }
-  return order
+  return order;
 }
 
 /**
@@ -259,24 +259,24 @@ function splitKingLeadBonus(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  if (card.rank !== Rank.King || card.rank === levelRank) return 0
-  const door = doorOf(card, trumpSuit, levelRank)
-  if (door === 'trump') return 0
+  if (card.rank !== Rank.King || card.rank === levelRank) return 0;
+  const door = doorOf(card, trumpSuit, levelRank);
+  if (door === 'trump') return 0;
 
   const hasPairMate = hands[player].some(c =>
-    c.id !== card.id && c.suit === card.suit && c.rank === Rank.King)
-  if (!hasPairMate) return 0
+    c.id !== card.id && c.suit === card.suit && c.rank === Rank.King);
+  if (!hasPairMate) return 0;
 
-  const opponents = ALL_POSITIONS.filter(pos => teamOf(pos) !== teamOf(player))
+  const opponents = ALL_POSITIONS.filter(pos => teamOf(pos) !== teamOf(player));
   for (const pos of opponents) {
     const oppDoorCards = hands[pos].filter(
       c => doorOf(c, trumpSuit, levelRank) === door,
-    )
-    const pairs = leadPairUnits(oppDoorCards, trumpSuit, levelRank)
-    const hasAces = pairs.some(unit => unit.cards[0].rank === Rank.Ace)
-    if (hasAces && pairs.length === 1) return SPLIT_KING_BONUS
+    );
+    const pairs = leadPairUnits(oppDoorCards, trumpSuit, levelRank);
+    const hasAces = pairs.some(unit => unit.cards[0].rank === Rank.Ace);
+    if (hasAces && pairs.length === 1) return SPLIT_KING_BONUS;
   }
-  return 0
+  return 0;
 }
 
 /**
@@ -288,7 +288,7 @@ function splitKingLeadBonus(
  * 对手也逼不出分（没有分对子、该门剩下的牌都不是分牌），
  * 领出这对 A 就只是用一张控制牌换一墩 0 分，评级要降低。
  */
-const ACE_PAIR_NO_POINT_PENALTY = 200
+const ACE_PAIR_NO_POINT_PENALTY = 200;
 
 /** 跟「对子」时，某家**最少**被迫要出的分数（对手视角：会挑最不值钱的跟） */
 function minPointsForcedVsPair(
@@ -297,28 +297,28 @@ function minPointsForcedVsPair(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  const need = 2
-  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
-  const inDoorIds = new Set(inDoor.map(c => c.id))
+  const need = 2;
+  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door);
+  const inDoorIds = new Set(inDoor.map(c => c.id));
   const sortedFill = hand
     .filter(c => !inDoorIds.has(c.id))
     .map(c => trickPoints([c]))
-    .sort((a, b) => a - b)
+    .sort((a, b) => a - b);
 
   if (inDoor.length >= need) {
-    const units = leadPairUnits(inDoor, trumpSuit, levelRank)
+    const units = leadPairUnits(inDoor, trumpSuit, levelRank);
     // 有对必对：挑一对最不值钱的
     if (units.length > 0) {
-      return Math.min(...units.map(u => trickPoints(u.cards)))
+      return Math.min(...units.map(u => trickPoints(u.cards)));
     }
     // 没有对子：自由选 2 张，挑最不值钱的
-    const points = inDoor.map(c => trickPoints([c])).sort((a, b) => a - b)
-    return points[0] + points[1]
+    const points = inDoor.map(c => trickPoints([c])).sort((a, b) => a - b);
+    return points[0] + points[1];
   }
 
   // 该门不足：门内牌必出，补牌挑最不值钱的
   return trickPoints(inDoor)
-    + sortedFill.slice(0, need - inDoor.length).reduce((sum, p) => sum + p, 0)
+    + sortedFill.slice(0, need - inDoor.length).reduce((sum, p) => sum + p, 0);
 }
 
 /** 跟「对子」时，某家**最多**能加多少分（对家视角：愿意加分） */
@@ -328,28 +328,28 @@ function maxPointsAddableVsPair(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  const need = 2
-  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
-  const inDoorIds = new Set(inDoor.map(c => c.id))
+  const need = 2;
+  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door);
+  const inDoorIds = new Set(inDoor.map(c => c.id));
   const sortedFill = hand
     .filter(c => !inDoorIds.has(c.id))
     .map(c => trickPoints([c]))
-    .sort((a, b) => b - a)
+    .sort((a, b) => b - a);
 
   if (inDoor.length >= need) {
-    const units = leadPairUnits(inDoor, trumpSuit, levelRank)
+    const units = leadPairUnits(inDoor, trumpSuit, levelRank);
     // 有对必对：挑一对最值钱的（对家愿意送分）
     if (units.length > 0) {
-      return Math.max(...units.map(u => trickPoints(u.cards)))
+      return Math.max(...units.map(u => trickPoints(u.cards)));
     }
     // 没有对子：自由选 2 张，挑最值钱的
-    const points = inDoor.map(c => trickPoints([c])).sort((a, b) => b - a)
-    return points[0] + points[1]
+    const points = inDoor.map(c => trickPoints([c])).sort((a, b) => b - a);
+    return points[0] + points[1];
   }
 
   // 该门不足：门内牌必出，补牌挑最值钱的
   return trickPoints(inDoor)
-    + sortedFill.slice(0, need - inDoor.length).reduce((sum, p) => sum + p, 0)
+    + sortedFill.slice(0, need - inDoor.length).reduce((sum, p) => sum + p, 0);
 }
 
 /**
@@ -364,23 +364,23 @@ function acePairLeadPenalty(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  if (lead.type !== HandType.Pair || cards.length !== 2) return 0
-  if (!cards.every(c => c.rank === Rank.Ace)) return 0
-  const door = doorOf(cards[0], trumpSuit, levelRank)
-  if (door === 'trump') return 0
+  if (lead.type !== HandType.Pair || cards.length !== 2) return 0;
+  if (!cards.every(c => c.rank === Rank.Ace)) return 0;
+  const door = doorOf(cards[0], trumpSuit, levelRank);
+  if (door === 'trump') return 0;
 
   const partner = ALL_POSITIONS.find(
     pos => pos !== player && teamOf(pos) === teamOf(player),
-  )
+  );
   const partnerPoints = partner
     ? maxPointsAddableVsPair(hands[partner], door, trumpSuit, levelRank)
-    : 0
+    : 0;
   const opponentPoints = ALL_POSITIONS
     .filter(pos => teamOf(pos) !== teamOf(player))
     .reduce((sum, pos) =>
-      sum + minPointsForcedVsPair(hands[pos], door, trumpSuit, levelRank), 0)
+      sum + minPointsForcedVsPair(hands[pos], door, trumpSuit, levelRank), 0);
 
-  return partnerPoints + opponentPoints > 0 ? 0 : ACE_PAIR_NO_POINT_PENALTY
+  return partnerPoints + opponentPoints > 0 ? 0 : ACE_PAIR_NO_POINT_PENALTY;
 }
 
 /**
@@ -393,17 +393,17 @@ function breakStructurePenalty(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  const door = doorOf(card, trumpSuit, levelRank)
+  const door = doorOf(card, trumpSuit, levelRank);
   const doorCards = hand.filter(
     c => doorOf(c, trumpSuit, levelRank) === door,
-  )
-  const units = leadPairUnits(doorCards, trumpSuit, levelRank)
-  const unit = units.find(u => u.cards.some(c => c.id === card.id))
-  if (!unit) return 0
+  );
+  const units = leadPairUnits(doorCards, trumpSuit, levelRank);
+  const unit = units.find(u => u.cards.some(c => c.id === card.id));
+  if (!unit) return 0;
 
-  const slots = new Set(units.map(u => u.slot))
-  const inTractor = slots.has(unit.slot - 1) || slots.has(unit.slot + 1)
-  return inTractor ? BREAK_TRACTOR_PENALTY : BREAK_PAIR_PENALTY
+  const slots = new Set(units.map(u => u.slot));
+  const inTractor = slots.has(unit.slot - 1) || slots.has(unit.slot + 1);
+  return inTractor ? BREAK_TRACTOR_PENALTY : BREAK_PAIR_PENALTY;
 }
 
 /**
@@ -417,12 +417,12 @@ function canAddPointsToTrick(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): boolean {
-  const hasDoor = hand.some(c => doorOf(c, trumpSuit, levelRank) === door)
+  const hasDoor = hand.some(c => doorOf(c, trumpSuit, levelRank) === door);
   if (hasDoor) {
     return hand.some(c =>
-      doorOf(c, trumpSuit, levelRank) === door && isPointCard(c.rank))
+      doorOf(c, trumpSuit, levelRank) === door && isPointCard(c.rank));
   }
-  return hand.some(c => isPointCard(c.rank))
+  return hand.some(c => isPointCard(c.rank));
 }
 
 /**
@@ -434,17 +434,17 @@ function bigTrumpWeight(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  if (doorOf(card, trumpSuit, levelRank) !== 'trump') return 0
-  if (card.rank === Rank.BigJoker) return 1
-  if (card.rank === Rank.SmallJoker) return 0.8
-  if (card.rank === levelRank) return 0.4
-  return 0
+  if (doorOf(card, trumpSuit, levelRank) !== 'trump') return 0;
+  if (card.rank === Rank.BigJoker) return 1;
+  if (card.rank === Rank.SmallJoker) return 0.8;
+  if (card.rank === levelRank) return 0.4;
+  return 0;
 }
 
 /** 用大主去管一个暂时 0 分的墩：控制牌换一墩无分，评分要降 */
-const BIG_TRUMP_EMPTY_TRICK_PENALTY = 2600
+const BIG_TRUMP_EMPTY_TRICK_PENALTY = 2600;
 /** 出了分牌，却要逼对家用大主来保这墩：等于拿对家的控制牌换这点分 */
-const POINT_FEED_BIG_TRUMP_PENALTY = 800
+const POINT_FEED_BIG_TRUMP_PENALTY = 800;
 
 /** 当前已出牌里最大的那一手（同大先出者赢） */
 function bestPlayOf(
@@ -453,13 +453,13 @@ function bestPlayOf(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): PlayState['trick']['plays'][number] | null {
-  let best: PlayState['trick']['plays'][number] | null = null
+  let best: PlayState['trick']['plays'][number] | null = null;
   for (const play of plays) {
     if (!best || beats(play.cards, best.cards, lead, trumpSuit, levelRank)) {
-      best = play
+      best = play;
     }
   }
-  return best
+  return best;
 }
 
 /**
@@ -474,16 +474,16 @@ function bigTrumpEmptyTrickPenalty(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  const weight = bigTrumpWeight(card, trumpSuit, levelRank)
-  if (weight === 0) return 0
+  const weight = bigTrumpWeight(card, trumpSuit, levelRank);
+  if (weight === 0) return 0;
 
   const tablePoints = trickPoints(state.trick.plays.flatMap(p => p.cards))
-    + trickPoints([card])
-  if (tablePoints > 0) return 0
+    + trickPoints([card]);
+  if (tablePoints > 0) return 0;
 
-  const best = bestPlayOf(state.trick.plays, lead, trumpSuit, levelRank)
-  if (!best || !beats([card], best.cards, lead, trumpSuit, levelRank)) return 0
-  return BIG_TRUMP_EMPTY_TRICK_PENALTY * weight
+  const best = bestPlayOf(state.trick.plays, lead, trumpSuit, levelRank);
+  if (!best || !beats([card], best.cards, lead, trumpSuit, levelRank)) return 0;
+  return BIG_TRUMP_EMPTY_TRICK_PENALTY * weight;
 }
 
 /**
@@ -504,40 +504,40 @@ function pointFeedBigTrumpPenalty(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  if (!isPointCard(card.rank)) return 0
+  if (!isPointCard(card.rank)) return 0;
 
   const partner = ALL_POSITIONS.find(
     pos => pos !== player && teamOf(pos) === teamOf(player),
-  )
-  if (!partner) return 0
-  if (state.trick.plays.some(play => play.player === partner)) return 0
+  );
+  if (!partner) return 0;
+  if (state.trick.plays.some(play => play.player === partner)) return 0;
 
-  const before = bestPlayOf(state.trick.plays, lead, trumpSuit, levelRank)
-  if (!before) return 0
+  const before = bestPlayOf(state.trick.plays, lead, trumpSuit, levelRank);
+  if (!before) return 0;
 
   // 我这张牌能管住 → 当前最大成了我们的（对家不用救）
-  const takesLead = beats([card], before.cards, lead, trumpSuit, levelRank)
+  const takesLead = beats([card], before.cards, lead, trumpSuit, levelRank);
   const currentBest = takesLead
     ? { player, cards: [card] }
-    : before
-  if (teamOf(currentBest.player) === teamOf(player)) return 0
+    : before;
+  if (teamOf(currentBest.player) === teamOf(player)) return 0;
 
   // 对家最省能赢的一手：优先看代价（主牌 > 副牌），代价最低的是不是大主
-  const partnerHand = hands[partner]
-  let cheapestCost = Infinity
-  let cheapestWeight = 0
+  const partnerHand = hands[partner];
+  let cheapestCost = Infinity;
+  let cheapestWeight = 0;
   for (const option of partnerHand) {
-    if (!validateFollow(partnerHand, lead, [option], trumpSuit, levelRank).ok) continue
-    if (!beats([option], currentBest.cards, lead, trumpSuit, levelRank)) continue
-    const cost = cardCost(option, trumpSuit, levelRank)
+    if (!validateFollow(partnerHand, lead, [option], trumpSuit, levelRank).ok) continue;
+    if (!beats([option], currentBest.cards, lead, trumpSuit, levelRank)) continue;
+    const cost = cardCost(option, trumpSuit, levelRank);
     if (cost < cheapestCost) {
-      cheapestCost = cost
-      cheapestWeight = bigTrumpWeight(option, trumpSuit, levelRank)
+      cheapestCost = cost;
+      cheapestWeight = bigTrumpWeight(option, trumpSuit, levelRank);
     }
   }
-  if (cheapestCost === Infinity) return 0
-  if (cheapestWeight === 0) return 0
-  return POINT_FEED_BIG_TRUMP_PENALTY * cheapestWeight
+  if (cheapestCost === Infinity) return 0;
+  if (cheapestWeight === 0) return 0;
+  return POINT_FEED_BIG_TRUMP_PENALTY * cheapestWeight;
 }
 
 /**
@@ -557,19 +557,19 @@ function pointCardPassPenalty(
   levelRank: Rank,
   candidate: Card,
 ): number {
-  const trick = state.trick
-  if (trick.leadDoor === null || trick.leadDoor === 'trump') return 0
-  if (trick.leadCount !== 1) return 0
-  if (trick.plays.length < 1 || trick.plays.length > 2) return 0
+  const trick = state.trick;
+  if (trick.leadDoor === null || trick.leadDoor === 'trump') return 0;
+  if (trick.leadCount !== 1) return 0;
+  if (trick.plays.length < 1 || trick.plays.length > 2) return 0;
 
-  const leader = trick.leadPlayer
-  const second = nextPlayer(leader)
-  const third = nextPlayer(second)
-  const fourth = nextPlayer(third)
-  if (player !== second && player !== third) return 0
+  const leader = trick.leadPlayer;
+  const second = nextPlayer(leader);
+  const third = nextPlayer(second);
+  const fourth = nextPlayer(third);
+  if (player !== second && player !== third) return 0;
 
-  const currentHighPlayer = player === third ? second : leader
-  if (teamOf(currentHighPlayer) === teamOf(player)) return 0
+  const currentHighPlayer = player === third ? second : leader;
+  if (teamOf(currentHighPlayer) === teamOf(player)) return 0;
 
   const lead: HandShape = {
     type: trick.leadType,
@@ -577,43 +577,43 @@ function pointCardPassPenalty(
     count: trick.leadCount,
     pairs: trick.leadPairs,
     tractor: trick.leadTractor,
-  }
+  };
   if (judgePlays(trick.plays, lead, trumpSuit, levelRank) !== currentHighPlayer) {
-    return 0
+    return 0;
   }
 
   // 第 1、2 家出的都是无分牌
-  if (trickPoints(trick.plays.flatMap(play => play.cards)) !== 0) return 0
+  if (trickPoints(trick.plays.flatMap(play => play.cards)) !== 0) return 0;
   // 只保护 10 分牌（K / 10）；5 分牌价值较低，不触发此例外
-  if (candidate.rank !== Rank.King && candidate.rank !== Rank.Ten) return 0
+  if (candidate.rank !== Rank.King && candidate.rank !== Rank.Ten) return 0;
 
-  const bestPlay = trick.plays.find(play => play.player === currentHighPlayer)
-  if (!bestPlay) return 0
+  const bestPlay = trick.plays.find(play => play.player === currentHighPlayer);
+  if (!bestPlay) return 0;
 
   // 手里所有能压过当前大牌的牌必须全都是分牌
   const beatingCards = hands[player].filter(card =>
     validateFollow(hands[player], lead, [card], trumpSuit, levelRank).ok
-    && beats([card], bestPlay.cards, lead, trumpSuit, levelRank))
-  if (beatingCards.length === 0) return 0
-  if (beatingCards.some(card => !isPointCard(card.rank))) return 0
+    && beats([card], bestPlay.cards, lead, trumpSuit, levelRank));
+  if (beatingCards.length === 0) return 0;
+  if (beatingCards.some(card => !isPointCard(card.rank))) return 0;
 
   // 必须存在一个比这张分牌更便宜的合法非分牌可以「放过」
-  const candidateCost = cardCost(candidate, trumpSuit, levelRank)
+  const candidateCost = cardCost(candidate, trumpSuit, levelRank);
   const canPass = hands[player].some(card =>
     !isPointCard(card.rank)
     && cardCost(card, trumpSuit, levelRank) < candidateCost
-    && validateFollow(hands[player], lead, [card], trumpSuit, levelRank).ok)
-  if (!canPass) return 0
+    && validateFollow(hands[player], lead, [card], trumpSuit, levelRank).ok);
+  if (!canPass) return 0;
 
   // 当前大牌那一方的搭档（本墩受益者）无法再往这墩加分
-  const beneficiary = player === third ? fourth : third
+  const beneficiary = player === third ? fourth : third;
   if (canAddPointsToTrick(
     hands[beneficiary], trick.leadDoor, trumpSuit, levelRank,
   )) {
-    return 0
+    return 0;
   }
 
-  return -PASS_POINT_CARD_PENALTY
+  return -PASS_POINT_CARD_PENALTY;
 }
 
 /** 生成同门内的所有拖拉机领出候选（长度 ≥ 2 对，含子段） */
@@ -623,32 +623,32 @@ function generateTractorLeadCandidates(
   levelRank: Rank,
 ): Card[][] {
   const units = leadPairUnits(doorCards, trumpSuit, levelRank)
-    .sort((a, b) => a.slot - b.slot)
-  const runs: LeadPairUnit[][] = []
-  let current: LeadPairUnit[] = []
+    .sort((a, b) => a.slot - b.slot);
+  const runs: LeadPairUnit[][] = [];
+  let current: LeadPairUnit[] = [];
   for (const unit of units) {
     if (current.length === 0
       || unit.slot === current[current.length - 1].slot + 1) {
-      current.push(unit)
+      current.push(unit);
     }
     else {
-      if (current.length >= 2) runs.push(current)
-      current = [unit]
+      if (current.length >= 2) runs.push(current);
+      current = [unit];
     }
   }
-  if (current.length >= 2) runs.push(current)
+  if (current.length >= 2) runs.push(current);
 
-  const candidates: Card[][] = []
+  const candidates: Card[][] = [];
   for (const run of runs) {
     for (let length = 2; length <= run.length; length++) {
       for (let start = 0; start + length <= run.length; start++) {
         candidates.push(
           run.slice(start, start + length).flatMap(unit => unit.cards),
-        )
+        );
       }
     }
   }
-  return candidates
+  return candidates;
 }
 
 /** 生成同门内的甩牌候选（最多 5 张，保留点数最低的若干组） */
@@ -657,28 +657,28 @@ function generateThrowLeadCandidates(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): Card[][] {
-  const candidates: Card[][] = []
-  const maxSize = Math.min(MAX_THROW_LEAD_CARDS, doorCards.length)
+  const candidates: Card[][] = [];
+  const maxSize = Math.min(MAX_THROW_LEAD_CARDS, doorCards.length);
   for (let size = 3; size <= maxSize; size++) {
-    const combo: Card[] = []
+    const combo: Card[] = [];
     const walk = (start: number) => {
       if (combo.length === size) {
-        const shape = analyzeShape(combo, trumpSuit, levelRank)
+        const shape = analyzeShape(combo, trumpSuit, levelRank);
         if (shape.type === HandType.Throw && shape.door !== null) {
-          candidates.push([...combo])
+          candidates.push([...combo]);
         }
-        return
+        return;
       }
       for (let i = start; i < doorCards.length; i++) {
-        combo.push(doorCards[i])
-        walk(i + 1)
-        combo.pop()
+        combo.push(doorCards[i]);
+        walk(i + 1);
+        combo.pop();
       }
-    }
-    walk(0)
+    };
+    walk(0);
   }
-  candidates.sort((a, b) => trickPoints(a) - trickPoints(b))
-  return candidates.slice(0, MAX_THROW_LEAD_CANDIDATES)
+  candidates.sort((a, b) => trickPoints(a) - trickPoints(b));
+  return candidates.slice(0, MAX_THROW_LEAD_CANDIDATES);
 }
 
 /**
@@ -699,50 +699,50 @@ function scoreRuffBaitLead(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number | null {
-  if (lead.door === null || lead.door === 'trump') return null
+  if (lead.door === null || lead.door === 'trump') return null;
 
-  const order = turnOrderFrom(player)
+  const order = turnOrderFrom(player);
   const partner = order.find(
     pos => pos !== player && teamOf(pos) === teamOf(player),
-  )
-  if (!partner) return null
-  const partnerIndex = order.indexOf(partner)
+  );
+  if (!partner) return null;
+  const partnerIndex = order.indexOf(partner);
 
-  let ruffingOpponent: PlayerPosition | null = null
+  let ruffingOpponent: PlayerPosition | null = null;
   for (let i = 1; i < order.length; i++) {
-    const pos = order[i]
-    if (teamOf(pos) === teamOf(player)) continue
-    if (!canRuffWithTrump(hands[pos], lead, trumpSuit, levelRank)) continue
+    const pos = order[i];
+    if (teamOf(pos) === teamOf(player)) continue;
+    if (!canRuffWithTrump(hands[pos], lead, trumpSuit, levelRank)) continue;
 
     // 对家在这家之后、也能用主牌毙 → 结果不确定，不按「必被毙」估值
     if (i < partnerIndex
       && canRuffWithTrump(hands[partner], lead, trumpSuit, levelRank)) {
-      return null
+      return null;
     }
-    ruffingOpponent = pos
-    break
+    ruffingOpponent = pos;
+    break;
   }
-  if (!ruffingOpponent) return null
+  if (!ruffingOpponent) return null;
 
-  const leadPoints = trickPoints(cards)
-  const trumpsSpent = cards.length
+  const leadPoints = trickPoints(cards);
+  const trumpsSpent = cards.length;
   const ownCost = cards.reduce(
     (sum, card) => sum + cardCost(card, trumpSuit, levelRank),
     0,
-  )
+  );
   const opponentCost = cheapestRuffCost(
     hands[ruffingOpponent], lead, trumpSuit, levelRank,
-  )
-  let score = -TRICK_WIN_VALUE - leadPoints - ownCost + opponentCost
-  const limit = trumpsSpent * RUFF_BAIT_POINT_PER_TRUMP
+  );
+  let score = -TRICK_WIN_VALUE - leadPoints - ownCost + opponentCost;
+  const limit = trumpsSpent * RUFF_BAIT_POINT_PER_TRUMP;
   if (leadPoints <= limit) {
-    score += Math.min(trumpsSpent * TRUMP_DRAW_VALUE, RUFF_BAIT_MAX_BONUS)
+    score += Math.min(trumpsSpent * TRUMP_DRAW_VALUE, RUFF_BAIT_MAX_BONUS);
   }
   else {
     // 送分过高：不仅不给钓主加成，还要额外降权（K1010 这类组合）
-    score -= (leadPoints - limit) * RUFF_BAIT_OVER_POINT_PENALTY
+    score -= (leadPoints - limit) * RUFF_BAIT_OVER_POINT_PENALTY;
   }
-  return score
+  return score;
 }
 
 /**
@@ -760,79 +760,79 @@ function scoreWinningMultiLead(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number | null {
-  if (lead.door === null || lead.door === 'trump') return null
+  if (lead.door === null || lead.door === 'trump') return null;
 
-  const opponents = ALL_POSITIONS.filter(pos => teamOf(pos) !== teamOf(player))
+  const opponents = ALL_POSITIONS.filter(pos => teamOf(pos) !== teamOf(player));
   if (opponents.some(pos =>
     canRuffWithTrump(hands[pos], lead, trumpSuit, levelRank))) {
-    return null
+    return null;
   }
 
   const isAkThrow = lead.count === 2
     && cards.some(c => c.rank === Rank.Ace)
-    && cards.some(c => c.rank === Rank.King)
+    && cards.some(c => c.rank === Rank.King);
 
   if (lead.type === HandType.Pair) {
-    const slot = slotOf(cards[0], trumpSuit, levelRank)
+    const slot = slotOf(cards[0], trumpSuit, levelRank);
     for (const pos of opponents) {
       const oppDoorCards = hands[pos].filter(
         c => doorOf(c, trumpSuit, levelRank) === lead.door,
-      )
+      );
       const hasHigherPair = leadPairUnits(oppDoorCards, trumpSuit, levelRank)
-        .some(unit => unit.slot > slot)
-      if (hasHigherPair) return null
+        .some(unit => unit.slot > slot);
+      if (hasHigherPair) return null;
     }
   }
   else if (!isAkThrow) {
-    return null
+    return null;
   }
 
   const captureBonus = isAkThrow && opponents.some(pos =>
     hands[pos].filter(c => doorOf(c, trumpSuit, levelRank) === lead.door).length === 2,
   )
     ? AK_CAPTURE_BONUS
-    : 0
+    : 0;
 
   const plays: PlayState['trick']['plays'] = [{
     player,
     cards,
     handType: lead.type,
-  }]
+  }];
   const simHands: Hands = {
     ...hands,
     [player]: hands[player].filter(c => !cards.some(p => p.id === c.id)),
-  }
-  let turn = nextPlayer(player)
+  };
+  let turn = nextPlayer(player);
   for (let i = 0; i < 3; i++) {
-    const follow = chooseFollow(simHands[turn], lead, trumpSuit, levelRank)
-    if (follow.length !== lead.count) return null
+    const follow = chooseFollow(simHands[turn], lead, trumpSuit, levelRank);
+    if (follow.length !== lead.count) return null;
     plays.push({
       player: turn,
       cards: follow,
       handType: analyzeShape(follow, trumpSuit, levelRank).type,
-    })
+    });
     simHands[turn] = simHands[turn].filter(
       c => !follow.some(p => p.id === c.id),
-    )
-    turn = nextPlayer(turn)
+    );
+    turn = nextPlayer(turn);
   }
 
-  const winner = judgePlays(plays, lead, trumpSuit, levelRank)
-  if (teamOf(winner) !== teamOf(player)) return null
+  const winner = judgePlays(plays, lead, trumpSuit, levelRank);
+  if (teamOf(winner) !== teamOf(player)) return null;
 
-  const points = trickPoints(plays.flatMap(play => play.cards))
+  const points = trickPoints(plays.flatMap(play => play.cards));
   const cardEconomy = plays.reduce((value, play) => {
     const cost = play.cards.reduce(
       (sum, card) => sum + cardCost(card, trumpSuit, levelRank),
       0,
-    )
-    return value + (teamOf(play.player) === teamOf(player) ? -cost : cost)
-  }, 0)
+    );
+    return value + (teamOf(play.player) === teamOf(player) ? -cost : cost);
+  }, 0);
   const isKingPair = lead.type === HandType.Pair
     && cards.length === 2
-    && cards.every(c => c.rank === Rank.King)
-  const pairBonus = isKingPair ? SAFE_PAIR_LEAD_BONUS : 0
-  return TRICK_WIN_VALUE + points + cardEconomy + captureBonus + pairBonus
+    && cards.every(c => c.rank === Rank.King);
+  const pairBonus = isKingPair ? SAFE_PAIR_LEAD_BONUS : 0;
+  return TRICK_WIN_VALUE + points + cardEconomy + captureBonus + pairBonus;
 }
 
 /**
@@ -846,22 +846,22 @@ function ruffBaitBonus(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  if (lead.door === null || lead.door === 'trump') return 0
+  if (lead.door === null || lead.door === 'trump') return 0;
 
-  const winnerPlay = plays.find(play => play.player === winner)
-  if (!winnerPlay) return 0
+  const winnerPlay = plays.find(play => play.player === winner);
+  if (!winnerPlay) return 0;
   if (!winnerPlay.cards.every(c => doorOf(c, trumpSuit, levelRank) === 'trump')) {
-    return 0
+    return 0;
   }
 
-  const leadCards = plays[0].cards
-  const leadPoints = trickPoints(leadCards)
-  const trumpsSpent = leadCards.length
-  const limit = trumpsSpent * RUFF_BAIT_POINT_PER_TRUMP
+  const leadCards = plays[0].cards;
+  const leadPoints = trickPoints(leadCards);
+  const trumpsSpent = leadCards.length;
+  const limit = trumpsSpent * RUFF_BAIT_POINT_PER_TRUMP;
   if (leadPoints <= limit) {
-    return Math.min(trumpsSpent * TRUMP_DRAW_VALUE, RUFF_BAIT_MAX_BONUS)
+    return Math.min(trumpsSpent * TRUMP_DRAW_VALUE, RUFF_BAIT_MAX_BONUS);
   }
-  return -(leadPoints - limit) * RUFF_BAIT_OVER_POINT_PENALTY
+  return -(leadPoints - limit) * RUFF_BAIT_OVER_POINT_PENALTY;
 }
 
 function utility(
@@ -874,22 +874,22 @@ function utility(
   ruffBait: boolean,
   strategicBonus: number,
 ): number {
-  const winner = judgePlays(plays, lead, trumpSuit, levelRank)
-  const points = trickPoints(plays.flatMap(play => play.cards))
-  const won = teamOf(winner) === rootTeam
+  const winner = judgePlays(plays, lead, trumpSuit, levelRank);
+  const points = trickPoints(plays.flatMap(play => play.cards));
+  const won = teamOf(winner) === rootTeam;
   const cardEconomy = plays.reduce((value, play) => {
     const cost = play.cards.reduce(
       (sum, card) => sum + cardCost(card, trumpSuit, levelRank),
       0,
-    )
-    return value + (teamOf(play.player) === rootTeam ? -cost : cost)
-  }, 0)
+    );
+    return value + (teamOf(play.player) === rootTeam ? -cost : cost);
+  }, 0);
 
-  const base = (won ? TRICK_WIN_VALUE + points : -TRICK_WIN_VALUE - points) + cardEconomy
-  let score = base + strategicBonus
-  if (won) score += leadBonus
-  else if (ruffBait) score += ruffBaitBonus(plays, winner, lead, trumpSuit, levelRank)
-  return score
+  const base = (won ? TRICK_WIN_VALUE + points : -TRICK_WIN_VALUE - points) + cardEconomy;
+  let score = base + strategicBonus;
+  if (won) score += leadBonus;
+  else if (ruffBait) score += ruffBaitBonus(plays, winner, lead, trumpSuit, levelRank);
+  return score;
 }
 
 function searchTrick(
@@ -909,25 +909,25 @@ function searchTrick(
   if (plays.length === 4) {
     return utility(
       plays, lead, rootTeam, trumpSuit, levelRank, leadBonus, ruffBait, strategicBonus,
-    )
+    );
   }
 
-  const available = hands[turn]
-  const maximizing = teamOf(turn) === rootTeam
-  let best = maximizing ? -Infinity : Infinity
+  const available = hands[turn];
+  const maximizing = teamOf(turn) === rootTeam;
+  let best = maximizing ? -Infinity : Infinity;
 
   for (const card of available) {
-    if (!validateFollow(available, lead, [card], trumpSuit, levelRank).ok) continue
+    if (!validateFollow(available, lead, [card], trumpSuit, levelRank).ok) continue;
 
     const nextHands: Hands = {
       ...hands,
       [turn]: available.filter(candidate => candidate.id !== card.id),
-    }
+    };
     const nextPlays = [...plays, {
       player: turn,
       cards: [card],
       handType: HandType.Single,
-    }]
+    }];
     const score = searchTrick(
       nextHands,
       nextPlayer(turn),
@@ -941,20 +941,20 @@ function searchTrick(
       strategicBonus,
       alpha,
       beta,
-    )
+    );
 
     if (maximizing) {
-      best = Math.max(best, score)
-      alpha = Math.max(alpha, best)
+      best = Math.max(best, score);
+      alpha = Math.max(alpha, best);
     }
     else {
-      best = Math.min(best, score)
-      beta = Math.min(beta, best)
+      best = Math.min(best, score);
+      beta = Math.min(beta, best);
     }
-    if (alpha >= beta) break
+    if (alpha >= beta) break;
   }
 
-  return best
+  return best;
 }
 
 // ------------------------------------------------------------
@@ -966,33 +966,33 @@ function pairRunsOfLength(
   units: LeadPairUnit[],
   length: number,
 ): LeadPairUnit[][] {
-  if (length < 2 || units.length < length) return []
-  const bySlot = new Map<number, LeadPairUnit>()
+  if (length < 2 || units.length < length) return [];
+  const bySlot = new Map<number, LeadPairUnit>();
   for (const unit of units) {
-    if (!bySlot.has(unit.slot)) bySlot.set(unit.slot, unit)
+    if (!bySlot.has(unit.slot)) bySlot.set(unit.slot, unit);
   }
-  const slots = [...bySlot.keys()].sort((a, b) => a - b)
-  const runs: LeadPairUnit[][] = []
+  const slots = [...bySlot.keys()].sort((a, b) => a - b);
+  const runs: LeadPairUnit[][] = [];
   for (let i = 0; i + length <= slots.length; i++) {
-    let ok = true
+    let ok = true;
     for (let j = 1; j < length; j++) {
       if (slots[i + j] !== slots[i + j - 1] + 1) {
-        ok = false
-        break
+        ok = false;
+        break;
       }
     }
-    if (ok) runs.push(slots.slice(i, i + length).map(s => bySlot.get(s)!))
+    if (ok) runs.push(slots.slice(i, i + length).map(s => bySlot.get(s)!));
   }
-  return runs
+  return runs;
 }
 
 interface BuildFollowOptions {
   /** 尽量取大（跟牌抢大 / 毙牌）还是取小（垫牌） */
-  high: boolean
+  high: boolean;
   /** 补牌只用主牌凑（构造毙牌） */
-  trumpsOnly?: boolean
+  trumpsOnly?: boolean;
   /** 补牌优先出分牌（对家大时垫分） */
-  dumpPoints?: boolean
+  dumpPoints?: boolean;
 }
 
 /**
@@ -1009,88 +1009,88 @@ function buildFollow(
   levelRank: Rank,
   options: BuildFollowOptions,
 ): Card[] | null {
-  const door = lead.door
-  if (door === null) return null
-  const need = lead.count
-  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
-  const cost = (c: Card) => cardCost(c, trumpSuit, levelRank)
-  const order = (a: Card, b: Card) => (options.high ? cost(b) - cost(a) : cost(a) - cost(b))
+  const door = lead.door;
+  if (door === null) return null;
+  const need = lead.count;
+  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door);
+  const cost = (c: Card) => cardCost(c, trumpSuit, levelRank);
+  const order = (a: Card, b: Card) => (options.high ? cost(b) - cost(a) : cost(a) - cost(b));
 
   // ---- 该门够：门内选牌，必须满足对子 / 拖拉机要求 ----
   if (inDoor.length >= need) {
-    const picked: Card[] = []
-    const used = new Set<string>()
+    const picked: Card[] = [];
+    const used = new Set<string>();
     const take = (cards: Card[]) => {
       for (const c of cards) {
-        if (used.has(c.id)) continue
-        used.add(c.id)
-        picked.push(c)
+        if (used.has(c.id)) continue;
+        used.add(c.id);
+        picked.push(c);
       }
-    }
+    };
 
     const units = leadPairUnits(inDoor, trumpSuit, levelRank)
-      .sort((a, b) => (options.high ? b.slot - a.slot : a.slot - b.slot))
+      .sort((a, b) => (options.high ? b.slot - a.slot : a.slot - b.slot));
 
     if (lead.tractor >= 2 && need >= lead.tractor * 2) {
-      const runs = pairRunsOfLength(units, lead.tractor)
+      const runs = pairRunsOfLength(units, lead.tractor);
       if (runs.length > 0) {
-        take((options.high ? runs[runs.length - 1] : runs[0]).flatMap(u => u.cards))
+        take((options.high ? runs[runs.length - 1] : runs[0]).flatMap(u => u.cards));
       }
     }
     if (lead.pairs >= 1) {
-      const needPairs = Math.min(lead.pairs, units.length, Math.floor(need / 2))
+      const needPairs = Math.min(lead.pairs, units.length, Math.floor(need / 2));
       for (const unit of units) {
-        if (picked.length >= needPairs * 2) break
-        take(unit.cards)
+        if (picked.length >= needPairs * 2) break;
+        take(unit.cards);
       }
     }
 
     // 补齐：先整对（不拆对子），再单张
-    const rest = inDoor.filter(c => !used.has(c.id))
-    const restUnits = leadPairUnits(rest, trumpSuit, levelRank)
-    const unitIds = new Set(restUnits.flatMap(u => u.cards.map(c => c.id)))
+    const rest = inDoor.filter(c => !used.has(c.id));
+    const restUnits = leadPairUnits(rest, trumpSuit, levelRank);
+    const unitIds = new Set(restUnits.flatMap(u => u.cards.map(c => c.id)));
     const restUnitsSorted = [...restUnits]
-      .sort((a, b) => (options.high ? b.slot - a.slot : a.slot - b.slot))
+      .sort((a, b) => (options.high ? b.slot - a.slot : a.slot - b.slot));
     const ordered = [
       ...restUnitsSorted.flatMap(u => u.cards),
       ...rest.filter(c => !unitIds.has(c.id)).sort(order),
-    ]
+    ];
     for (const c of ordered) {
-      if (picked.length >= need) break
-      take([c])
+      if (picked.length >= need) break;
+      take([c]);
     }
-    if (picked.length < need) return null
-    const play = picked.slice(0, need)
-    return validateFollow(hand, lead, play, trumpSuit, levelRank).ok ? play : null
+    if (picked.length < need) return null;
+    const play = picked.slice(0, need);
+    return validateFollow(hand, lead, play, trumpSuit, levelRank).ok ? play : null;
   }
 
   // ---- 该门不足：门内牌全出，其余自选 ----
-  const picked = [...inDoor]
-  const used = new Set(picked.map(c => c.id))
-  const outDoor = hand.filter(c => !used.has(c.id))
+  const picked = [...inDoor];
+  const used = new Set(picked.map(c => c.id));
+  const outDoor = hand.filter(c => !used.has(c.id));
   const side = outDoor
     .filter(c => doorOf(c, trumpSuit, levelRank) !== 'trump')
-    .sort(order)
+    .sort(order);
   const trumps = outDoor
     .filter(c => doorOf(c, trumpSuit, levelRank) === 'trump')
-    .sort(order)
+    .sort(order);
 
-  let fillers: Card[]
+  let fillers: Card[];
   if (options.trumpsOnly) {
-    fillers = trumps
+    fillers = trumps;
   }
   else if (options.dumpPoints) {
-    const points = outDoor.filter(c => isPointCard(c.rank)).sort(order)
-    const others = outDoor.filter(c => !isPointCard(c.rank)).sort(order)
-    fillers = [...points, ...others]
+    const points = outDoor.filter(c => isPointCard(c.rank)).sort(order);
+    const others = outDoor.filter(c => !isPointCard(c.rank)).sort(order);
+    fillers = [...points, ...others];
   }
   else {
-    fillers = options.high ? [...trumps, ...side] : [...side, ...trumps]
+    fillers = options.high ? [...trumps, ...side] : [...side, ...trumps];
   }
 
-  const play = [...picked, ...fillers.slice(0, need - picked.length)]
-  if (play.length !== need) return null
-  return validateFollow(hand, lead, play, trumpSuit, levelRank).ok ? play : null
+  const play = [...picked, ...fillers.slice(0, need - picked.length)];
+  if (play.length !== need) return null;
+  return validateFollow(hand, lead, play, trumpSuit, levelRank).ok ? play : null;
 }
 
 /**
@@ -1105,33 +1105,33 @@ function followOptionsFor(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): Card[][] {
-  const door = lead.door
-  if (door === null) return []
-  const need = lead.count
-  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door)
+  const door = lead.door;
+  if (door === null) return [];
+  const need = lead.count;
+  const inDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) === door);
 
-  const options: Card[][] = []
-  const seen = new Set<string>()
+  const options: Card[][] = [];
+  const seen = new Set<string>();
   const add = (cards: Card[] | null) => {
-    if (!cards || cards.length !== need) return
-    if (!validateFollow(hand, lead, cards, trumpSuit, levelRank).ok) return
-    const key = cards.map(c => c.id).sort().join('|')
-    if (seen.has(key)) return
-    seen.add(key)
-    options.push(cards)
-  }
+    if (!cards || cards.length !== need) return;
+    if (!validateFollow(hand, lead, cards, trumpSuit, levelRank).ok) return;
+    const key = cards.map(c => c.id).sort().join('|');
+    if (seen.has(key)) return;
+    seen.add(key);
+    options.push(cards);
+  };
 
-  add(chooseFollow(hand, lead, trumpSuit, levelRank))
-  add(buildFollow(hand, lead, trumpSuit, levelRank, { high: true }))
+  add(chooseFollow(hand, lead, trumpSuit, levelRank));
+  add(buildFollow(hand, lead, trumpSuit, levelRank, { high: true }));
 
   if (inDoor.length < need) {
-    add(buildFollow(hand, lead, trumpSuit, levelRank, { high: false, dumpPoints: true }))
+    add(buildFollow(hand, lead, trumpSuit, levelRank, { high: false, dumpPoints: true }));
     if (inDoor.length === 0) {
-      add(buildFollow(hand, lead, trumpSuit, levelRank, { high: false, trumpsOnly: true }))
-      add(buildFollow(hand, lead, trumpSuit, levelRank, { high: true, trumpsOnly: true }))
+      add(buildFollow(hand, lead, trumpSuit, levelRank, { high: false, trumpsOnly: true }));
+      add(buildFollow(hand, lead, trumpSuit, levelRank, { high: true, trumpsOnly: true }));
     }
   }
-  return options
+  return options;
 }
 
 /**
@@ -1150,12 +1150,12 @@ function scoreMultiLead(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
-  const rootTeam = teamOf(player)
+  const rootTeam = teamOf(player);
   const startHands: Hands = {
     ...hands,
     [player]: hands[player].filter(c => !cards.some(x => x.id === c.id)),
-  }
-  const firstPlay = { player, cards, handType: lead.type }
+  };
+  const firstPlay = { player, cards, handType: lead.type };
 
   const search = (
     currentHands: Hands,
@@ -1165,41 +1165,41 @@ function scoreMultiLead(
     beta: number,
   ): number => {
     if (plays.length === ALL_POSITIONS.length) {
-      return utility(plays, lead, rootTeam, trumpSuit, levelRank, 0, false, 0)
+      return utility(plays, lead, rootTeam, trumpSuit, levelRank, 0, false, 0);
     }
 
-    const options = followOptionsFor(currentHands[turn], lead, trumpSuit, levelRank)
+    const options = followOptionsFor(currentHands[turn], lead, trumpSuit, levelRank);
     if (options.length === 0) {
-      return utility(plays, lead, rootTeam, trumpSuit, levelRank, 0, false, 0)
+      return utility(plays, lead, rootTeam, trumpSuit, levelRank, 0, false, 0);
     }
 
-    const maximizing = teamOf(turn) === rootTeam
-    let best = maximizing ? -Infinity : Infinity
+    const maximizing = teamOf(turn) === rootTeam;
+    let best = maximizing ? -Infinity : Infinity;
     for (const option of options) {
       const nextHands: Hands = {
         ...currentHands,
         [turn]: currentHands[turn].filter(c => !option.some(x => x.id === c.id)),
-      }
+      };
       const nextPlays = [...plays, {
         player: turn,
         cards: option,
         handType: analyzeShape(option, trumpSuit, levelRank).type,
-      }]
-      const score = search(nextHands, nextPlayer(turn), nextPlays, alpha, beta)
+      }];
+      const score = search(nextHands, nextPlayer(turn), nextPlays, alpha, beta);
       if (maximizing) {
-        best = Math.max(best, score)
-        alpha = Math.max(alpha, best)
+        best = Math.max(best, score);
+        alpha = Math.max(alpha, best);
       }
       else {
-        best = Math.min(best, score)
-        beta = Math.min(beta, best)
+        best = Math.min(best, score);
+        beta = Math.min(beta, best);
       }
-      if (alpha >= beta) break
+      if (alpha >= beta) break;
     }
-    return best
-  }
+    return best;
+  };
 
-  return search(startHands, nextPlayer(player), [firstPlay], -Infinity, Infinity)
+  return search(startHands, nextPlayer(player), [firstPlay], -Infinity, Infinity);
 }
 
 /**
@@ -1215,29 +1215,29 @@ export function aiChoosePlay(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): Card[] {
-  const player = state.turn
-  const hand = hands[player]
+  const player = state.turn;
+  const hand = hands[player];
 
   if (!state.trick.leadDoor && state.trick.plays.length === 0) {
-    let bestCards: Card[] | null = null
-    let bestScore = -Infinity
-    const rootTeam = teamOf(player)
+    let bestCards: Card[] | null = null;
+    let bestScore = -Infinity;
+    const rootTeam = teamOf(player);
 
     for (const card of hand) {
-      const lead = analyzeShape([card], trumpSuit, levelRank)
+      const lead = analyzeShape([card], trumpSuit, levelRank);
       const firstPlay = {
         player,
         cards: [card],
         handType: HandType.Single,
-      }
+      };
       const remainingHands: Hands = {
         ...hands,
         [player]: hand.filter(candidate => candidate.id !== card.id),
-      }
-      const leadBonus = safePointLeadBonus(card, hands, player, trumpSuit, levelRank)
-      const splitBonus = splitKingLeadBonus(card, hands, player, trumpSuit, levelRank)
+      };
+      const leadBonus = safePointLeadBonus(card, hands, player, trumpSuit, levelRank);
+      const splitBonus = splitKingLeadBonus(card, hands, player, trumpSuit, levelRank);
       const strategicBonus = splitBonus
-        - leadJokerPenalty(card, trumpSuit, levelRank)
+        - leadJokerPenalty(card, trumpSuit, levelRank);
       const score = searchTrick(
         remainingHands,
         nextPlayer(player),
@@ -1251,10 +1251,10 @@ export function aiChoosePlay(
         strategicBonus,
         bestScore,
         Infinity,
-      )
+      );
       if (score > bestScore) {
-        bestScore = score
-        bestCards = [card]
+        bestScore = score;
+        bestCards = [card];
       }
     }
 
@@ -1262,25 +1262,25 @@ export function aiChoosePlay(
     // 先按「钓主」「必胜」两个专项规则评分，没命中时用通用评估与单张公平竞争。
     const otherHands = ALL_POSITIONS
       .filter(pos => pos !== player)
-      .map(pos => hands[pos])
-    const leadDoors = new Set<Suit | 'trump'>()
+      .map(pos => hands[pos]);
+    const leadDoors = new Set<Suit | 'trump'>();
     for (const card of hand) {
-      leadDoors.add(doorOf(card, trumpSuit, levelRank))
+      leadDoors.add(doorOf(card, trumpSuit, levelRank));
     }
 
-    const seen = new Set<string>()
+    const seen = new Set<string>();
     for (const door of leadDoors) {
-      const isTrumpDoor = door === 'trump'
+      const isTrumpDoor = door === 'trump';
       const doorCards = hand.filter(
         card => doorOf(card, trumpSuit, levelRank) === door,
-      )
-      const akThrows: Card[][] = []
+      );
+      const akThrows: Card[][] = [];
       if (!isTrumpDoor) {
-        const aces = doorCards.filter(card => card.rank === Rank.Ace)
-        const kings = doorCards.filter(card => card.rank === Rank.King)
+        const aces = doorCards.filter(card => card.rank === Rank.Ace);
+        const kings = doorCards.filter(card => card.rank === Rank.King);
         for (const ace of aces) {
           for (const king of kings) {
-            akThrows.push([ace, king])
+            akThrows.push([ace, king]);
           }
         }
       }
@@ -1295,41 +1295,41 @@ export function aiChoosePlay(
               ...generateThrowLeadCandidates(doorCards, trumpSuit, levelRank),
               ...akThrows,
             ]),
-      ]
+      ];
 
       for (const cards of candidates) {
-        const key = cards.map(card => card.id).sort().join('|')
-        if (seen.has(key)) continue
-        seen.add(key)
+        const key = cards.map(card => card.id).sort().join('|');
+        if (seen.has(key)) continue;
+        seen.add(key);
 
-        const lead = analyzeShape(cards, trumpSuit, levelRank)
-        if (lead.door === null) continue
+        const lead = analyzeShape(cards, trumpSuit, levelRank);
+        if (lead.door === null) continue;
         // 甩牌会被三家拦住时自动出小，不作为钓主候选
         if (lead.type === HandType.Throw
           && throwFallback(cards, otherHands, trumpSuit, levelRank) !== null) {
-          continue
+          continue;
         }
 
         const ruffBaitScore = scoreRuffBaitLead(
           cards, lead, hands, player, trumpSuit, levelRank,
-        )
+        );
         // 保留惩罚：主牌多张领出同样不该交出王；空甩一对 A 也降低评级
         const holdPenalty = cards.reduce(
           (sum, card) => sum + leadJokerPenalty(card, trumpSuit, levelRank), 0,
-        ) + acePairLeadPenalty(cards, lead, hands, player, trumpSuit, levelRank)
+        ) + acePairLeadPenalty(cards, lead, hands, player, trumpSuit, levelRank);
         const score = ruffBaitScore !== null
           ? ruffBaitScore
           : (scoreWinningMultiLead(cards, lead, hands, player, trumpSuit, levelRank)
             ?? scoreMultiLead(cards, lead, hands, player, trumpSuit, levelRank))
-            - holdPenalty
+            - holdPenalty;
         if (score > bestScore) {
-          bestScore = score
-          bestCards = cards
+          bestScore = score;
+          bestCards = cards;
         }
       }
     }
 
-    return bestCards ?? chooseLead(hand, trumpSuit, levelRank)
+    return bestCards ?? chooseLead(hand, trumpSuit, levelRank);
   }
 
   if (state.trick.leadCount === 1) {
@@ -1339,30 +1339,30 @@ export function aiChoosePlay(
       count: state.trick.leadCount,
       pairs: state.trick.leadPairs,
       tractor: state.trick.leadTractor,
-    }
-    const rootTeam = teamOf(player)
-    let bestCard: Card | null = null
-    let bestScore = -Infinity
+    };
+    const rootTeam = teamOf(player);
+    let bestCard: Card | null = null;
+    let bestScore = -Infinity;
 
     for (const card of hand) {
-      if (!validateFollow(hand, lead, [card], trumpSuit, levelRank).ok) continue
+      if (!validateFollow(hand, lead, [card], trumpSuit, levelRank).ok) continue;
 
       const play = {
         player,
         cards: [card],
         handType: HandType.Single,
-      }
+      };
       const remainingHands: Hands = {
         ...hands,
         [player]: hand.filter(candidate => candidate.id !== card.id),
-      }
+      };
       const strategicBonus = pointCardPassPenalty(
         state, hands, player, trumpSuit, levelRank, card,
       ) - breakStructurePenalty(card, hands[player], trumpSuit, levelRank)
         - bigTrumpEmptyTrickPenalty(state, lead, card, trumpSuit, levelRank)
         - pointFeedBigTrumpPenalty(
           state, hands, player, lead, card, trumpSuit, levelRank,
-        )
+        );
       const score = searchTrick(
         remainingHands,
         nextPlayer(player),
@@ -1376,14 +1376,14 @@ export function aiChoosePlay(
         strategicBonus,
         bestScore,
         Infinity,
-      )
+      );
       if (score > bestScore) {
-        bestScore = score
-        bestCard = card
+        bestScore = score;
+        bestCard = card;
       }
     }
 
-    return bestCard ? [bestCard] : chooseFollow(hand, lead, trumpSuit, levelRank)
+    return bestCard ? [bestCard] : chooseFollow(hand, lead, trumpSuit, levelRank);
   }
 
   const lead: HandShape = {
@@ -1392,6 +1392,6 @@ export function aiChoosePlay(
     count: state.trick.leadCount,
     pairs: state.trick.leadPairs,
     tractor: state.trick.leadTractor,
-  }
-  return chooseFollow(hand, lead, trumpSuit, levelRank)
+  };
+  return chooseFollow(hand, lead, trumpSuit, levelRank);
 }

@@ -6,9 +6,9 @@
 //   以及按闲家得分判定的等级变化（升几级 / 换庄 / 下一局庄家）
 // ============================================================
 
-import { type CSSProperties } from 'react'
-import { type BottomSettlement } from '../core/scoring.ts'
-import { type LevelBoard, type LevelSettlement, type LapBoard, formatLap } from '../core/rank.ts'
+import { type CSSProperties } from 'react';
+import { type BottomSettlement } from '../core/scoring.ts';
+import { type LevelBoard, type LevelSettlement, type LapBoard, formatLap } from '../core/rank.ts';
 import {
   type Card,
   PlayerPosition,
@@ -16,32 +16,32 @@ import {
   RANK_NAME,
   Team,
   TEAM_NAME_ZH,
-} from '../core/types.ts'
-import CardComponent from './CardComponent.tsx'
+} from '../core/types.ts';
+import CardComponent from './CardComponent.tsx';
 
 interface RoundSettlementProps {
   /** 本局墩数 */
-  trickCount: number
+  trickCount: number;
   /** 闲家得分（若抠底，已含「底牌分 × 倍数」） */
-  defendingPoints: number
+  defendingPoints: number;
   /** 庄家逃分 */
-  bankerPoints: number
+  bankerPoints: number;
   /** 抠底结算结果 */
-  bottom: BottomSettlement | null
+  bottom: BottomSettlement | null;
   /** 埋底的 8 张底牌 */
-  bottomCards: Card[]
+  bottomCards: Card[];
   /** 本局庄家 */
-  banker: PlayerPosition | null
+  banker: PlayerPosition | null;
   /** 两队当前级牌 */
-  levels: LevelBoard
+  levels: LevelBoard;
   /** 两队当前周目（本局结算后若要 +1，由这里推导） */
-  laps: LapBoard
+  laps: LapBoard;
   /** 等级结算（升几级 / 换庄 / 周目） */
-  levelSettlement: LevelSettlement | null
+  levelSettlement: LevelSettlement | null;
   /** 点击「完整日志」：由 App 打开本局日志（可导出 JSON / JSONC） */
-  onViewPlayLog: () => void
+  onViewPlayLog: () => void;
   /** 点击「下一局」 */
-  onNextRound: () => void
+  onNextRound: () => void;
 }
 
 const BUTTON_STYLE: CSSProperties = {
@@ -53,7 +53,7 @@ const BUTTON_STYLE: CSSProperties = {
   borderRadius: 7,
   background: 'rgba(255,215,0,0.16)',
   color: '#ffd700',
-}
+};
 
 export default function RoundSettlement({
   trickCount,
@@ -68,18 +68,18 @@ export default function RoundSettlement({
   onViewPlayLog,
   onNextRound,
 }: RoundSettlementProps) {
-  const total = defendingPoints + bankerPoints
-  const taken = bottom?.taken ?? false
+  const total = defendingPoints + bankerPoints;
+  const taken = bottom?.taken ?? false;
   // 升级后的级牌（用于展示「下一局」会打几）
   const nextBoard: LevelBoard = levelSettlement
     ? { ...levels, [levelSettlement.upgradingTeam]: levelSettlement.toLevel }
-    : levels
+    : levels;
   const nextTeamName = levelSettlement
     ? TEAM_NAME_ZH[levelSettlement.upgradingTeam]
-    : '—'
+    : '—';
   const nextLevelName = levelSettlement
     ? RANK_NAME[levelSettlement.toLevel]
-    : '—'
+    : '—';
   // 下一局的周目（升过 A 的队按完成周目数累加）
   const nextLaps: LapBoard = levelSettlement?.lapUp
     ? {
@@ -87,14 +87,14 @@ export default function RoundSettlement({
         [levelSettlement.upgradingTeam]:
           laps[levelSettlement.upgradingTeam] + levelSettlement.lapsGained,
       }
-    : laps
+    : laps;
   const tractorLabel = bottom
     ? bottom.tractorLength === 0
       ? '无对子'
       : bottom.tractorLength === 1
         ? '1 个对子'
         : `${bottom.tractorLength} 连对（拖拉机）`
-    : '—'
+    : '—';
 
   return (
     <div style={{
@@ -177,7 +177,7 @@ export default function RoundSettlement({
       {/* 底牌牌面 */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {bottomCards.map(c => (
-          <CardComponent key={c.id} card={c} small scale={0.62} />
+          <CardComponent key={c.id} card={c} small={true} scale={0.62} />
         ))}
       </div>
 
@@ -252,5 +252,5 @@ export default function RoundSettlement({
         </button>
       </div>
     </div>
-  )
+  );
 }

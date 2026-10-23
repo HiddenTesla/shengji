@@ -2,12 +2,12 @@ import {
   type PlayerPosition,
   PlayerMode,
   POSITION_NAME_ZH,
-} from '../core/types.ts'
+} from '../core/types.ts';
 
 interface PlayerModeButtonProps {
-  position: PlayerPosition
-  mode: PlayerMode
-  onToggle: () => void
+  position: PlayerPosition;
+  mode: PlayerMode;
+  onToggle: () => void;
 }
 
 export default function PlayerModeButton({
@@ -15,7 +15,7 @@ export default function PlayerModeButton({
   mode,
   onToggle,
 }: PlayerModeButtonProps) {
-  const isManual = mode === PlayerMode.Manual
+  const isManual = mode === PlayerMode.Manual;
 
   return (
     <button
@@ -33,5 +33,5 @@ export default function PlayerModeButton({
     >
       {POSITION_NAME_ZH[position]}家·{isManual ? '手动' : '托管'}
     </button>
-  )
+  );
 }
