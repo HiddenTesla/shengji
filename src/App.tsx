@@ -146,7 +146,7 @@ const FIRST_BID_MIN_REMAINING_SECONDS = 5;
 const BOTTOM_COUNT = 8;
 const SPEED_MULTIPLIERS = [2.0, 1.2, 0.7, 0.4, 0.2] as const;
 /** 发牌途中有人报主时的停顿（毫秒，会按游戏速度缩放） */
-const DEAL_DECLARE_PAUSE_MS = 1200;
+const DEAL_DECLARE_PAUSE_MS = 3000;
 
 /** 深色背景上的主花色文字颜色（黑桃用白色，否则看不清） */
 const TRUMP_TEXT_COLORS: Record<Suit, string> = {
@@ -305,8 +305,10 @@ function App() {
 
   // 本局**预定庄家**（「下一局」预设）：在 dealRound 里**同步**写入，
   // 与 React 渲染时序无关，因此不可能出现「预设丢了 → 退化成东家」的情况。
-  // null = 本局庄家由叫主（亮主者）决定（首局 / 新游戏）。
+  // null = 本局庄家由叫主（亮主者）决定（首局 / 新游戏 / 抢庄局）。
   const presetBankerRef = useRef<PlayerPosition | null>(null);
+  // 本局发牌开始时展示的庄家（「原样发牌」保留原庄家；抢庄局下仍可被亮主者取代）
+  const initialBankerRef = useRef<PlayerPosition | null>(null);
 
   /** 本局出牌记录（每局重建；下一局发牌时清空） */
   const logRef = useRef<RoundRecord | null>(null);
@@ -347,10 +349,16 @@ function App() {
 
   // ---- 重新发牌 ----
   // presetBanker 非空时以它为庄家（用于「下一局」：庄家由升级规则预定，叫主只定主花色）；
-  // 为空时庄家仍由叫主（亮主者）决定（用于首局 / 新游戏）。
+  // 为空时庄家仍由叫主（亮主者）决定（用于首局 / 新游戏 / 抢庄局）。
   // keepDeal = true 时**不洗牌**，沿用上一次发好的手牌与底部（「原样发牌」）。
-  function dealRound(presetBanker: PlayerPosition | null, keepDeal = false) {
+  // initialBanker：发牌开始时已有的庄家（「原样发牌」沿用原庄家），默认等于 presetBanker。
+  function dealRound(
+    presetBanker: PlayerPosition | null,
+    keepDeal = false,
+    initialBanker: PlayerPosition | null = presetBanker,
+  ) {
     presetBankerRef.current = presetBanker;
+    initialBankerRef.current = initialBanker;
 
     let nextHands: Hands;
     let nextBottom: Card[];
@@ -379,7 +387,7 @@ function App() {
     cardIdMapRef.current = buildCardIdMap(nextHands, nextBottom);
     gameIdRef.current = `G-${Math.random().toString(36).slice(2, 10)}`;
     logRef.current = createRoundRecord({
-      level: levels[teamOf(presetBanker ?? PlayerPosition.South)],
+      level: levels[teamOf(initialBanker ?? PlayerPosition.South)],
       playerModes: { ...playerModes },
       deal: {
         mode: keepDeal ? 'sameDeal' : 'shuffle',
@@ -399,7 +407,7 @@ function App() {
     setDealHoldSeq(0);
     setSelectedIndices(new Set());
     setTrumpSuit(null);
-    setBanker(presetBanker);
+    setBanker(initialBanker);
     setBottomTrump(false);
     setBidSeconds(BID_WINDOW_SECONDS);
     setFlipping(false);
@@ -423,9 +431,10 @@ function App() {
   }
 
   // ---- 原样发牌：牌序不变（手牌 / 底牌与刚才完全一致），清除报主记录重新发牌 ----
-  // 等级与周目保持不变；庄家重新由亮主者决定（与首局一致）。
+  // 等级 / 周目 / 庄家 / 级牌全部不变；本局是否「抢庄局」也保持不变：
+  // 抢庄局（首局）庄家仍由亮主者决定，非抢庄局庄家固定、叫主只定主花色。
   function redealSameCards() {
-    dealRound(null, true);
+    dealRound(presetBankerRef.current, true, banker);
   }
 
   // ---- 逐张发牌动画 ----
@@ -655,8 +664,11 @@ function App() {
       setTrumpSuit(suit);
       setBottomTrump(true);
       setFlipping(false);
-      // 翻底定主：庄家仍取预定庄家（「下一局」），否则取东家
-      const flipBanker = presetBankerRef.current ?? ALL_POSITIONS[0];
+      // 翻底定主：庄家仍取预定庄家（「下一局」）或发牌时已有的庄家（「原样发牌」），
+      // 都没有（真正的首局）才退回东家
+      const flipBanker = presetBankerRef.current
+        ?? initialBankerRef.current
+        ?? ALL_POSITIONS[0];
       const decisive = decisiveBottomIndex(bottom, levelRank);
       let trumpCard: Card | undefined = bottom[0];
       if (decisive >= 0) {
@@ -1723,7 +1735,7 @@ function App() {
       <ConfirmDialog
         open={confirmRedeal}
         title="原样发牌？"
-        description={'牌序不变：四家手牌与 8 张底牌和刚才完全一致，\n但会清除报主记录并重新发牌（庄家重新由亮主决定）。\n等级与周目保持不变。'}
+        description={'牌序不变：四家手牌与 8 张底牌和刚才完全一致，\n会清除报主记录并重新发牌；庄家与级牌都不变。\n（抢庄局仍为抢庄局：庄家由亮主者决定。）'}
         confirmLabel="原样发牌"
         cancelLabel="取消"
         danger={true}
