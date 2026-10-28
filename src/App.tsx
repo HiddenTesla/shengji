@@ -145,6 +145,8 @@ const FIRST_BID_MIN_REMAINING_SECONDS = 5;
 /** 底牌张数（= 庄家埋底张数） */
 const BOTTOM_COUNT = 8;
 const SPEED_MULTIPLIERS = [2.0, 1.2, 0.7, 0.4, 0.2] as const;
+/** 发牌途中有人报主时的停顿（毫秒，会按游戏速度缩放） */
+const DEAL_DECLARE_PAUSE_MS = 1200;
 
 /** 深色背景上的主花色文字颜色（黑桃用白色，否则看不清） */
 const TRUMP_TEXT_COLORS: Record<Suit, string> = {
@@ -233,6 +235,10 @@ function App() {
   /** 本次发牌的**原始**底牌（埋底后 bottomRef 会被覆盖，这里始终保留） */
   const originalBottomRef = useRef<Card[]>([]);
   const [revealed, setRevealed] = useState(0);
+  /** 发牌途中报主后的停顿（暂停发牌动画，让玩家看清报主） */
+  const [dealHold, setDealHold] = useState(false);
+  /** 每次报主自增，用于重置停顿计时 */
+  const [dealHoldSeq, setDealHoldSeq] = useState(0);
   /** 主牌是否由翻底牌确定（此时不可再反主） */
   const [bottomTrump, setBottomTrump] = useState(false);
   /** 叫主倒计时（秒） */
@@ -389,6 +395,8 @@ function App() {
 
     setHands({ E: [], S: [], W: [], N: [] });
     setRevealed(0);
+    setDealHold(false);
+    setDealHoldSeq(0);
     setSelectedIndices(new Set());
     setTrumpSuit(null);
     setBanker(presetBanker);
@@ -425,6 +433,8 @@ function App() {
     if (phase !== GamePhase.Dealing) return;
     const full = fullHandsRef.current;
     if (!full) return;
+    // 报主停顿期间不继续发牌（停顿结束后 effect 重新触发）
+    if (dealHold) return;
 
     const total = full.S.length;
     if (revealed >= total) {
@@ -445,7 +455,15 @@ function App() {
     }, gameDelay(500));
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, revealed]);
+  }, [phase, revealed, dealHold]);
+
+  // ---- 发牌途中报主：暂停发牌一小段时间（时长随游戏速度缩放） ----
+  useEffect(() => {
+    if (!dealHold) return;
+    const t = setTimeout(() => setDealHold(false), gameDelay(DEAL_DECLARE_PAUSE_MS));
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealHold, dealHoldSeq]);
 
   // ---- 跟牌必出牌（自动选中，且不可取消） ----
   function currentForcedIndices(): Set<number> {
@@ -534,6 +552,11 @@ function App() {
       );
     }
     setTrumpSuit(decl.suit);
+    // 发牌途中报主：暂停发牌动画一小段时间（让玩家看清报主）
+    if (phase === GamePhase.Dealing) {
+      setDealHold(true);
+      setDealHoldSeq(seq => seq + 1);
+    }
     // 已有预定庄家（「下一局」预设）时，叫主只定主花色，**绝不动庄家**
     if (presetBankerRef.current === null) setBanker(decl.player);
   }
@@ -1371,6 +1394,9 @@ function App() {
               {isDealing && (
                 <div>
                   发牌中… 可抢亮
+                  {dealHold && (
+                    <span className="phase-hint__gold"> · 报主停顿…</span>
+                  )}
                   {bidState.current && (
                     <span className="phase-hint__inline">
                       · 当前主牌：{trumpOfDeclaration(bidState.current)}
