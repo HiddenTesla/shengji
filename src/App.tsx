@@ -5,6 +5,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   type Card,
+  type PlayedCards,
   type RuleOptions,
   Rank,
   PlayerPosition,
@@ -80,9 +81,22 @@ import TrickArea from './components/TrickArea.tsx';
 import PlayBar from './components/PlayBar.tsx';
 import RoundSettlement from './components/RoundSettlement.tsx';
 import PlayLogDialog from './components/PlayLogDialog.tsx';
+import CardTrackerDialog from './components/CardTrackerDialog.tsx';
 import CardComponent from './components/CardComponent.tsx';
 
 type Hands = Record<PlayerPosition, Card[]>
+
+/** 发牌前的空手牌（记牌器用） */
+const EMPTY_HANDS: Hands = { E: [], S: [], W: [], N: [] };
+
+/** 记牌器：本局已经出的每一手牌（已收的墩 + 当前墩已出的牌） */
+function playedPlaysOf(state: PlayState | null): PlayedCards[] {
+  if (!state) return [];
+  const plays: PlayedCards[] = [];
+  for (const trick of state.tricks) plays.push(...trick.plays);
+  plays.push(...state.trick.plays);
+  return plays;
+}
 
 /**
  * 跟牌「必出牌」→ 在 `groupCardsForDisplay(...).flatMap(g => g.cards)` 中的下标。
@@ -267,6 +281,8 @@ function App() {
   const [confirmRedeal, setConfirmRedeal] = useState(false);
   /** 「自定义规则」信息框（只读，说明「新的一局」里的可选规则） */
   const [showRules, setShowRules] = useState(false);
+  /** 记牌器（已出牌 / 剩余牌） */
+  const [showTracker, setShowTracker] = useState(false);
   /** 本局生效的可选规则 */
   const [rules, setRules] = useState<RuleOptions>(DEFAULT_RULE_OPTIONS);
   /** 「新的一局」对话框中待确认的规则 */
@@ -1202,6 +1218,7 @@ function App() {
         onRedealSameCards={() => setConfirmRedeal(true)}
         onViewRules={() => setShowRules(true)}
         onViewPlayLog={() => openPlayLog('plays')}
+        onViewTracker={() => setShowTracker(true)}
       />
 
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
@@ -1691,6 +1708,16 @@ function App() {
         serialize={serializeLog}
         onExport={exportLog}
         onClose={() => setPlayLogOpen(false)}
+      />
+
+      {/* 记牌器：按门统计已出 / 剩余（按视角排除本家手牌） */}
+      <CardTrackerDialog
+        open={showTracker}
+        plays={playedPlaysOf(playState)}
+        hands={hands ?? EMPTY_HANDS}
+        trumpSuit={trumpSuit}
+        levelRank={levelRank}
+        onClose={() => setShowTracker(false)}
       />
 
       {/* 自定义规则（只读）：说明「新的一局」里的可选规则 */}

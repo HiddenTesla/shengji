@@ -14,6 +14,8 @@ interface MenuBarProps {
   onViewRules: () => void;
   /** 点击「出牌记录」：显示本局出牌（不含发牌记录） */
   onViewPlayLog: () => void;
+  /** 点击「记牌器」：查看已出牌 / 剩余牌 */
+  onViewTracker: () => void;
 }
 
 /**
@@ -43,6 +45,7 @@ export default function MenuBar({
   onRedealSameCards,
   onViewRules,
   onViewPlayLog,
+  onViewTracker,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<MenuKey | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -118,6 +121,9 @@ export default function MenuBar({
           <div role="menu" className="menu-bar__dropdown">
             <MenuItem onClick={() => closeThen(onViewPlayLog)}>
               出牌记录…
+            </MenuItem>
+            <MenuItem onClick={() => closeThen(onViewTracker)}>
+              记牌器…
             </MenuItem>
             <MenuItem onClick={() => closeThen(onViewRules)}>
               自定义规则…
