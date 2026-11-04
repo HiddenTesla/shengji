@@ -171,6 +171,36 @@
   color: $text-on-dark-dim;
 }
 
+/* 断门（算牌提示）：任一家断门时列出「方位 + 已断的门」 */
+.level-panel__voids {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.level-panel__void-row {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.level-panel__void-seat {
+  color: $text-on-dark-muted;
+}
+
+.level-panel__void-door {
+  min-width: 14px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--void-color, #fff);
+}
+
+.level-panel__void-none {
+  font-size: 13px;
+  color: $text-on-dark-dim;
+}
+
 /* ---- 牌桌 ---- */
 .stage {
   display: flex;

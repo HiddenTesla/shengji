@@ -4,7 +4,7 @@
 // 样式：src/styles/components/_trick-area.scss（BEM）
 // ============================================================
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   type Card,
   PlayerPosition,
@@ -17,6 +17,12 @@ import {
   currentTrickLeader,
   doorLabel,
 } from '../core/play.ts';
+import {
+  type Door,
+  VOID_DOOR_COLOR,
+  inferVoids,
+  voidDoorLabel,
+} from '../core/voids.ts';
 import { trickPoints } from '../core/scoring.ts';
 import { cssVars } from '../utils/cssVars.ts';
 import CardComponent from './CardComponent.tsx';
@@ -70,6 +76,11 @@ export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProp
     ? state.tricks[state.tricks.length - 1]
     : null;
   const compare = showLast && lastTrick !== null;
+  // 断门推断：只依据已出的牌（撤销后重算，自然回退）
+  const voids = useMemo(
+    () => inferVoids([...state.tricks, state.trick], trumpSuit, levelRank),
+    [state.tricks, state.trick, trumpSuit, levelRank],
+  );
 
   return (
     <div className="trick-area">
@@ -88,6 +99,7 @@ export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProp
             <PlaySlot
               player={slot.player}
               cards={play?.cards ?? []}
+              voids={voids[slot.player]}
               lastCards={lastPlay?.cards ?? []}
               lastIsLead={compare && lastTrick.leadPlayer === slot.player}
               lastIsWinner={compare && lastTrick.winner === slot.player}
@@ -155,6 +167,7 @@ function layoutCards(cards: Card[], width: number) {
 function PlaySlot({
   player,
   cards,
+  voids,
   lastCards,
   lastIsLead,
   lastIsWinner,
@@ -169,6 +182,8 @@ function PlaySlot({
 }: {
   player: PlayerPosition;
   cards: Card[];
+  /** 该家已断的门（根据出牌推断；空数组 = 未断） */
+  voids: Door[];
   /** 上一墩该家出的牌（勾选「显示上轮」时传入；空数组 = 不显示） */
   lastCards: Card[];
   /** 上一墩是否是这家领出 */
@@ -209,6 +224,23 @@ function PlaySlot({
       <div className={labelClass}>
         {POSITION_NAME_ZH[player]}家
         {isWinner ? ' 🏆' : isTurn ? ' · 出牌' : isCurrentMax ? ' · 当前最大' : isLead ? ' · 首出' : ''}
+        {voids.length > 0 && (
+          <span
+            className="play-slot__voids"
+            title={`已断：${voids.map(doorLabel).join('、')}`}
+          >
+            断
+            {voids.map(door => (
+              <span
+                key={door}
+                className="play-slot__void"
+                style={cssVars({ '--void-color': VOID_DOOR_COLOR[door] })}
+              >
+                {voidDoorLabel(door)}
+              </span>
+            ))}
+          </span>
+        )}
       </div>
 
       {/* 牌 */}

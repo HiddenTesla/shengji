@@ -59,6 +59,11 @@ import {
 import { type HandShape, mandatoryFollowCards } from './core/hand.ts';
 import { aiChoosePlay } from './core/ai.ts';
 import {
+  VOID_DOOR_COLOR,
+  inferVoids,
+  voidDoorLabel,
+} from './core/voids.ts';
+import {
   type RoundRecord,
   appendPlay,
   buildCardIdMap,
@@ -299,6 +304,13 @@ function App() {
 
   // 本局打的级牌 = **庄家队**的级牌（首局未定庄时按南家队；两队都从 2 打起）
   const levelRank = levels[teamOf(banker ?? PlayerPosition.South)];
+  // 断门推断：只看已出的牌（撤销后 playState 回退 → 自动回退）
+  const voids = useMemo(
+    () => (playState
+      ? inferVoids([...playState.tricks, playState.trick], trumpSuit, levelRank)
+      : null),
+    [playState, trumpSuit, levelRank],
+  );
   const gameDelay = (baseMs: number) =>
     Math.round(baseMs * SPEED_MULTIPLIERS[gameSpeed - 1]);
   // 用 ref 持有最新 bidState，避免闭包陷阱
@@ -1338,6 +1350,34 @@ function App() {
                 {playState.defendingPoints}
               </b>
               <span className="level-panel__score-max">/80</span>
+            </div>
+          </div>
+        )}
+
+        {/* 断门：按出牌推断（算牌），任一家断门即列出 */}
+        {voids && (
+          <div className="level-panel__row level-panel__row--section">
+            <span className="level-panel__label">断门</span>
+            <div className="level-panel__voids">
+              {ALL_POSITIONS.filter(pos => voids[pos].length > 0).map(pos => (
+                <div key={pos} className="level-panel__void-row">
+                  <span className="level-panel__void-seat">
+                    {POSITION_NAME_ZH[pos]}家
+                  </span>
+                  {voids[pos].map(door => (
+                    <span
+                      key={door}
+                      className="level-panel__void-door"
+                      style={cssVars({ '--void-color': VOID_DOOR_COLOR[door] })}
+                    >
+                      {voidDoorLabel(door)}
+                    </span>
+                  ))}
+                </div>
+              ))}
+              {ALL_POSITIONS.every(pos => voids[pos].length === 0) && (
+                <span className="level-panel__void-none">暂无</span>
+              )}
             </div>
           </div>
         )}
