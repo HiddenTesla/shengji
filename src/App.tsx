@@ -1018,17 +1018,57 @@ function App() {
     setSelectedIndices(indicesOfCards(hands[banker], cards));
   }
 
-  // ---- 撤销：优先回到「上一次玩家决策之前」；
-  // 若本局还没有玩家决策（全托管），则只退一步（AI 动作），
-  // 并在恢复点仍由托管行动时暂停托管，避免 AI 立即重做。
+  /** 这个快照恢复后，轮到的是不是「非托管（手动）」玩家（埋底阶段看庄家） */
+  function isManualTurnSnapshot(snap: UndoSnapshot): boolean {
+    if (snap.phase === GamePhase.Playing && snap.playState !== null) {
+      return playerModes[snap.playState.turn] === PlayerMode.Manual;
+    }
+    if (snap.phase === GamePhase.Burying && banker !== null) {
+      return playerModes[banker] === PlayerMode.Manual;
+    }
+    return false;
+  }
+
+  /**
+   * 撤销目标：回到「上一个非托管（手动）玩家」的决策点。
+   *   1. 从 history 末尾向前找最近一个「恢复后由手动玩家行动」的快照 → 就是它；
+   *   2. 本局还没轮到过手动玩家（如开局都是 AI 在动）：退到**出牌阶段起点**（第一次出牌之前）；
+   *   3. 整局都没有手动玩家（全托管）：仍只退一步，方便「末墩之后 / 托管埋底之后」回看。
+   * pauseAuto：恢复点仍由托管行动时需要暂停 AI，避免它立刻把撤销的动作重做。
+   */
+  function resolveUndo(): { idx: number; steps: number; pauseAuto: boolean } | null {
+    if (history.length === 0) return null;
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (isManualTurnSnapshot(history[i])) {
+        return { idx: i, steps: history.length - i, pauseAuto: false };
+      }
+    }
+    const hasManualSeat = ALL_POSITIONS.some(pos => playerModes[pos] === PlayerMode.Manual);
+    if (hasManualSeat) {
+      const firstPlay = history.findIndex(snap => snap.phase === GamePhase.Playing);
+      if (firstPlay >= 0) {
+        return { idx: firstPlay, steps: history.length - firstPlay, pauseAuto: true };
+      }
+    }
+    const last = history.length - 1;
+    return { idx: last, steps: 1, pauseAuto: true };
+  }
+
+  const undoTarget = resolveUndo();
+  /** 将被撤回的最后一个动作（出牌 / 埋底），只用于按钮提示 */
+  const undoKind = history[history.length - 1]?.kind === 'bury' ? '埋底' : '出牌';
+  const undoTitle = !undoTarget
+    ? '暂无可撤销的操作'
+    : undoTarget.pauseAuto
+      ? `撤销${undoKind} ${undoTarget.steps} 步：本局还没有你的操作，退到上一手 / 出牌开始（托管将暂停）`
+      : `撤销${undoKind} ${undoTarget.steps} 步，回到上一次非托管玩家的操作之前`;
+
+  // ---- 撤销：回到「上一个非托管（手动）玩家」的决策点（见 resolveUndo） ----
   function undo() {
-    if (history.length === 0) return;
-    let idx = history.length - 1;
-    while (idx >= 0 && !history[idx].manual) idx--;
-    if (idx < 0) idx = history.length - 1;
-    const snap = history[idx];
+    if (!undoTarget) return;
+    const snap = history[undoTarget.idx];
     if (!snap) return;
-    setHistory(prev => prev.slice(0, idx));
+    setHistory(prev => prev.slice(0, undoTarget.idx));
     setHands(snap.hands);
     setPlayState(snap.playState);
     setPhase(snap.phase);
@@ -1043,17 +1083,7 @@ function App() {
         snap.phase === GamePhase.Burying,
       );
     }
-
-    const autoWouldAct = (
-      snap.phase === GamePhase.Burying
-      && banker !== null
-      && playerModes[banker] === PlayerMode.Auto
-    ) || (
-      snap.phase === GamePhase.Playing
-      && snap.playState !== null
-      && playerModes[snap.playState.turn] === PlayerMode.Auto
-    );
-    setAutoPaused(autoWouldAct);
+    setAutoPaused(undoTarget.pauseAuto);
   }
 
   // ---- 离开 / 刷新页面时弹窗确认 ----
@@ -1210,9 +1240,7 @@ function App() {
   })();
 
   /** 是否有可撤销的玩家操作 */
-  const canUndo = history.length > 0;
-  /** 最近一次可撤销的操作类型（用于按钮提示） */
-  const lastUndoKind = history[history.length - 1]?.kind ?? null;
+  const canUndo = undoTarget !== null;
 
   // 本局主牌颜色：无主用紫色（与牌面一致），其余按花色
   const trumpTextColor = trumpSuit === null
@@ -1620,11 +1648,9 @@ function App() {
               className="undo-button"
               onClick={undo}
               disabled={!canUndo}
-              title={canUndo
-                ? `撤销${lastUndoKind === 'bury' ? '埋底' : '出牌'}（共 ${history.length} 步；撤销后托管暂停）`
-                : '暂无可撤销的操作'}
+              title={undoTitle}
             >
-              ↩ 撤销{canUndo ? `（${history.length}）` : ''}
+              ↩ 撤销{canUndo ? `（${undoTarget.steps}）` : ''}
             </button>
             {autoPaused && (
               <button
