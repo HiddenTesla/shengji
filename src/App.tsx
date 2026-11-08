@@ -59,6 +59,7 @@ import {
 import { type HandShape, mandatoryFollowCards } from './core/hand.ts';
 import { aiChoosePlay } from './core/ai.ts';
 import { useUiScale } from './hooks/useUiScale.ts';
+import { SPEED_MULTIPLIERS } from './utils/speed.ts';
 import {
   VOID_DOOR_COLOR,
   inferVoids,
@@ -165,7 +166,6 @@ const FIRST_BID_MIN_REMAINING_SECONDS = 5;
 
 /** 底牌张数（= 庄家埋底张数） */
 const BOTTOM_COUNT = 8;
-const SPEED_MULTIPLIERS = [1.2, 0.7, 0.4, 0.28, 0.16] as const;
 /** 报主泡泡的停留时长（毫秒，与 _base.scss 的 declareBubble 动画时长一致） */
 const DECLARE_TOAST_MS = 1800;
 
@@ -1250,6 +1250,8 @@ function App() {
         onViewRules={() => setShowRules(true)}
         onViewPlayLog={() => openPlayLog('plays')}
         onViewTracker={() => setShowTracker(true)}
+        gameSpeed={gameSpeed}
+        onChangeSpeed={setGameSpeed}
       />
 
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
@@ -1633,27 +1635,6 @@ function App() {
                 ▶ 继续托管
               </button>
             )}
-          </div>
-
-          <div className="speed-row">
-            <span className="speed-row__label">速度</span>
-            {SPEED_MULTIPLIERS.map((_, index) => {
-              const level = index + 1;
-              const active = gameSpeed === level;
-              return (
-                <button
-                  key={level}
-                  className={active
-                    ? 'speed-button speed-button--active'
-                    : 'speed-button'}
-                  onClick={() => setGameSpeed(level)}
-                  aria-pressed={active}
-                  title={`速度 ${level}${level === 3 ? '（当前默认）' : ''}`}
-                >
-                  {level}
-                </button>
-              );
-            })}
           </div>
 
         </div>

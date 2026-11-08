@@ -418,41 +418,6 @@
   background: rgba(126, 231, 135, 0.16);
 }
 
-/* 速度选择 */
-.speed-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  margin-top: 8px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.speed-row__label {
-  margin-right: 3px;
-}
-
-.speed-button {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.75);
-  cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.08);
-
-  &--active {
-    font-weight: 700;
-    color: $color-gold;
-    border-color: $color-gold;
-    background: rgba(255, 215, 0, 0.24);
-  }
-}
-
 /* ---- 底部手牌区 ---- */
 .bottom-area {
   padding: 4px 16px 8px;
