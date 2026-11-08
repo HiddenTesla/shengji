@@ -9,6 +9,8 @@
 //      拖拉机 vs 同长度拖拉机；甩牌按「张数相同」比较
 //      （甩牌成立时同门跟牌一律压不过，只有毙牌才可能大过；
 //       被拦的甩牌已在 play.ts::applyPlay 里「自动出小」改出）
+//      **毙牌也要带够对子 / 拖拉机**：首出甩牌含 N 个对子时，
+//      全是主牌但不够 N 个对子（或拖拉机不够长）只能算垫牌，不算毙牌。
 //   5. 同大时先出者赢（使用严格大于比较）
 // ============================================================
 
@@ -22,7 +24,6 @@ import {
   HandType as HT,
 } from './types.ts';
 import {
-  type Door,
   type HandShape,
   analyzeShape,
   slotOf,
@@ -33,18 +34,26 @@ import {
  *   2 = 主牌毙（首出非主）
  *   1 = 与首出同门（首出为主牌时即主牌）
  *   0 = 垫牌 —— 不能赢
+ *
+ * 毙牌的条件：1) 全部是主牌；2) **带够对子 + 拖拉机**——
+ * 首出甩牌里有 N 个对子（最长拖拉机 L 对）时，毙牌也必须至少有 N 个对子
+ * 与一条不短于 L 的拖拉机，否则只是「垫主牌」，算垫牌。
  */
 function tierOf(
   cards: Card[],
-  leadDoor: Door,
+  lead: HandShape,
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): number {
   const shape = analyzeShape(cards, trumpSuit, levelRank);
   const door = shape.door;
   if (door === null) return 0;
-  if (door === 'trump') return leadDoor === 'trump' ? 1 : 2;
-  return door === leadDoor ? 1 : 0;
+  if (door !== 'trump') return door === lead.door ? 1 : 0;
+  // 主牌：首出也是主牌 → 同门；否则必须满足毙牌的牌型要求
+  if (lead.door === 'trump') return 1;
+  if (shape.pairs < lead.pairs) return 0;
+  if (shape.maxTractor < lead.maxTractor) return 0;
+  return 2;
 }
 
 /** 同层内比较用的强度 = 该手牌中最大的「门内槽位」 */
@@ -89,14 +98,13 @@ export function beats(
   trumpSuit: Suit | null,
   levelRank: Rank,
 ): boolean {
-  const leadDoor = lead.door;
-  if (leadDoor === null) return false;
+  if (lead.door === null) return false;
 
   const cs = analyzeShape(candidate, trumpSuit, levelRank);
   // 不能与首出「同型同长度」→ 不能赢（如：不能拿主牌单张/非对子毙副牌对子）
   if (!canCompete(cs, lead)) return false;
 
-  const ct = tierOf(candidate, leadDoor, trumpSuit, levelRank);
+  const ct = tierOf(candidate, lead, trumpSuit, levelRank);
 
   // 甩牌成立时：同门跟牌一定小于领出（甩牌本身已保证该门要不上），
   // 只有主牌毙牌（跨门 tier = 2）才可能大过甩牌；主牌甩牌则无人能大过。
@@ -105,7 +113,7 @@ export function beats(
   const bs = analyzeShape(best, trumpSuit, levelRank);
   // 当前最大者若本身不能争胜（纯垫牌 / 无效毙牌），按垫牌处理
   const bt = canCompete(bs, lead)
-    ? tierOf(best, leadDoor, trumpSuit, levelRank)
+    ? tierOf(best, lead, trumpSuit, levelRank)
     : 0;
 
   // 不同层：层级高的赢（主牌毙 > 同门 > 垫牌）

@@ -125,6 +125,7 @@ function forcedFollowIndicesOf(
     count: trick.leadCount,
     pairs: trick.leadPairs,
     tractor: trick.leadTractor,
+    maxTractor: trick.leadMaxTractor,
   };
   const forced = mandatoryFollowCards(hand, lead, trumpSuit, levelRank);
   if (forced.length === 0) return result;

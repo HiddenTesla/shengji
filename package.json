@@ -8,6 +8,7 @@
     "build": "eslint . && tsc -b && vite build",
     "lint": "eslint .",
     "fix": "eslint . --fix",
+    "test": "node scripts/run-tests.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

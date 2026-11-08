@@ -205,10 +205,10 @@ function canRuffWithTrump(
   const trumps = hand.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump');
   if (trumps.length < lead.count) return false;
 
-  if (lead.tractor >= 2) {
+  if (lead.maxTractor >= 2) {
     return hasConsecutivePairRun(
       leadPairUnits(trumps, trumpSuit, levelRank),
-      lead.tractor,
+      lead.maxTractor,
     );
   }
   if (lead.pairs > 0) {
@@ -577,6 +577,7 @@ function pointCardPassPenalty(
     count: trick.leadCount,
     pairs: trick.leadPairs,
     tractor: trick.leadTractor,
+    maxTractor: trick.leadMaxTractor,
   };
   if (judgePlays(trick.plays, lead, trumpSuit, levelRank) !== currentHighPlayer) {
     return 0;
@@ -1339,6 +1340,7 @@ export function aiChoosePlay(
       count: state.trick.leadCount,
       pairs: state.trick.leadPairs,
       tractor: state.trick.leadTractor,
+      maxTractor: state.trick.leadMaxTractor,
     };
     const rootTeam = teamOf(player);
     let bestCard: Card | null = null;
@@ -1392,6 +1394,7 @@ export function aiChoosePlay(
     count: state.trick.leadCount,
     pairs: state.trick.leadPairs,
     tractor: state.trick.leadTractor,
+    maxTractor: state.trick.leadMaxTractor,
   };
   return chooseFollow(hand, lead, trumpSuit, levelRank);
 }
