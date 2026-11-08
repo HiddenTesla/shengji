@@ -139,6 +139,52 @@ function leadJokerPenalty(
   return 0;
 }
 
+/**
+ * 「靠自家的王接自己的主分牌」惩罚。
+ *
+ * 副牌有「已方确定大牌 → 领出该门分牌」的技巧（见 `safePointLeadBonus`），
+ * 但这条技巧**不能套用到主牌**。单张搜索只看一墩，只要结果是我们这边最大
+ * 就按 +TRICK_WIN_VALUE 记，于是 AI 会为了多收 5 / 10 分而领出主 5 / 主 10 / 主 K，
+ * 让对家的大王 / 小王把这一墩接走。
+ * 实战里几乎不会这样打：王是控制牌，要留着抢有分的墩；吊主应该领小主牌，
+ * 而不是用一张主分牌把对家的王钓出来。
+ *
+ * 只在下面三条同时成立时计入：
+ *   1. 领出的这一手是主牌、且本身是分牌（5 / 10 / K，级牌除外——级牌是控制牌）；
+ *   2. 本墩由本方赢下，且赢的那手牌里有王（= 对家垫了王）；
+ *   3. 本墩分值不高（否则用王收分是划算的）。
+ */
+const LEAD_TRUMP_POINT_MAX_TRICK_POINTS = 20;
+
+function leadTrumpPointJokerPenalty(
+  plays: PlayState['trick']['plays'],
+  lead: HandShape,
+  winner: PlayerPosition,
+  rootTeam: ReturnType<typeof teamOf>,
+  points: number,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  if (lead.door !== 'trump') return 0;
+  if (lead.count !== 1) return 0;
+  if (points > LEAD_TRUMP_POINT_MAX_TRICK_POINTS) return 0;
+  if (teamOf(winner) !== rootTeam) return 0;
+
+  // 领出的牌必须是主分牌；王由 leadJokerPenalty 单独处理，级牌是控制牌不算
+  const led = plays[0].cards[0];
+  if (led.rank === levelRank) return 0;
+  if (!isPointCard(led.rank)) return 0;
+
+  const winnerCards = plays.find(play => play.player === winner)?.cards ?? [];
+  if (winnerCards.some(card => card.rank === Rank.BigJoker)) {
+    return LEAD_BIG_JOKER_PENALTY;
+  }
+  if (winnerCards.some(card => card.rank === Rank.SmallJoker)) {
+    return LEAD_SMALL_JOKER_PENALTY;
+  }
+  return 0;
+}
+
 function cardCost(card: Card, trumpSuit: Suit | null, levelRank: Rank): number {
   const slot = slotOf(card, trumpSuit, levelRank);
   return doorOf(card, trumpSuit, levelRank) === 'trump' ? 20 + slot : slot;
@@ -872,7 +918,7 @@ function utility(
   trumpSuit: Suit | null,
   levelRank: Rank,
   leadBonus: number,
-  ruffBait: boolean,
+  leading: boolean,
   strategicBonus: number,
 ): number {
   const winner = judgePlays(plays, lead, trumpSuit, levelRank);
@@ -889,7 +935,12 @@ function utility(
   const base = (won ? TRICK_WIN_VALUE + points : -TRICK_WIN_VALUE - points) + cardEconomy;
   let score = base + strategicBonus;
   if (won) score += leadBonus;
-  else if (ruffBait) score += ruffBaitBonus(plays, winner, lead, trumpSuit, levelRank);
+  else if (leading) score += ruffBaitBonus(plays, winner, lead, trumpSuit, levelRank);
+  if (leading) {
+    score -= leadTrumpPointJokerPenalty(
+      plays, lead, winner, rootTeam, points, trumpSuit, levelRank,
+    );
+  }
   return score;
 }
 
@@ -902,14 +953,14 @@ function searchTrick(
   trumpSuit: Suit | null,
   levelRank: Rank,
   leadBonus: number,
-  ruffBait: boolean,
+  leading: boolean,
   strategicBonus: number,
   alpha: number,
   beta: number,
 ): number {
   if (plays.length === 4) {
     return utility(
-      plays, lead, rootTeam, trumpSuit, levelRank, leadBonus, ruffBait, strategicBonus,
+      plays, lead, rootTeam, trumpSuit, levelRank, leadBonus, leading, strategicBonus,
     );
   }
 
@@ -938,7 +989,7 @@ function searchTrick(
       trumpSuit,
       levelRank,
       leadBonus,
-      ruffBait,
+      leading,
       strategicBonus,
       alpha,
       beta,
