@@ -152,9 +152,10 @@
 
 .play-slot__cards-outer {
   position: relative;
-  width: 168px;
-  height: 59.52px; /* 96 * 0.62 */
+  width: var(--cards-outer-w, 168px);
+  height: 59.52px; /* 96 * 0.62：高度固定，缩牌时垂直居中，牌桌不会跳动 */
   display: flex;
+  align-items: center;
   justify-content: center;
 
   /* 同时显示上轮与本墩：两组并排（左 上轮 / 右 本墩），不增加高度 */
@@ -202,7 +203,7 @@
 .play-slot__cards {
   position: relative;
   width: var(--cards-width, 44.02px);
-  height: 59.52px;
+  height: var(--card-h, 59.52px);
 
   /* 本墩：勾选「显示上轮」时虚化 */
   &--dim {

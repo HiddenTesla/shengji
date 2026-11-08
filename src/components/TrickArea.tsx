@@ -36,13 +36,18 @@ interface TrickAreaProps {
 /** 出牌区用的牌缩放（比手牌更小） */
 const CARD_SCALE = 0.62;
 const CARD_W = 71 * CARD_SCALE;
-const CARD_H = 96 * CARD_SCALE;
 /** 一手多张牌时的重叠步长上限 */
 const STEP_MAX = 26;
 /** 每手牌区域宽度（多张牌在此宽度内压缩重叠） */
 const SLOT_W = 168;
-/** 同时显示上一墩时，每组牌占的宽度（左：上轮，右：本墩，中间留分隔线位置） */
-const COMPARE_GROUP_W = (SLOT_W - 9) / 2;
+/** 同时显示上一墩时：「上轮｜分隔线｜本墩」占用的总间隔（gap 4 + 线 1 + gap 4） */
+const COMPARE_GAP = 9;
+/** 同时显示上一墩时，每手牌的区域宽度上限（牌桌会随之变宽，太宽会挤压东西家出牌栏） */
+const COMPARE_SLOT_MAX = 208;
+/** 每组牌至少要露出的宽度（能看清左上角的点数 + 花色）占牌宽的比例 */
+const STRIP_RATIO = 0.45;
+/** 张数过多时牌面缩放的保底值（再小就没意义了，超出部分继续重叠） */
+const COMPARE_MIN_SCALE = 0.3;
 
 /** 四家在本墩中的方位 */
 const SLOTS: { player: PlayerPosition; col: number; row: number }[] = [
@@ -51,8 +56,6 @@ const SLOTS: { player: PlayerPosition; col: number; row: number }[] = [
   { player: PlayerPosition.East, col: 3, row: 2 },
   { player: PlayerPosition.South, col: 2, row: 3 },
 ];
-
-/** 回看上一墩时的牌缩放（与本墩一致，靠透明度区分） */
 
 /** 「轮到谁出牌」箭头：指向该玩家所在方位（牌未出，空位上显示） */
 const TURN_ARROW: Record<PlayerPosition, string> = {
@@ -157,11 +160,49 @@ export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProp
 
 // ------------------------------------------------------------
 
-/** 一组牌在限定宽度内的重叠步长与总宽 */
-function layoutCards(cards: Card[], width: number) {
+/** 一组牌的叠放布局（步长 / 总宽 / 牌面缩放 / 牌高） */
+interface CardLayout {
+  step: number;
+  width: number;
+  scale: number;
+  height: number;
+}
+
+function layoutAtScale(cards: Card[], width: number, scale: number): CardLayout {
   const n = cards.length;
-  const step = n > 1 ? Math.min(STEP_MAX, (width - CARD_W) / (n - 1)) : 0;
-  return { step, width: n > 0 ? (n - 1) * step + CARD_W : CARD_W };
+  const cardW = 71 * scale;
+  const step = n > 1 ? Math.min(STEP_MAX, (width - cardW) / (n - 1)) : 0;
+  return {
+    step,
+    width: n > 0 ? (n - 1) * step + cardW : cardW,
+    scale,
+    height: 96 * scale,
+  };
+}
+
+/** 一组牌在限定宽度内的重叠步长与总宽 */
+function layoutCards(cards: Card[], width: number): CardLayout {
+  return layoutAtScale(cards, width, CARD_SCALE);
+}
+
+/**
+ * 勾选「显示上轮」时两组牌并排，每组只有一半宽度：张数一多就会叠成一摞看不清。
+ * 所以先按张数把牌面缩小，保证每张牌都露出左上角的点数 + 花色
+ * （缩放下限 COMPARE_MIN_SCALE，超过部分继续重叠）。
+ */
+function layoutCompare(cards: Card[], width: number): CardLayout {
+  const n = cards.length;
+  if (n <= 1) return layoutAtScale(cards, width, CARD_SCALE);
+  // 步长 >= STRIP_RATIO * 牌宽 时，牌角才露得出来
+  const maxCardW = width / (1 + STRIP_RATIO * (n - 1));
+  const scale = Math.max(COMPARE_MIN_SCALE, Math.min(CARD_SCALE, maxCardW / 71));
+  return layoutAtScale(cards, width, scale);
+}
+
+/** 勾选「显示上轮」时每手牌的区域宽度：按张数加宽，避免一摞牌叠在一起 */
+function compareSlotWidth(n: number): number {
+  const need = 2 * (CARD_W + Math.max(0, n - 1) * STEP_MAX) + COMPARE_GAP;
+  return Math.min(COMPARE_SLOT_MAX, Math.max(SLOT_W, need));
 }
 
 function PlaySlot({
@@ -205,10 +246,11 @@ function PlaySlot({
 }) {
   const n = cards.length;
   const compare = lastCards.length > 0;
-  // 两组并排时各占一半宽度，避免额外的上下高度
-  const groupW = compare ? COMPARE_GROUP_W : SLOT_W;
-  const current = layoutCards(cards, groupW);
-  const previous = layoutCards(lastCards, groupW);
+  // 两组并排时各占一半宽度：按张数适当加宽，避免额外的高度
+  const outerW = compare ? compareSlotWidth(Math.max(n, lastCards.length)) : SLOT_W;
+  const groupW = compare ? (outerW - COMPARE_GAP) / 2 : SLOT_W;
+  const current = compare ? layoutCompare(cards, groupW) : layoutCards(cards, groupW);
+  const previous = layoutCompare(lastCards, groupW);
 
   // 折叠框浮层：往牌桌外侧展开（西家向左，其余向右），不影响布局
   const sideLeft = player === PlayerPosition.West;
@@ -244,15 +286,20 @@ function PlaySlot({
       </div>
 
       {/* 牌 */}
-      <div className={compare
-        ? 'play-slot__cards-outer play-slot__cards-outer--compare'
-        : 'play-slot__cards-outer'}
+      <div
+        className={compare
+          ? 'play-slot__cards-outer play-slot__cards-outer--compare'
+          : 'play-slot__cards-outer'}
+        style={cssVars({ '--cards-outer-w': `${outerW}px` })}
       >
         {/* 左：上一墩（保持清晰） */}
         {compare && (
           <div
             className="play-slot__cards play-slot__cards--last"
-            style={cssVars({ '--cards-width': `${previous.width}px` })}
+            style={cssVars({
+              '--cards-width': `${previous.width}px`,
+              '--card-h': `${previous.height}px`,
+            })}
           >
             {lastCards.map((c, i) => (
               <div
@@ -263,7 +310,12 @@ function PlaySlot({
                   '--card-step': `${previous.step}px`,
                 })}
               >
-                <CardComponent card={c} faceUp={true} small={true} scale={CARD_SCALE} />
+                <CardComponent
+                  card={c}
+                  faceUp={true}
+                  small={true}
+                  scale={previous.scale}
+                />
               </div>
             ))}
             {/* 上一墩的角色：领出者 / 大出者（最高牌，赢墩） */}
@@ -292,7 +344,10 @@ function PlaySlot({
           className={dimCurrent && n > 0
             ? 'play-slot__cards play-slot__cards--dim'
             : 'play-slot__cards'}
-          style={cssVars({ '--cards-width': `${current.width}px` })}
+          style={cssVars({
+            '--cards-width': `${current.width}px`,
+            '--card-h': `${current.height}px`,
+          })}
         >
           {cards.map((c, i) => (
             <div
@@ -303,7 +358,12 @@ function PlaySlot({
                 '--card-step': `${current.step}px`,
               })}
             >
-              <CardComponent card={c} faceUp={true} small={true} scale={CARD_SCALE} />
+              <CardComponent
+                card={c}
+                faceUp={true}
+                small={true}
+                scale={current.scale}
+              />
             </div>
           ))}
 
