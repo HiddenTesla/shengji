@@ -1,0 +1,156 @@
+// ============================================================
+// CardTrackerDialog —— 记牌器（已出牌 / 剩余牌）
+// ============================================================
+
+@use '../tokens' as *;
+
+.tracker {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* 视角切换 */
+.tracker__perspective {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.tracker__perspective-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.tracker__perspective-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.tracker-seat {
+  padding: 3px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  &--active {
+    color: $color-gold;
+    background: rgba(255, 215, 0, 0.16);
+    border-color: rgba(255, 215, 0, 0.6);
+  }
+}
+
+.tracker__row {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.tracker__suit {
+  display: flex;
+  flex: 0 0 32px;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  color: var(--suit-color, #fff);
+}
+
+.tracker__suit-symbol {
+  font-size: 19px;
+  line-height: 1;
+}
+
+/* 非花色行（如「级王」）的文字标签 */
+.tracker__group-label {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.tracker__trump {
+  padding: 0 3px;
+  font-size: 9px;
+  line-height: 12px;
+  color: transparent;
+  border-radius: 3px;
+  border: 1px solid transparent;
+
+  &--on {
+    color: $color-gold;
+    border-color: rgba(255, 215, 0, 0.55);
+    background: rgba(255, 215, 0, 0.12);
+  }
+}
+
+.tracker-cell {
+  display: flex;
+  flex: 0 0 46px;
+  flex-direction: column;
+  gap: 1px;
+  align-items: center;
+  padding: 4px 0 3px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+
+  &--level {
+    background: rgba(255, 215, 0, 0.14);
+    border-color: rgba(255, 215, 0, 0.5);
+  }
+
+  /* 该牌已经没有看不到的了 */
+  &--gone {
+    opacity: 0.45;
+  }
+}
+
+.tracker-cell__rank {
+  display: flex;
+  gap: 1px;
+  align-items: baseline;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* 副级牌 / 王行里的花色前缀 */
+.tracker-cell__suit {
+  font-size: 11px;
+  color: var(--suit-color, #fff);
+}
+
+.tracker-cell__remain {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: $color-green-bright;
+}
+
+.tracker-cell--gone .tracker-cell__remain {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.tracker-cell__played {
+  font-size: 9px;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.45);
+}

@@ -18,6 +18,7 @@ html {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   /* 顶部菜单栏高度：随窗口高度自适应（窗口越矮越紧凑，但不会小于 36px） */
+  /* 兜底值；`.app` 里会用 --app-height（缩放前的设计高度）覆盖它 */
   --menu-bar-height: clamp(36px, 5.5vh, 56px);
   /* 菜单栏下沿 + 8px：绝对定位的浮层（等级面板、甩牌提示）用它，避免写死数字 */
   --menu-bar-offset: calc(var(--menu-bar-height) + 8px);
@@ -59,5 +60,28 @@ select option {
   }
   50% {
     opacity: 1;
+  }
+}
+
+/* 报主泡泡：弹入 → 停留 → 淡出（时长与 App.tsx::DECLARE_TOAST_MS 一致） */
+@keyframes declareBubble {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.85);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.06);
+  }
+  22% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  76% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -10px) scale(0.96);
   }
 }

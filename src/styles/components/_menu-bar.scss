@@ -54,10 +54,56 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
+/* 带子菜单的条目：hover / 键盘聚焦时在右侧展开子菜单 */
+.menu-bar__submenu-group {
+  position: relative;
+
+  &:hover,
+  &:focus-within {
+    > .menu-bar__item--parent {
+      background: $color-menu-hover;
+    }
+
+    > .menu-bar__submenu {
+      display: block;
+    }
+  }
+}
+
+.menu-bar__item--parent {
+  justify-content: space-between;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.menu-bar__arrow {
+  font-size: 0.9em;
+  line-height: 1;
+  color: $text-on-dark-dim;
+}
+
+/* 子菜单：贴在父项右侧（与父项齐平，中间不留缝） */
+.menu-bar__submenu {
+  display: none;
+  position: absolute;
+  top: -5px; /* 抵消 dropdown 的 4px padding + 1px 边框 */
+  left: 100%;
+  z-index: 1;
+  min-width: clamp(64px, 6vw, 92px);
+  padding: 4px;
+  border-radius: 6px;
+  background: $color-menu-bg;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
 .menu-bar__item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   width: 100%;
-  padding: clamp(6px, 1vh, 11px) clamp(12px, 1vw, 18px);
+  padding: clamp(6px, calc(var(--app-height, 100vh) * 0.01), 11px)
+    clamp(12px, 1vw, 18px);
   font-size: $menu-font-size;
   text-align: left;
   color: #fff;
@@ -69,12 +115,25 @@
   &:hover {
     background: $color-menu-hover;
   }
+
+  /* 单选类条目（如游戏速度）：当前项加粗 */
+  &--checked {
+    font-weight: 700;
+  }
+}
+
+/* 单选条目前的勾（未选中时留白，保证对齐） */
+.menu-bar__check {
+  width: 14px;
+  flex-shrink: 0;
+  color: $color-gold;
+  text-align: center;
 }
 
 .menu-bar__title {
   margin-left: auto;
   margin-right: 4px;
   color: rgba(255, 255, 255, 0.45);
-  font-size: clamp(11px, 1.3vh, 14px);
+  font-size: clamp(11px, calc(var(--app-height, 100vh) * 0.013), 14px);
   letter-spacing: 1px;
 }

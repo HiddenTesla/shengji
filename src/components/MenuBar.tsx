@@ -1,9 +1,10 @@
 // ============================================================
-// 顶部菜单栏 —— 「游戏」「查看」菜单
+// 顶部菜单栏 —— 「游戏」「查看」「选项」菜单
 // 样式：src/styles/components/_menu-bar.scss（BEM）
 // ============================================================
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { SPEED_LEVELS } from '../utils/speed.ts';
 
 interface MenuBarProps {
   /** 点击「新的一局」：只负责发起请求，由 App 弹确认框 */
@@ -14,6 +15,12 @@ interface MenuBarProps {
   onViewRules: () => void;
   /** 点击「出牌记录」：显示本局出牌（不含发牌记录） */
   onViewPlayLog: () => void;
+  /** 点击「记牌器」：查看已出牌 / 剩余牌 */
+  onViewTracker: () => void;
+  /** 当前游戏速度档位（1..5） */
+  gameSpeed: number;
+  /** 选择速度档位（「选项 → 游戏速度」，不需要弹框） */
+  onChangeSpeed: (level: number) => void;
 }
 
 /**
@@ -21,28 +28,40 @@ interface MenuBarProps {
  * 绝对定位的浮层直接用 `top: var(--menu-bar-offset)`。
  */
 
-function MenuItem({ onClick, children }: {
+function MenuItem({ onClick, checked, children }: {
   onClick: () => void;
+  /** 传入时按「单选」项渲染（前面带勾） */
+  checked?: boolean;
   children: ReactNode;
 }) {
+  const isRadio = checked !== undefined;
   return (
     <button
-      role="menuitem"
-      className="menu-bar__item"
+      role={isRadio ? 'menuitemradio' : 'menuitem'}
+      aria-checked={isRadio ? checked : undefined}
+      className={checked ? 'menu-bar__item menu-bar__item--checked' : 'menu-bar__item'}
       onClick={onClick}
     >
+      {isRadio && (
+        <span className="menu-bar__check">
+          {checked ? '✓' : ''}
+        </span>
+      )}
       {children}
     </button>
   );
 }
 
-type MenuKey = 'game' | 'view'
+type MenuKey = 'game' | 'view' | 'options'
 
 export default function MenuBar({
   onNewGame,
   onRedealSameCards,
   onViewRules,
   onViewPlayLog,
+  onViewTracker,
+  gameSpeed,
+  onChangeSpeed,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<MenuKey | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -119,9 +138,50 @@ export default function MenuBar({
             <MenuItem onClick={() => closeThen(onViewPlayLog)}>
               出牌记录…
             </MenuItem>
+            <MenuItem onClick={() => closeThen(onViewTracker)}>
+              记牌器…
+            </MenuItem>
             <MenuItem onClick={() => closeThen(onViewRules)}>
               自定义规则…
             </MenuItem>
+          </div>
+        )}
+      </div>
+
+      <div className="menu-bar__group">
+        <button
+          className={buttonClassName('options')}
+          onClick={() => toggle('options')}
+          aria-haspopup="menu"
+          aria-expanded={openMenu === 'options'}
+        >
+          选项
+        </button>
+
+        {openMenu === 'options' && (
+          <div role="menu" className="menu-bar__dropdown">
+            {/* 目前只有一个选项：光标移到「游戏速度」上，右侧展开速度子菜单 */}
+            <div className="menu-bar__submenu-group">
+              <button
+                role="menuitem"
+                aria-haspopup="menu"
+                className="menu-bar__item menu-bar__item--parent"
+              >
+                游戏速度
+                <span className="menu-bar__arrow">▸</span>
+              </button>
+              <div role="menu" className="menu-bar__submenu">
+                {SPEED_LEVELS.map(level => (
+                  <MenuItem
+                    key={level}
+                    checked={gameSpeed === level}
+                    onClick={() => closeThen(() => onChangeSpeed(level))}
+                  >
+                    {level}
+                  </MenuItem>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -7,7 +7,8 @@
 $z-menu-bar: 40;
 
 // 字号
-$menu-font-size: clamp(13px, 1.6vh, 17px);
+// （用 --app-height 而不是 vh：窗口变矮时整块界面会被 transform 缩小，vh 会被缩两次）
+$menu-font-size: clamp(13px, calc(var(--app-height, 100vh) * 0.016), 17px);
 
 // 文本
 $color-text-strong: #1a1a1a;

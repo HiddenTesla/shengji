@@ -5,6 +5,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   type Card,
+  type PlayedCards,
   type RuleOptions,
   Rank,
   PlayerPosition,
@@ -57,6 +58,13 @@ import {
 } from './core/play.ts';
 import { type HandShape, mandatoryFollowCards } from './core/hand.ts';
 import { aiChoosePlay } from './core/ai.ts';
+import { useUiScale } from './hooks/useUiScale.ts';
+import { SPEED_MULTIPLIERS } from './utils/speed.ts';
+import {
+  VOID_DOOR_COLOR,
+  inferVoids,
+  voidDoorLabel,
+} from './core/voids.ts';
 import {
   type RoundRecord,
   appendPlay,
@@ -80,9 +88,22 @@ import TrickArea from './components/TrickArea.tsx';
 import PlayBar from './components/PlayBar.tsx';
 import RoundSettlement from './components/RoundSettlement.tsx';
 import PlayLogDialog from './components/PlayLogDialog.tsx';
+import CardTrackerDialog from './components/CardTrackerDialog.tsx';
 import CardComponent from './components/CardComponent.tsx';
 
 type Hands = Record<PlayerPosition, Card[]>
+
+/** 发牌前的空手牌（记牌器用） */
+const EMPTY_HANDS: Hands = { E: [], S: [], W: [], N: [] };
+
+/** 记牌器：本局已经出的每一手牌（已收的墩 + 当前墩已出的牌） */
+function playedPlaysOf(state: PlayState | null): PlayedCards[] {
+  if (!state) return [];
+  const plays: PlayedCards[] = [];
+  for (const trick of state.tricks) plays.push(...trick.plays);
+  plays.push(...state.trick.plays);
+  return plays;
+}
 
 /**
  * 跟牌「必出牌」→ 在 `groupCardsForDisplay(...).flatMap(g => g.cards)` 中的下标。
@@ -105,6 +126,7 @@ function forcedFollowIndicesOf(
     count: trick.leadCount,
     pairs: trick.leadPairs,
     tractor: trick.leadTractor,
+    maxTractor: trick.leadMaxTractor,
   };
   const forced = mandatoryFollowCards(hand, lead, trumpSuit, levelRank);
   if (forced.length === 0) return result;
@@ -144,7 +166,8 @@ const FIRST_BID_MIN_REMAINING_SECONDS = 5;
 
 /** 底牌张数（= 庄家埋底张数） */
 const BOTTOM_COUNT = 8;
-const SPEED_MULTIPLIERS = [2.0, 1.2, 0.7, 0.4, 0.2] as const;
+/** 报主泡泡的停留时长（毫秒，与 _base.scss 的 declareBubble 动画时长一致） */
+const DECLARE_TOAST_MS = 1800;
 
 /** 深色背景上的主花色文字颜色（黑桃用白色，否则看不清） */
 const TRUMP_TEXT_COLORS: Record<Suit, string> = {
@@ -203,7 +226,23 @@ function trumpOfBottomFlip(suit: Suit | null, decisiveCard: Card | null): string
   return '无主';
 }
 
+/** 报主泡泡（桌面中央短暂显示）：谁、亮主/反主、什么主、几张 */
+interface DeclareToast {
+  /** 自增序号：同一个泡泡内容重复出现时也能重播动画 */
+  seq: number;
+  player: PlayerPosition;
+  /** 亮主 = 首次报主；反主 = 盖过已有声明 */
+  action: '亮主' | '反主';
+  suit: Suit | null;
+  strength: BidStrength;
+  /** 报主用了几张牌（1 张 / 一对 / 对王） */
+  count: number;
+}
+
 function App() {
+  // ---- 窗口较矮时整体缩放（保证一屏内尽量看到全部内容） ----
+  const uiScaleStyle = useUiScale();
+
   // ---- 游戏状态 ----
   const [hands, setHands] = useState<Hands | null>(null);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
@@ -233,6 +272,10 @@ function App() {
   /** 本次发牌的**原始**底牌（埋底后 bottomRef 会被覆盖，这里始终保留） */
   const originalBottomRef = useRef<Card[]>([]);
   const [revealed, setRevealed] = useState(0);
+  /** 报主泡泡（发牌 / 叫主途中有人亮主、反主时在桌面中央短暂显示） */
+  const [declareToast, setDeclareToast] = useState<DeclareToast | null>(null);
+  /** 泡泡序号（每次报主 +1，用于重播动画） */
+  const declareToastSeqRef = useRef(0);
   /** 主牌是否由翻底牌确定（此时不可再反主） */
   const [bottomTrump, setBottomTrump] = useState(false);
   /** 叫主倒计时（秒） */
@@ -261,6 +304,8 @@ function App() {
   const [confirmRedeal, setConfirmRedeal] = useState(false);
   /** 「自定义规则」信息框（只读，说明「新的一局」里的可选规则） */
   const [showRules, setShowRules] = useState(false);
+  /** 记牌器（已出牌 / 剩余牌） */
+  const [showTracker, setShowTracker] = useState(false);
   /** 本局生效的可选规则 */
   const [rules, setRules] = useState<RuleOptions>(DEFAULT_RULE_OPTIONS);
   /** 「新的一局」对话框中待确认的规则 */
@@ -277,6 +322,13 @@ function App() {
 
   // 本局打的级牌 = **庄家队**的级牌（首局未定庄时按南家队；两队都从 2 打起）
   const levelRank = levels[teamOf(banker ?? PlayerPosition.South)];
+  // 断门推断：只看已出的牌（撤销后 playState 回退 → 自动回退）
+  const voids = useMemo(
+    () => (playState
+      ? inferVoids([...playState.tricks, playState.trick], trumpSuit, levelRank)
+      : null),
+    [playState, trumpSuit, levelRank],
+  );
   const gameDelay = (baseMs: number) =>
     Math.round(baseMs * SPEED_MULTIPLIERS[gameSpeed - 1]);
   // 用 ref 持有最新 bidState，避免闭包陷阱
@@ -299,8 +351,10 @@ function App() {
 
   // 本局**预定庄家**（「下一局」预设）：在 dealRound 里**同步**写入，
   // 与 React 渲染时序无关，因此不可能出现「预设丢了 → 退化成东家」的情况。
-  // null = 本局庄家由叫主（亮主者）决定（首局 / 新游戏）。
+  // null = 本局庄家由叫主（亮主者）决定（首局 / 新游戏 / 抢庄局）。
   const presetBankerRef = useRef<PlayerPosition | null>(null);
+  // 本局发牌开始时展示的庄家（「原样发牌」保留原庄家；抢庄局下仍可被亮主者取代）
+  const initialBankerRef = useRef<PlayerPosition | null>(null);
 
   /** 本局出牌记录（每局重建；下一局发牌时清空） */
   const logRef = useRef<RoundRecord | null>(null);
@@ -341,10 +395,16 @@ function App() {
 
   // ---- 重新发牌 ----
   // presetBanker 非空时以它为庄家（用于「下一局」：庄家由升级规则预定，叫主只定主花色）；
-  // 为空时庄家仍由叫主（亮主者）决定（用于首局 / 新游戏）。
+  // 为空时庄家仍由叫主（亮主者）决定（用于首局 / 新游戏 / 抢庄局）。
   // keepDeal = true 时**不洗牌**，沿用上一次发好的手牌与底部（「原样发牌」）。
-  function dealRound(presetBanker: PlayerPosition | null, keepDeal = false) {
+  // initialBanker：发牌开始时已有的庄家（「原样发牌」沿用原庄家），默认等于 presetBanker。
+  function dealRound(
+    presetBanker: PlayerPosition | null,
+    keepDeal = false,
+    initialBanker: PlayerPosition | null = presetBanker,
+  ) {
     presetBankerRef.current = presetBanker;
+    initialBankerRef.current = initialBanker;
 
     let nextHands: Hands;
     let nextBottom: Card[];
@@ -373,7 +433,7 @@ function App() {
     cardIdMapRef.current = buildCardIdMap(nextHands, nextBottom);
     gameIdRef.current = `G-${Math.random().toString(36).slice(2, 10)}`;
     logRef.current = createRoundRecord({
-      level: levels[teamOf(presetBanker ?? PlayerPosition.South)],
+      level: levels[teamOf(initialBanker ?? PlayerPosition.South)],
       playerModes: { ...playerModes },
       deal: {
         mode: keepDeal ? 'sameDeal' : 'shuffle',
@@ -389,9 +449,10 @@ function App() {
 
     setHands({ E: [], S: [], W: [], N: [] });
     setRevealed(0);
+    setDeclareToast(null);
     setSelectedIndices(new Set());
     setTrumpSuit(null);
-    setBanker(presetBanker);
+    setBanker(initialBanker);
     setBottomTrump(false);
     setBidSeconds(BID_WINDOW_SECONDS);
     setFlipping(false);
@@ -415,9 +476,10 @@ function App() {
   }
 
   // ---- 原样发牌：牌序不变（手牌 / 底牌与刚才完全一致），清除报主记录重新发牌 ----
-  // 等级与周目保持不变；庄家重新由亮主者决定（与首局一致）。
+  // 等级 / 周目 / 庄家 / 级牌全部不变；本局是否「抢庄局」也保持不变：
+  // 抢庄局（首局）庄家仍由亮主者决定，非抢庄局庄家固定、叫主只定主花色。
   function redealSameCards() {
-    dealRound(null, true);
+    dealRound(presetBankerRef.current, true, banker);
   }
 
   // ---- 逐张发牌动画 ----
@@ -446,6 +508,13 @@ function App() {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, revealed]);
+
+  // ---- 报主泡泡：到时间自动消失（时长与 _base.scss 的 declareBubble 动画一致） ----
+  useEffect(() => {
+    if (!declareToast) return;
+    const timer = setTimeout(() => setDeclareToast(null), DECLARE_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [declareToast]);
 
   // ---- 跟牌必出牌（自动选中，且不可取消） ----
   function currentForcedIndices(): Set<number> {
@@ -534,6 +603,16 @@ function App() {
       );
     }
     setTrumpSuit(decl.suit);
+    // 桌面中央的报主泡泡：只做提示，**不打断发牌**
+    declareToastSeqRef.current += 1;
+    setDeclareToast({
+      seq: declareToastSeqRef.current,
+      player: decl.player,
+      action: prev.current ? '反主' : '亮主',
+      suit: decl.suit,
+      strength: decl.strength,
+      count: decl.cardIds.length,
+    });
     // 已有预定庄家（「下一局」预设）时，叫主只定主花色，**绝不动庄家**
     if (presetBankerRef.current === null) setBanker(decl.player);
   }
@@ -632,8 +711,11 @@ function App() {
       setTrumpSuit(suit);
       setBottomTrump(true);
       setFlipping(false);
-      // 翻底定主：庄家仍取预定庄家（「下一局」），否则取东家
-      const flipBanker = presetBankerRef.current ?? ALL_POSITIONS[0];
+      // 翻底定主：庄家仍取预定庄家（「下一局」）或发牌时已有的庄家（「原样发牌」），
+      // 都没有（真正的首局）才退回东家
+      const flipBanker = presetBankerRef.current
+        ?? initialBankerRef.current
+        ?? ALL_POSITIONS[0];
       const decisive = decisiveBottomIndex(bottom, levelRank);
       let trumpCard: Card | undefined = bottom[0];
       if (decisive >= 0) {
@@ -936,17 +1018,57 @@ function App() {
     setSelectedIndices(indicesOfCards(hands[banker], cards));
   }
 
-  // ---- 撤销：优先回到「上一次玩家决策之前」；
-  // 若本局还没有玩家决策（全托管），则只退一步（AI 动作），
-  // 并在恢复点仍由托管行动时暂停托管，避免 AI 立即重做。
+  /** 这个快照恢复后，轮到的是不是「非托管（手动）」玩家（埋底阶段看庄家） */
+  function isManualTurnSnapshot(snap: UndoSnapshot): boolean {
+    if (snap.phase === GamePhase.Playing && snap.playState !== null) {
+      return playerModes[snap.playState.turn] === PlayerMode.Manual;
+    }
+    if (snap.phase === GamePhase.Burying && banker !== null) {
+      return playerModes[banker] === PlayerMode.Manual;
+    }
+    return false;
+  }
+
+  /**
+   * 撤销目标：回到「上一个非托管（手动）玩家」的决策点。
+   *   1. 从 history 末尾向前找最近一个「恢复后由手动玩家行动」的快照 → 就是它；
+   *   2. 本局还没轮到过手动玩家（如开局都是 AI 在动）：退到**出牌阶段起点**（第一次出牌之前）；
+   *   3. 整局都没有手动玩家（全托管）：仍只退一步，方便「末墩之后 / 托管埋底之后」回看。
+   * pauseAuto：恢复点仍由托管行动时需要暂停 AI，避免它立刻把撤销的动作重做。
+   */
+  function resolveUndo(): { idx: number; steps: number; pauseAuto: boolean } | null {
+    if (history.length === 0) return null;
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (isManualTurnSnapshot(history[i])) {
+        return { idx: i, steps: history.length - i, pauseAuto: false };
+      }
+    }
+    const hasManualSeat = ALL_POSITIONS.some(pos => playerModes[pos] === PlayerMode.Manual);
+    if (hasManualSeat) {
+      const firstPlay = history.findIndex(snap => snap.phase === GamePhase.Playing);
+      if (firstPlay >= 0) {
+        return { idx: firstPlay, steps: history.length - firstPlay, pauseAuto: true };
+      }
+    }
+    const last = history.length - 1;
+    return { idx: last, steps: 1, pauseAuto: true };
+  }
+
+  const undoTarget = resolveUndo();
+  /** 将被撤回的最后一个动作（出牌 / 埋底），只用于按钮提示 */
+  const undoKind = history[history.length - 1]?.kind === 'bury' ? '埋底' : '出牌';
+  const undoTitle = !undoTarget
+    ? '暂无可撤销的操作'
+    : undoTarget.pauseAuto
+      ? `撤销${undoKind} ${undoTarget.steps} 步：本局还没有你的操作，退到上一手 / 出牌开始（托管将暂停）`
+      : `撤销${undoKind} ${undoTarget.steps} 步，回到上一次非托管玩家的操作之前`;
+
+  // ---- 撤销：回到「上一个非托管（手动）玩家」的决策点（见 resolveUndo） ----
   function undo() {
-    if (history.length === 0) return;
-    let idx = history.length - 1;
-    while (idx >= 0 && !history[idx].manual) idx--;
-    if (idx < 0) idx = history.length - 1;
-    const snap = history[idx];
+    if (!undoTarget) return;
+    const snap = history[undoTarget.idx];
     if (!snap) return;
-    setHistory(prev => prev.slice(0, idx));
+    setHistory(prev => prev.slice(0, undoTarget.idx));
     setHands(snap.hands);
     setPlayState(snap.playState);
     setPhase(snap.phase);
@@ -961,17 +1083,7 @@ function App() {
         snap.phase === GamePhase.Burying,
       );
     }
-
-    const autoWouldAct = (
-      snap.phase === GamePhase.Burying
-      && banker !== null
-      && playerModes[banker] === PlayerMode.Auto
-    ) || (
-      snap.phase === GamePhase.Playing
-      && snap.playState !== null
-      && playerModes[snap.playState.turn] === PlayerMode.Auto
-    );
-    setAutoPaused(autoWouldAct);
+    setAutoPaused(undoTarget.pauseAuto);
   }
 
   // ---- 离开 / 刷新页面时弹窗确认 ----
@@ -1128,9 +1240,7 @@ function App() {
   })();
 
   /** 是否有可撤销的玩家操作 */
-  const canUndo = history.length > 0;
-  /** 最近一次可撤销的操作类型（用于按钮提示） */
-  const lastUndoKind = history[history.length - 1]?.kind ?? null;
+  const canUndo = undoTarget !== null;
 
   // 本局主牌颜色：无主用紫色（与牌面一致），其余按花色
   const trumpTextColor = trumpSuit === null
@@ -1157,7 +1267,7 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" style={uiScaleStyle}>
       {/* ---- 顶部菜单栏 ---- */}
       <MenuBar onNewGame={() => {
         setDraftRules(rules);
@@ -1167,6 +1277,9 @@ function App() {
         onRedealSameCards={() => setConfirmRedeal(true)}
         onViewRules={() => setShowRules(true)}
         onViewPlayLog={() => openPlayLog('plays')}
+        onViewTracker={() => setShowTracker(true)}
+        gameSpeed={gameSpeed}
+        onChangeSpeed={setGameSpeed}
       />
 
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
@@ -1289,6 +1402,34 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* 断门：按出牌推断（算牌），任一家断门即列出 */}
+        {voids && (
+          <div className="level-panel__row level-panel__row--section">
+            <span className="level-panel__label">断门</span>
+            <div className="level-panel__voids">
+              {ALL_POSITIONS.filter(pos => voids[pos].length > 0).map(pos => (
+                <div key={pos} className="level-panel__void-row">
+                  <span className="level-panel__void-seat">
+                    {POSITION_NAME_ZH[pos]}家
+                  </span>
+                  {voids[pos].map(door => (
+                    <span
+                      key={door}
+                      className="level-panel__void-door"
+                      style={cssVars({ '--void-color': VOID_DOOR_COLOR[door] })}
+                    >
+                      {voidDoorLabel(door)}
+                    </span>
+                  ))}
+                </div>
+              ))}
+              {ALL_POSITIONS.every(pos => voids[pos].length === 0) && (
+                <span className="level-panel__void-none">暂无</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ---- 顶部：北家 ---- */}
@@ -1353,6 +1494,35 @@ function App() {
 
         {/* 牌桌中心 */}
         <div className="table__center">
+          {/* 报主泡泡：有人亮主 / 反主时在桌面中央弹一下（不占布局、不打断发牌） */}
+          {declareToast && (
+            <div key={declareToast.seq} className="declare-bubble">
+              <span className="declare-bubble__who">
+                {POSITION_NAME_ZH[declareToast.player]}家
+              </span>
+              <span className="declare-bubble__action">
+                {declareToast.action}
+              </span>
+              <b
+                className={declareToast.suit === null
+                  ? 'declare-bubble__trump declare-bubble__trump--text'
+                  : 'declare-bubble__trump'}
+                style={cssVars({
+                  '--trump-color': TRUMP_TEXT_COLORS[declareToast.suit ?? Suit.Joker],
+                })}
+              >
+                {declareToast.suit === null
+                  ? (declareToast.strength === BidStrength.BigJokerPair
+                    ? '无主·大王'
+                    : '无主·小王')
+                  : SUIT_SYMBOL[declareToast.suit]}
+              </b>
+              <span className="declare-bubble__count">
+                {declareToast.count} 张
+              </span>
+            </div>
+          )}
+
           {/* 游戏标题（出牌阶段让位给出牌区） */}
           {!isPlaying && !isRoundEnd && (
             <>
@@ -1478,11 +1648,9 @@ function App() {
               className="undo-button"
               onClick={undo}
               disabled={!canUndo}
-              title={canUndo
-                ? `撤销${lastUndoKind === 'bury' ? '埋底' : '出牌'}（共 ${history.length} 步；撤销后托管暂停）`
-                : '暂无可撤销的操作'}
+              title={undoTitle}
             >
-              ↩ 撤销{canUndo ? `（${history.length}）` : ''}
+              ↩ 撤销{canUndo ? `（${undoTarget.steps}）` : ''}
             </button>
             {autoPaused && (
               <button
@@ -1493,27 +1661,6 @@ function App() {
                 ▶ 继续托管
               </button>
             )}
-          </div>
-
-          <div className="speed-row">
-            <span className="speed-row__label">速度</span>
-            {SPEED_MULTIPLIERS.map((_, index) => {
-              const level = index + 1;
-              const active = gameSpeed === level;
-              return (
-                <button
-                  key={level}
-                  className={active
-                    ? 'speed-button speed-button--active'
-                    : 'speed-button'}
-                  onClick={() => setGameSpeed(level)}
-                  aria-pressed={active}
-                  title={`速度 ${level}${level === 3 ? '（当前默认）' : ''}`}
-                >
-                  {level}
-                </button>
-              );
-            })}
           </div>
 
         </div>
@@ -1655,6 +1802,16 @@ function App() {
         onClose={() => setPlayLogOpen(false)}
       />
 
+      {/* 记牌器：按门统计已出 / 剩余（按视角排除本家手牌） */}
+      <CardTrackerDialog
+        open={showTracker}
+        plays={playedPlaysOf(playState)}
+        hands={hands ?? EMPTY_HANDS}
+        trumpSuit={trumpSuit}
+        levelRank={levelRank}
+        onClose={() => setShowTracker(false)}
+      />
+
       {/* 自定义规则（只读）：说明「新的一局」里的可选规则 */}
       <ConfirmDialog
         open={showRules}
@@ -1697,7 +1854,7 @@ function App() {
       <ConfirmDialog
         open={confirmRedeal}
         title="原样发牌？"
-        description={'牌序不变：四家手牌与 8 张底牌和刚才完全一致，\n但会清除报主记录并重新发牌（庄家重新由亮主决定）。\n等级与周目保持不变。'}
+        description={'牌序不变：四家手牌与 8 张底牌和刚才完全一致，\n会清除报主记录并重新发牌；庄家与级牌都不变。\n（抢庄局仍为抢庄局：庄家由亮主者决定。）'}
         confirmLabel="原样发牌"
         cancelLabel="取消"
         danger={true}

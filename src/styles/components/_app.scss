@@ -6,12 +6,22 @@
 @use '../tokens' as *;
 
 /* ---- 根容器 ---- */
+/* 尺寸由 src/hooks/useUiScale.ts 写入：
+   --app-width / --app-height = 按设计基准排版的空间，--ui-scale = 缩放到真实窗口的比例。
+   窗口够高时 scale=1、尺寸等于视口，与以前完全一致；窗口变矮时整块界面等比缩小，
+   牌桌 / 四家手牌不会被裁掉。 */
 .app {
   position: relative;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  width: var(--app-width, 100vw);
+  height: var(--app-height, 100vh);
   overflow: hidden;
+  transform: scale(var(--ui-scale, 1));
+  transform-origin: top left;
+  /* 菜单栏高度跟随「设计高度」而不是真实视口高度：真实视口高度还会被 transform 再缩一次 */
+  --menu-bar-height: clamp(36px, calc(var(--app-height, 100vh) * 0.055), 56px);
+  --menu-bar-offset: calc(var(--menu-bar-height) + 8px);
   background: linear-gradient(135deg, #1a5c2a 0%, #0d3b1a 100%);
   font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   /* 整局界面禁止拖拽框选（手牌、牌桌、状态文字都不会被选中） */
@@ -171,6 +181,36 @@
   color: $text-on-dark-dim;
 }
 
+/* 断门（算牌提示）：任一家断门时列出「方位 + 已断的门」 */
+.level-panel__voids {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.level-panel__void-row {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.level-panel__void-seat {
+  color: $text-on-dark-muted;
+}
+
+.level-panel__void-door {
+  min-width: 14px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--void-color, #fff);
+}
+
+.level-panel__void-none {
+  font-size: 13px;
+  color: $text-on-dark-dim;
+}
+
 /* ---- 牌桌 ---- */
 .stage {
   display: flex;
@@ -213,10 +253,74 @@
 }
 
 .table__center {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
+}
+
+/* ---- 报主泡泡（桌面中央，绝对定位：不占布局、不打断发牌） ---- */
+.declare-bubble {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 18px 8px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: $text-on-dark;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: rgba(12, 30, 16, 0.94);
+  border: 1.5px solid $panel-border-gold;
+  box-shadow:
+    0 8px 26px rgba(0, 0, 0, 0.5),
+    0 0 0 4px rgba(255, 215, 0, 0.08);
+  pointer-events: none;
+  animation: declareBubble 1.8s ease-out both;
+
+  /* 小尾巴：朝下，像气泡从桌面上冒出来 */
+  &::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    margin-left: -6px;
+    border: 6px solid transparent;
+    border-top-color: rgba(12, 30, 16, 0.94);
+  }
+}
+
+.declare-bubble__who {
+  color: $text-on-dark;
+}
+
+.declare-bubble__action {
+  color: $color-gold;
+}
+
+.declare-bubble__trump {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--trump-color, #fff);
+
+  /* 无主：三个字比一个花色符号长，字号收一点 */
+  &--text {
+    font-size: 17px;
+  }
+}
+
+.declare-bubble__count {
+  font-size: 12px;
+  font-weight: 600;
+  color: $text-on-dark-muted;
 }
 
 .game-title {
@@ -312,41 +416,6 @@
   border: 1px solid rgba(126, 231, 135, 0.5);
   border-radius: 6px;
   background: rgba(126, 231, 135, 0.16);
-}
-
-/* 速度选择 */
-.speed-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  margin-top: 8px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.speed-row__label {
-  margin-right: 3px;
-}
-
-.speed-button {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.75);
-  cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.08);
-
-  &--active {
-    font-weight: 700;
-    color: $color-gold;
-    border-color: $color-gold;
-    background: rgba(255, 215, 0, 0.24);
-  }
 }
 
 /* ---- 底部手牌区 ---- */
