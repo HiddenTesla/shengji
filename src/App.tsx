@@ -166,8 +166,8 @@ const FIRST_BID_MIN_REMAINING_SECONDS = 5;
 /** 底牌张数（= 庄家埋底张数） */
 const BOTTOM_COUNT = 8;
 const SPEED_MULTIPLIERS = [1.2, 0.7, 0.4, 0.28, 0.16] as const;
-/** 发牌途中有人报主时的停顿（毫秒，会按游戏速度缩放） */
-const DEAL_DECLARE_PAUSE_MS = 3000;
+/** 报主泡泡的停留时长（毫秒，与 _base.scss 的 declareBubble 动画时长一致） */
+const DECLARE_TOAST_MS = 1800;
 
 /** 深色背景上的主花色文字颜色（黑桃用白色，否则看不清） */
 const TRUMP_TEXT_COLORS: Record<Suit, string> = {
@@ -226,6 +226,19 @@ function trumpOfBottomFlip(suit: Suit | null, decisiveCard: Card | null): string
   return '无主';
 }
 
+/** 报主泡泡（桌面中央短暂显示）：谁、亮主/反主、什么主、几张 */
+interface DeclareToast {
+  /** 自增序号：同一个泡泡内容重复出现时也能重播动画 */
+  seq: number;
+  player: PlayerPosition;
+  /** 亮主 = 首次报主；反主 = 盖过已有声明 */
+  action: '亮主' | '反主';
+  suit: Suit | null;
+  strength: BidStrength;
+  /** 报主用了几张牌（1 张 / 一对 / 对王） */
+  count: number;
+}
+
 function App() {
   // ---- 窗口较矮时整体缩放（保证一屏内尽量看到全部内容） ----
   const uiScaleStyle = useUiScale();
@@ -259,10 +272,10 @@ function App() {
   /** 本次发牌的**原始**底牌（埋底后 bottomRef 会被覆盖，这里始终保留） */
   const originalBottomRef = useRef<Card[]>([]);
   const [revealed, setRevealed] = useState(0);
-  /** 发牌途中报主后的停顿（暂停发牌动画，让玩家看清报主） */
-  const [dealHold, setDealHold] = useState(false);
-  /** 每次报主自增，用于重置停顿计时 */
-  const [dealHoldSeq, setDealHoldSeq] = useState(0);
+  /** 报主泡泡（发牌 / 叫主途中有人亮主、反主时在桌面中央短暂显示） */
+  const [declareToast, setDeclareToast] = useState<DeclareToast | null>(null);
+  /** 泡泡序号（每次报主 +1，用于重播动画） */
+  const declareToastSeqRef = useRef(0);
   /** 主牌是否由翻底牌确定（此时不可再反主） */
   const [bottomTrump, setBottomTrump] = useState(false);
   /** 叫主倒计时（秒） */
@@ -436,8 +449,7 @@ function App() {
 
     setHands({ E: [], S: [], W: [], N: [] });
     setRevealed(0);
-    setDealHold(false);
-    setDealHoldSeq(0);
+    setDeclareToast(null);
     setSelectedIndices(new Set());
     setTrumpSuit(null);
     setBanker(initialBanker);
@@ -475,8 +487,6 @@ function App() {
     if (phase !== GamePhase.Dealing) return;
     const full = fullHandsRef.current;
     if (!full) return;
-    // 报主停顿期间不继续发牌（停顿结束后 effect 重新触发）
-    if (dealHold) return;
 
     const total = full.S.length;
     if (revealed >= total) {
@@ -497,15 +507,14 @@ function App() {
     }, gameDelay(500));
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, revealed, dealHold]);
+  }, [phase, revealed]);
 
-  // ---- 发牌途中报主：暂停发牌一小段时间（时长随游戏速度缩放） ----
+  // ---- 报主泡泡：到时间自动消失（时长与 _base.scss 的 declareBubble 动画一致） ----
   useEffect(() => {
-    if (!dealHold) return;
-    const t = setTimeout(() => setDealHold(false), gameDelay(DEAL_DECLARE_PAUSE_MS));
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dealHold, dealHoldSeq]);
+    if (!declareToast) return;
+    const timer = setTimeout(() => setDeclareToast(null), DECLARE_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [declareToast]);
 
   // ---- 跟牌必出牌（自动选中，且不可取消） ----
   function currentForcedIndices(): Set<number> {
@@ -594,11 +603,16 @@ function App() {
       );
     }
     setTrumpSuit(decl.suit);
-    // 发牌途中报主：暂停发牌动画一小段时间（让玩家看清报主）
-    if (phase === GamePhase.Dealing) {
-      setDealHold(true);
-      setDealHoldSeq(seq => seq + 1);
-    }
+    // 桌面中央的报主泡泡：只做提示，**不打断发牌**
+    declareToastSeqRef.current += 1;
+    setDeclareToast({
+      seq: declareToastSeqRef.current,
+      player: decl.player,
+      action: prev.current ? '反主' : '亮主',
+      suit: decl.suit,
+      strength: decl.strength,
+      count: decl.cardIds.length,
+    });
     // 已有预定庄家（「下一局」预设）时，叫主只定主花色，**绝不动庄家**
     if (presetBankerRef.current === null) setBanker(decl.player);
   }
@@ -1450,6 +1464,35 @@ function App() {
 
         {/* 牌桌中心 */}
         <div className="table__center">
+          {/* 报主泡泡：有人亮主 / 反主时在桌面中央弹一下（不占布局、不打断发牌） */}
+          {declareToast && (
+            <div key={declareToast.seq} className="declare-bubble">
+              <span className="declare-bubble__who">
+                {POSITION_NAME_ZH[declareToast.player]}家
+              </span>
+              <span className="declare-bubble__action">
+                {declareToast.action}
+              </span>
+              <b
+                className={declareToast.suit === null
+                  ? 'declare-bubble__trump declare-bubble__trump--text'
+                  : 'declare-bubble__trump'}
+                style={cssVars({
+                  '--trump-color': TRUMP_TEXT_COLORS[declareToast.suit ?? Suit.Joker],
+                })}
+              >
+                {declareToast.suit === null
+                  ? (declareToast.strength === BidStrength.BigJokerPair
+                    ? '无主·大王'
+                    : '无主·小王')
+                  : SUIT_SYMBOL[declareToast.suit]}
+              </b>
+              <span className="declare-bubble__count">
+                {declareToast.count} 张
+              </span>
+            </div>
+          )}
+
           {/* 游戏标题（出牌阶段让位给出牌区） */}
           {!isPlaying && !isRoundEnd && (
             <>
@@ -1468,9 +1511,6 @@ function App() {
               {isDealing && (
                 <div>
                   发牌中… 可抢亮
-                  {dealHold && (
-                    <span className="phase-hint__gold"> · 报主停顿…</span>
-                  )}
                   {bidState.current && (
                     <span className="phase-hint__inline">
                       · 当前主牌：{trumpOfDeclaration(bidState.current)}

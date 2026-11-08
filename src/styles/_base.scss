@@ -62,3 +62,26 @@ select option {
     opacity: 1;
   }
 }
+
+/* 报主泡泡：弹入 → 停留 → 淡出（时长与 App.tsx::DECLARE_TOAST_MS 一致） */
+@keyframes declareBubble {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.85);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.06);
+  }
+  22% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  76% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -10px) scale(0.96);
+  }
+}

@@ -253,10 +253,74 @@
 }
 
 .table__center {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
+}
+
+/* ---- 报主泡泡（桌面中央，绝对定位：不占布局、不打断发牌） ---- */
+.declare-bubble {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 18px 8px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: $text-on-dark;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: rgba(12, 30, 16, 0.94);
+  border: 1.5px solid $panel-border-gold;
+  box-shadow:
+    0 8px 26px rgba(0, 0, 0, 0.5),
+    0 0 0 4px rgba(255, 215, 0, 0.08);
+  pointer-events: none;
+  animation: declareBubble 1.8s ease-out both;
+
+  /* 小尾巴：朝下，像气泡从桌面上冒出来 */
+  &::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    margin-left: -6px;
+    border: 6px solid transparent;
+    border-top-color: rgba(12, 30, 16, 0.94);
+  }
+}
+
+.declare-bubble__who {
+  color: $text-on-dark;
+}
+
+.declare-bubble__action {
+  color: $color-gold;
+}
+
+.declare-bubble__trump {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--trump-color, #fff);
+
+  /* 无主：三个字比一个花色符号长，字号收一点 */
+  &--text {
+    font-size: 17px;
+  }
+}
+
+.declare-bubble__count {
+  font-size: 12px;
+  font-weight: 600;
+  color: $text-on-dark-muted;
 }
 
 .game-title {
