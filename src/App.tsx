@@ -58,6 +58,7 @@ import {
 } from './core/play.ts';
 import { type HandShape, mandatoryFollowCards } from './core/hand.ts';
 import { aiChoosePlay } from './core/ai.ts';
+import { useUiScale } from './hooks/useUiScale.ts';
 import {
   VOID_DOOR_COLOR,
   inferVoids,
@@ -225,6 +226,9 @@ function trumpOfBottomFlip(suit: Suit | null, decisiveCard: Card | null): string
 }
 
 function App() {
+  // ---- 窗口较矮时整体缩放（保证一屏内尽量看到全部内容） ----
+  const uiScaleStyle = useUiScale();
+
   // ---- 游戏状态 ----
   const [hands, setHands] = useState<Hands | null>(null);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
@@ -1220,7 +1224,7 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" style={uiScaleStyle}>
       {/* ---- 顶部菜单栏 ---- */}
       <MenuBar onNewGame={() => {
         setDraftRules(rules);

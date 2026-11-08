@@ -6,12 +6,22 @@
 @use '../tokens' as *;
 
 /* ---- 根容器 ---- */
+/* 尺寸由 src/hooks/useUiScale.ts 写入：
+   --app-width / --app-height = 按设计基准排版的空间，--ui-scale = 缩放到真实窗口的比例。
+   窗口够高时 scale=1、尺寸等于视口，与以前完全一致；窗口变矮时整块界面等比缩小，
+   牌桌 / 四家手牌不会被裁掉。 */
 .app {
   position: relative;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  width: var(--app-width, 100vw);
+  height: var(--app-height, 100vh);
   overflow: hidden;
+  transform: scale(var(--ui-scale, 1));
+  transform-origin: top left;
+  /* 菜单栏高度跟随「设计高度」而不是真实视口高度：真实视口高度还会被 transform 再缩一次 */
+  --menu-bar-height: clamp(36px, calc(var(--app-height, 100vh) * 0.055), 56px);
+  --menu-bar-offset: calc(var(--menu-bar-height) + 8px);
   background: linear-gradient(135deg, #1a5c2a 0%, #0d3b1a 100%);
   font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   /* 整局界面禁止拖拽框选（手牌、牌桌、状态文字都不会被选中） */
