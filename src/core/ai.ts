@@ -533,13 +533,92 @@ function bigTrumpEmptyTrickPenalty(
 }
 
 /**
+ * 某家为了赢下这一手，最省的赢牌方式是不是大主（王 / 级牌）：
+ * 返回该牌的大主权重（见 `bigTrumpWeight`）；赢不了 → null。
+ */
+function cheapestWinningWeight(
+  hand: Card[],
+  lead: HandShape,
+  bestCards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number | null {
+  let cheapestCost = Infinity;
+  let cheapestWeight = 0;
+  for (const option of hand) {
+    if (!validateFollow(hand, lead, [option], trumpSuit, levelRank).ok) continue;
+    if (!beats([option], bestCards, lead, trumpSuit, levelRank)) continue;
+    const cost = cardCost(option, trumpSuit, levelRank);
+    if (cost < cheapestCost) {
+      cheapestCost = cost;
+      cheapestWeight = bigTrumpWeight(option, trumpSuit, levelRank);
+    }
+  }
+  return cheapestCost === Infinity ? null : cheapestWeight;
+}
+
+/**
+ * 下家（对手）最可能怎么压这一手：取「不动大主、代价最低」的能压过的牌。
+ * 没有这种牌（压不过，或只能用大主压）→ null。
+ * 对手要动大主才能压分反而是我们想要的（钓主），不按「能压回来」算。
+ */
+function cheapestPlainBeatingCard(
+  hand: Card[],
+  lead: HandShape,
+  bestCards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card | null {
+  let cheapestCost = Infinity;
+  let picked: Card | null = null;
+  for (const option of hand) {
+    if (!validateFollow(hand, lead, [option], trumpSuit, levelRank).ok) continue;
+    if (!beats([option], bestCards, lead, trumpSuit, levelRank)) continue;
+    if (bigTrumpWeight(option, trumpSuit, levelRank) > 0) continue;
+    const cost = cardCost(option, trumpSuit, levelRank);
+    if (cost < cheapestCost) {
+      cheapestCost = cost;
+      picked = option;
+    }
+  }
+  return picked;
+}
+
+/**
+ * 对家手上只剩最后一张主，且这张主压得住下家（第三家）的每一张牌。
+ *
+ * 这种「最后一张主」本来就要用掉、而且收的是确定的一墩，
+ * 顺手多收 10 分不算浪费；对家还有第二张主时才该把大王留着继续控主。
+ */
+function partnerLastTrumpCoversNext(
+  hands: Hands,
+  lead: HandShape,
+  partner: PlayerPosition,
+  nextToPlay: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  const trumps = hands[partner].filter(
+    card => doorOf(card, trumpSuit, levelRank) === 'trump',
+  );
+  if (trumps.length !== 1) return false;
+
+  const [lastTrump] = trumps;
+  return !hands[nextToPlay].some(card =>
+    validateFollow(hands[nextToPlay], lead, [card], trumpSuit, levelRank).ok
+    && beats([card], [lastTrump], lead, trumpSuit, levelRank));
+}
+
+/**
  * 「喂分却要逼对家用大主保」降权。
  *
- * 跟单张时打出分牌，如果：
- *   - 出完之后当前最大仍是对手；
- *   - 对家还没出牌；
- *   - 对家要保住这墩的分，最省的办法也是用大主（王 / 级牌）；
- * 则降低这张分牌的评分（对手能便宜管住就让对手拿去，不必搭上对家的大主）。
+ * 跟单张时打出分牌，如果出完之后这一墩还要靠对家动大主（王 / 级牌）才能拿下，
+ * 就降低这张分牌的评分：多出来的分是「硬塞」的，代价却是对家的控制牌。
+ * 两种情形都算：
+ *   1. 出完仍是对手最大；
+ *   2. 第二家：我这手分牌暂时最大，但下家（第三家）能用便宜牌压回来，
+ *      最后还是得靠对家（第四家）救 —— 不能因为「对家反正能赢」就白白多送 10 分。
+ * 对手要用大主才压得回来的情形不算（那是我们想要的钓主）。
  */
 function pointFeedBigTrumpPenalty(
   state: PlayState,
@@ -561,29 +640,35 @@ function pointFeedBigTrumpPenalty(
   const before = bestPlayOf(state.trick.plays, lead, trumpSuit, levelRank);
   if (!before) return 0;
 
-  // 我这张牌能管住 → 当前最大成了我们的（对家不用救）
-  const takesLead = beats([card], before.cards, lead, trumpSuit, levelRank);
-  const currentBest = takesLead
-    ? { player, cards: [card] }
-    : before;
-  if (teamOf(currentBest.player) === teamOf(player)) return 0;
+  // 出完之后这一墩归谁
+  let bestCards = before.cards;
+  let bestPlayer = before.player;
+  if (beats([card], before.cards, lead, trumpSuit, levelRank)) {
+    // 我这张牌暂时管住 → 还要看下家（第三家）能不能用便宜牌压回来
+    const third = nextPlayer(player);
+    if (teamOf(third) === teamOf(player)) return 0;
+    const thirdCard = cheapestPlainBeatingCard(
+      hands[third], lead, [card], trumpSuit, levelRank,
+    );
+    // 第三家压不回来（或只能用大主压）→ 对家不用救
+    if (!thirdCard) return 0;
+    bestCards = [thirdCard];
+    bestPlayer = third;
+  }
+  if (teamOf(bestPlayer) === teamOf(player)) return 0;
 
   // 对家最省能赢的一手：优先看代价（主牌 > 副牌），代价最低的是不是大主
-  const partnerHand = hands[partner];
-  let cheapestCost = Infinity;
-  let cheapestWeight = 0;
-  for (const option of partnerHand) {
-    if (!validateFollow(partnerHand, lead, [option], trumpSuit, levelRank).ok) continue;
-    if (!beats([option], currentBest.cards, lead, trumpSuit, levelRank)) continue;
-    const cost = cardCost(option, trumpSuit, levelRank);
-    if (cost < cheapestCost) {
-      cheapestCost = cost;
-      cheapestWeight = bigTrumpWeight(option, trumpSuit, levelRank);
-    }
+  const weight = cheapestWinningWeight(
+    hands[partner], lead, bestCards, trumpSuit, levelRank,
+  );
+  if (!weight) return 0;
+  // 对家只剩最后一张主、且压得下下家 → 这张主反正要用掉，多的分照收
+  if (partnerLastTrumpCoversNext(
+    hands, lead, partner, nextPlayer(player), trumpSuit, levelRank,
+  )) {
+    return 0;
   }
-  if (cheapestCost === Infinity) return 0;
-  if (cheapestWeight === 0) return 0;
-  return POINT_FEED_BIG_TRUMP_PENALTY * cheapestWeight;
+  return POINT_FEED_BIG_TRUMP_PENALTY * weight;
 }
 
 /**
