@@ -165,7 +165,7 @@ const FIRST_BID_MIN_REMAINING_SECONDS = 5;
 
 /** 底牌张数（= 庄家埋底张数） */
 const BOTTOM_COUNT = 8;
-const SPEED_MULTIPLIERS = [2.0, 1.2, 0.7, 0.4, 0.2] as const;
+const SPEED_MULTIPLIERS = [1.2, 0.7, 0.4, 0.28, 0.16] as const;
 /** 发牌途中有人报主时的停顿（毫秒，会按游戏速度缩放） */
 const DEAL_DECLARE_PAUSE_MS = 3000;
 
