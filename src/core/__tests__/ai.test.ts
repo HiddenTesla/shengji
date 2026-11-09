@@ -532,3 +532,41 @@ describe('AI 领出：大对子（AA / KK）不轻易拆', () => {
     );
   });
 });
+
+describe('AI 多张跟牌：不白送大分', () => {
+  it('南领主 10 对、东压主 K 对，北有对小王 → 用对小王把墩抢下来', () => {
+    // 出对 5 的话，这一墩 40 分（10 对 + K 对）加自己的 10 分全判给对手
+    const hands = handsOf(
+      [
+        c(Suit.Spade, R.King), c(Suit.Spade, R.King), c(Suit.Club, R.Seven),
+        c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight),
+      ],
+      [
+        c(Suit.Spade, R.Ten), c(Suit.Spade, R.Ten), c(Suit.Club, R.Three),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Five), c(Suit.Diamond, R.Six),
+      ],
+      [
+        c(Suit.Spade, R.Three), c(Suit.Spade, R.Seven), c(Suit.Club, R.Ten),
+        c(Suit.Diamond, R.Ten), c(Suit.Club, R.Jack), c(Suit.Diamond, R.Jack),
+      ],
+      [
+        c(Suit.Joker, R.SmallJoker), c(Suit.Joker, R.SmallJoker),
+        c(Suit.Spade, R.Five), c(Suit.Spade, R.Five), c(Suit.Club, R.Nine), c(Suit.Diamond, R.Nine),
+      ],
+    );
+    const first = applyPlay(
+      hands, createPlayState(PlayerPosition.South), PlayerPosition.South,
+      hands[PlayerPosition.South].slice(0, 2), TRUMP, LEVEL,
+    );
+    const second = applyPlay(
+      first.hands, first.state, PlayerPosition.East,
+      first.hands[PlayerPosition.East].slice(0, 2), TRUMP, LEVEL,
+    );
+    expectEqual(
+      aiChoosePlay(second.state, second.hands, TRUMP, LEVEL)
+        .map(card => `${card.suit}${RANK_NAME[card.rank]}`).sort(),
+      ['J小王', 'J小王'],
+      '北家跟牌',
+    );
+  });
+});
