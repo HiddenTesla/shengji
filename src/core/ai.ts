@@ -672,6 +672,112 @@ function pointFeedBigTrumpPenalty(
 }
 
 /**
+ * 这张牌是不是「这一墩之后该门最大的牌」：
+ * 其余三家同门都没有更大的牌，而且自己手上也没有更大的同门牌（那些是要留下的）。
+ * 本墩已经打出的牌已经不在 `hands` 里，所以这里就等于「此 trick 之后」。
+ */
+function isDoorBoss(
+  card: Card,
+  hand: Card[],
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  const door = doorOf(card, trumpSuit, levelRank);
+  const slot = slotOf(card, trumpSuit, levelRank);
+  const higher = (c: Card) =>
+    c.id !== card.id
+    && doorOf(c, trumpSuit, levelRank) === door
+    && slotOf(c, trumpSuit, levelRank) > slot;
+  if (hand.some(higher)) return false;
+  return !ALL_POSITIONS.some(pos =>
+    pos !== player && hands[pos].some(higher));
+}
+
+/** 手上同门还有另一张 5 可以拿来顶替这张牌吗 */
+function fiveInDoor(
+  hand: Card[],
+  card: Card,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card | null {
+  const door = doorOf(card, trumpSuit, levelRank);
+  return hand.find(c =>
+    c.id !== card.id
+    && c.rank === Rank.Five
+    && doorOf(c, trumpSuit, levelRank) === door,
+  ) ?? null;
+}
+
+/**
+ * 这张牌该不该留着当门霸：0 分小牌（不是级牌）、手上同门还有 5 可以顶替，
+ * 而且它在这墩之后是该门最大的牌。
+ *
+ * 送它是 0 分、送 5 是 5 分，但门霸能在后面的墩里替我们收分，
+ * 一般宁可送 5 分把它留下。是 10 / K 时送 5 本来就少丢分，不需要这条。
+ */
+function worthKeepingAsBoss(
+  card: Card,
+  hand: Card[],
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  if (isPointCard(card.rank)) return false;
+  if (card.rank === levelRank) return false;
+  if (!fiveInDoor(hand, card, trumpSuit, levelRank)) return false;
+  return isDoorBoss(card, hand, hands, player, trumpSuit, levelRank);
+}
+
+/**
+ * 「把门霸白送出去」的降权（单张跟牌用）。
+ * 「这一墩是不是真的赢不了」交给搜索里的 ±TRICK_WIN_VALUE 判断：
+ * 能赢就赢（100 远小于 1000），只有必须送出去时这 100 分才会影响取舍。
+ */
+const GIVE_AWAY_DOOR_BOSS_PENALTY = 100;
+
+function giveAwayDoorBossPenalty(
+  card: Card,
+  hand: Card[],
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  return worthKeepingAsBoss(card, hand, hands, player, trumpSuit, levelRank)
+    ? GIVE_AWAY_DOOR_BOSS_PENALTY
+    : 0;
+}
+
+/**
+ * 多张跟牌时，`chooseFollow` 送出去的牌里如果夹着某门的门霸，
+ * 而手上还有同门的 5 可以顶替，就换成 5（用 `validateFollow` 保证牌型仍然合法）。
+ */
+function keepDoorBossInFollow(
+  play: Card[],
+  hand: Card[],
+  lead: HandShape,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[] {
+  let result = play;
+  for (let i = 0; i < result.length; i++) {
+    const card = result[i];
+    if (!worthKeepingAsBoss(card, hand, hands, player, trumpSuit, levelRank)) continue;
+    const five = fiveInDoor(hand, card, trumpSuit, levelRank);
+    if (!five || result.some(c => c.id === five.id)) continue;
+    const swapped = result.map((c, idx) => (idx === i ? five : c));
+    if (!validateFollow(hand, lead, swapped, trumpSuit, levelRank).ok) continue;
+    result = swapped;
+  }
+  return result;
+}
+
+/**
  * 「分牌例外」：第 3 家或第 2 家跟单张时，如果：
  *   - 当前大牌在对手手里；
  *   - 已出的牌都是 0 分；
@@ -1500,6 +1606,9 @@ export function aiChoosePlay(
         - bigTrumpEmptyTrickPenalty(state, lead, card, trumpSuit, levelRank)
         - pointFeedBigTrumpPenalty(
           state, hands, player, lead, card, trumpSuit, levelRank,
+        )
+        - giveAwayDoorBossPenalty(
+          card, hands[player], hands, player, trumpSuit, levelRank,
         );
       const score = searchTrick(
         remainingHands,
@@ -1532,5 +1641,14 @@ export function aiChoosePlay(
     tractor: state.trick.leadTractor,
     maxTractor: state.trick.leadMaxTractor,
   };
-  return chooseFollow(hand, lead, trumpSuit, levelRank);
+  // 多张跟牌：先按合法最小策略出，再把白送出去的门霸换成同门的 5
+  return keepDoorBossInFollow(
+    chooseFollow(hand, lead, trumpSuit, levelRank),
+    hand,
+    lead,
+    hands,
+    player,
+    trumpSuit,
+    levelRank,
+  );
 }

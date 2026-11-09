@@ -45,8 +45,13 @@ function leadOf(hands: Hands, banker: PlayerPosition): string[] {
 
 /** 东家（第一家）领出 leadCard 之后，北家（第二家）AI 选的牌 */
 function secondSeatOf(hands: Hands, leadCard: Card): string[] {
+  return secondSeatAfter(hands, [leadCard]);
+}
+
+/** 东家（第一家）领出 leadCards 之后，北家（第二家）AI 选的牌 */
+function secondSeatAfter(hands: Hands, leadCards: Card[]): string[] {
   const played = applyPlay(
-    hands, createPlayState(PlayerPosition.East), PlayerPosition.East, [leadCard], TRUMP, LEVEL,
+    hands, createPlayState(PlayerPosition.East), PlayerPosition.East, leadCards, TRUMP, LEVEL,
   );
   return aiChoosePlay(played.state, played.hands, TRUMP, LEVEL).map(card =>
     `${card.suit}${RANK_NAME[card.rank]}`,
@@ -158,5 +163,123 @@ describe('AI 跟单张（第二家）：不靠对家的大主救分数', () => {
       NORTH_HEART(),
     );
     expectEqual(pick(hands), ['H10'], '北家跟牌');
+  });
+});
+
+describe('AI 跟单张：一门只剩「一张 5 + 一张小牌 X」', () => {
+  // 东家（对手）领 ♥A / ♥7，北家该门只剩 ♥5 与 X，必须送出去一张。
+  const southNoHeart = () => [c(Suit.Club, R.Nine), c(Suit.Diamond, R.Eight), c(Suit.Club, R.Six)];
+  const westNoHeart = () => [c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight)];
+  const afterEastLead = (hands: Hands) =>
+    secondSeatOf(hands, hands[PlayerPosition.East][0]);
+
+  it('X 不是该门最大牌 → 送 X 留 5', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Club, R.Four), c(Suit.Diamond, R.Four)],
+      southNoHeart(),
+      [c(Suit.Heart, R.Jack), c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight)],
+      [c(Suit.Heart, R.Five), c(Suit.Heart, R.Nine), c(Suit.Club, R.Three), c(Suit.Diamond, R.Six)],
+    );
+    expectEqual(afterEastLead(hands), ['H9'], '北家跟牌');
+  });
+
+  it('X 在这墩之后是该门最大牌 → 送 5 分留下 X', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Club, R.Four), c(Suit.Diamond, R.Four)],
+      southNoHeart(),
+      westNoHeart(),
+      [c(Suit.Heart, R.Five), c(Suit.Heart, R.Nine), c(Suit.Club, R.Three), c(Suit.Diamond, R.Six)],
+    );
+    expectEqual(afterEastLead(hands), ['H5'], '北家跟牌');
+  });
+
+  it('X 是 10 分牌时一律送 5 分（当门霸也一样）', () => {
+    const bossHands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Club, R.Four), c(Suit.Diamond, R.Four)],
+      southNoHeart(),
+      westNoHeart(),
+      [c(Suit.Heart, R.Five), c(Suit.Heart, R.Ten), c(Suit.Club, R.Three), c(Suit.Diamond, R.Six)],
+    );
+    expectEqual(afterEastLead(bossHands), ['H5'], 'X 是门霸');
+    const beatenHands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Club, R.Four), c(Suit.Diamond, R.Four)],
+      southNoHeart(),
+      [c(Suit.Heart, R.Jack), c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight)],
+      [c(Suit.Heart, R.Five), c(Suit.Heart, R.Ten), c(Suit.Club, R.Three), c(Suit.Diamond, R.Six)],
+    );
+    expectEqual(afterEastLead(beatenHands), ['H5'], 'X 不是门霸');
+  });
+
+  it('X 能赢下这一墩 → 仍然出 X 去赢', () => {
+    // 领出 ♥7：♥5 赢不了，♥9 能赢 —— 留门霸的偏好不能盖过赢墩
+    const hands = handsOf(
+      [c(Suit.Heart, R.Seven), c(Suit.Club, R.Four), c(Suit.Diamond, R.Four)],
+      southNoHeart(),
+      westNoHeart(),
+      [c(Suit.Heart, R.Five), c(Suit.Heart, R.Nine), c(Suit.Club, R.Three), c(Suit.Diamond, R.Six)],
+    );
+    expectEqual(afterEastLead(hands), ['H9'], '北家跟牌');
+  });
+});
+
+describe('AI 多张跟牌：垫牌顺序（5 的保留优先级高于 6/7/8/9/J）', () => {
+  // 东家（对手）领一对 ♥A 大出，北家必须送两张 ♥ 出去。
+  const filler = () => [
+    c(Suit.Spade, R.Three), c(Suit.Diamond, R.Nine), c(Suit.Club, R.Nine),
+  ];
+  /** 领一对 ♥A 后北家的选择（结果排序后比较） */
+  const followPair = (north: Card[]): string[] => {
+    const east = [
+      c(Suit.Heart, R.Ace), c(Suit.Heart, R.Ace),
+      c(Suit.Club, R.Four), c(Suit.Diamond, R.Four),
+    ];
+    const hands = handsOf(east, filler(), filler(), north);
+    return secondSeatAfter(
+      hands, hands[PlayerPosition.East].slice(0, 2),
+    ).sort();
+  };
+
+  it('手上 ♥5 6 7 8 → 送 6 和 7，把 5 留着', () => {
+    expectEqual(
+      followPair([
+        c(Suit.Heart, R.Five), c(Suit.Heart, R.Six),
+        c(Suit.Heart, R.Seven), c(Suit.Heart, R.Eight),
+      ]),
+      ['H6', 'H7'],
+      '北家跟牌',
+    );
+  });
+
+  it('手上 ♥5 6 8、♥8 是门霸 → 送 6 和 5，把门霸留着', () => {
+    expectEqual(
+      followPair([
+        c(Suit.Heart, R.Five), c(Suit.Heart, R.Six),
+        c(Suit.Heart, R.Eight), c(Suit.Diamond, R.Nine),
+      ]),
+      ['H5', 'H6'],
+      '北家跟牌',
+    );
+  });
+
+  it('手上有 ♥55 和 ♥66 → 送 ♥66，把 5 的对子留着', () => {
+    expectEqual(
+      followPair([
+        c(Suit.Heart, R.Five), c(Suit.Heart, R.Five),
+        c(Suit.Heart, R.Six), c(Suit.Heart, R.Six),
+      ]),
+      ['H6', 'H6'],
+      '北家跟牌',
+    );
+  });
+
+  it('断 ♥ 垫牌：♣5 6 7 8 里先送 ♣6 ♣7', () => {
+    expectEqual(
+      followPair([
+        c(Suit.Club, R.Five), c(Suit.Club, R.Six),
+        c(Suit.Club, R.Seven), c(Suit.Club, R.Eight),
+      ]),
+      ['C6', 'C7'],
+      '北家跟牌',
+    );
   });
 });
