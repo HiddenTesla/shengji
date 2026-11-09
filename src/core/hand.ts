@@ -696,6 +696,13 @@ export function mandatoryFollowCards(
 // 托管 AI：构造合法出牌
 // ------------------------------------------------------------
 
+/** 自定垫牌顺序（默认按 `sortForDiscard`） */
+export type FollowOrder = (cards: Card[]) => Card[];
+
+function defaultFollowOrder(trumpSuit: Suit | null, levelRank: Rank): FollowOrder {
+  return cards => sortForDiscard(cards, trumpSuit, levelRank);
+}
+
 /** 从 group 中挑 need 张，尽量满足对子/拖拉机要求 */
 function pickForGroup(
   group: Card[],
@@ -705,6 +712,7 @@ function pickForGroup(
   leadTractor: number,
   trumpSuit: Suit | null,
   levelRank: Rank,
+  order: FollowOrder,
 ): Card[] {
   const picked: Card[] = [];
   const rest = [...group];
@@ -739,7 +747,7 @@ function pickForGroup(
   }
 
   // 3) 单张补齐（按垫牌顺序，先送 0 分小牌，5 与分牌留后面）
-  for (const c of sortForDiscard(rest, trumpSuit, levelRank)) {
+  for (const c of order(rest)) {
     if (picked.length >= need) break;
     picked.push(c);
   }
@@ -759,12 +767,13 @@ export function chooseLead(
   return sorted.length > 0 ? [sorted[0]] : [];
 }
 
-/** AI 跟牌：构造一手合法牌 */
+/** AI 跟牌：构造一手合法牌（`order` 可换成「垫分」等自定义顺序） */
 export function chooseFollow(
   hand: Card[],
   lead: HandShape,
   trumpSuit: Suit | null,
   levelRank: Rank,
+  order: FollowOrder = defaultFollowOrder(trumpSuit, levelRank),
 ): Card[] {
   const door = lead.door;
   if (door === null) return [];
@@ -776,7 +785,7 @@ export function chooseFollow(
   if (handInDoor.length >= need) {
     return pickForGroup(
       handInDoor, handInDoor, need,
-      lead.pairs, lead.tractor, trumpSuit, levelRank,
+      lead.pairs, lead.tractor, trumpSuit, levelRank, order,
     );
   }
 
@@ -784,9 +793,8 @@ export function chooseFollow(
   const picked = [...handInDoor];
   const restNeed = need - handInDoor.length;
   const outDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) !== door);
-  const sideFill = sortForDiscard(
+  const sideFill = order(
     outDoor.filter(c => doorOf(c, trumpSuit, levelRank) !== 'trump'),
-    trumpSuit, levelRank,
   );
   const trumpFill = outDoor.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump');
 
@@ -800,18 +808,14 @@ export function chooseFollow(
     // 想大出必须自带同型主牌 —— 那是主动毙牌，这里不主动毙；
     // 否则会把一对大王当成「跟对子」垫出去，白白浪费主牌。
     picked.push(...pickForGroup(
-      trumpFill, handTrump, remain, 0, 0, trumpSuit, levelRank,
+      trumpFill, handTrump, remain, 0, 0, trumpSuit, levelRank, order,
     ));
   }
 
   // 兜底：保证张数正好等于首出张数
   if (picked.length < need) {
     const pickedIds = new Set(picked.map(c => c.id));
-    const rest = sortForDiscard(
-      hand.filter(c => !pickedIds.has(c.id)),
-      trumpSuit,
-      levelRank,
-    );
+    const rest = order(hand.filter(c => !pickedIds.has(c.id)));
     for (const c of rest) {
       if (picked.length >= need) break;
       picked.push(c);

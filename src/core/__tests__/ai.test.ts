@@ -332,3 +332,76 @@ describe('AI 多张跟牌：甩牌补牌不浪费主牌', () => {
     );
   });
 });
+
+describe('AI 多张跟牌：对家基本大出时垫分', () => {
+  // 南（北家的对家）领 ♥A Q Q（基本大出），东家跟三张 ♥ 之后轮到北家；
+  // 北家没有 ♥，要把 3 张牌送给南家。
+  const eastFollow = () => [
+    c(Suit.Heart, R.Three), c(Suit.Heart, R.Four), c(Suit.Heart, R.Six),
+    c(Suit.Club, R.Nine), c(Suit.Diamond, R.Nine),
+  ];
+  const southLead = () => [
+    c(Suit.Heart, R.Ace), c(Suit.Heart, R.Queen), c(Suit.Heart, R.Queen),
+    c(Suit.Club, R.Four), c(Suit.Diamond, R.Four),
+  ];
+  /** 西家跟不上 ♥A Q Q（有 ♥ 但都比 Q 小）→ 对家确定大出 */
+  const westSafe = () => [
+    c(Suit.Heart, R.Seven), c(Suit.Heart, R.Eight), c(Suit.Heart, R.Nine),
+    c(Suit.Diamond, R.King), c(Suit.Club, R.King),
+  ];
+  const northPick = (north: Card[], west: Card[]): string[] => {
+    const hands = handsOf(eastFollow(), southLead(), west, north);
+    const first = applyPlay(
+      hands, createPlayState(PlayerPosition.South), PlayerPosition.South,
+      hands[PlayerPosition.South].slice(0, 3), TRUMP, LEVEL,
+    );
+    const eastCards = first.hands[PlayerPosition.East]
+      .filter(card => card.suit === Suit.Heart).slice(0, 3);
+    const second = applyPlay(
+      first.hands, first.state, PlayerPosition.East, eastCards, TRUMP, LEVEL,
+    );
+    return aiChoosePlay(second.state, second.hands, TRUMP, LEVEL)
+      .map(card => `${card.suit}${RANK_NAME[card.rank]}`).sort();
+  };
+
+  it('北无 ♥ → 先贴单张 10，再贴 5，最后才贴杂牌', () => {
+    expectEqual(
+      northPick([
+        c(Suit.Club, R.Ten), c(Suit.Club, R.Three), c(Suit.Diamond, R.Five),
+        c(Suit.Diamond, R.Seven), c(Suit.Spade, R.Three),
+      ], westSafe()),
+      ['C10', 'C3', 'D5'],
+      '北家跟牌',
+    );
+  });
+
+  it('手上 ♣10 对、对手有更大的 ♣JJ → 死对子整对先垫', () => {
+    const westWithJacks = [
+      c(Suit.Club, R.Jack), c(Suit.Club, R.Jack),
+      c(Suit.Heart, R.Seven), c(Suit.Diamond, R.King), c(Suit.Club, R.King),
+    ];
+    expectEqual(
+      northPick([
+        c(Suit.Club, R.Ten), c(Suit.Club, R.Ten), c(Suit.Diamond, R.Three),
+        c(Suit.Diamond, R.Seven), c(Suit.Spade, R.Three),
+      ], westWithJacks),
+      ['C10', 'C10', 'D3'],
+      '北家跟牌',
+    );
+  });
+
+  it('对手可能毙（断 ♥ 且带一对主）→ 不盲目垫分', () => {
+    const westCanRuff = [
+      c(Suit.Spade, R.Three), c(Suit.Spade, R.Three), c(Suit.Spade, R.Four),
+      c(Suit.Diamond, R.King), c(Suit.Club, R.King),
+    ];
+    expectEqual(
+      northPick([
+        c(Suit.Club, R.Ten), c(Suit.Club, R.Three), c(Suit.Diamond, R.Five),
+        c(Suit.Diamond, R.Seven), c(Suit.Spade, R.Three),
+      ], westCanRuff),
+      ['C3', 'D5', 'D7'],
+      '北家跟牌',
+    );
+  });
+});

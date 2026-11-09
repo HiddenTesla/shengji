@@ -20,6 +20,7 @@ import {
   chooseLead,
   doorOf,
   slotOf,
+  sortForDiscard,
   throwFallback,
   validateFollow,
 } from './hand.ts';
@@ -775,6 +776,123 @@ function keepDoorBossInFollow(
     result = swapped;
   }
   return result;
+}
+
+/** 这门这对牌是不是「死对子」：对手手里有更大的同门对子，它永远赢不了墩 */
+function deadPairSuit(
+  cards: Card[],
+  rank: Rank,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Suit | null {
+  const bySuit = new Map<Suit, Card[]>();
+  for (const card of cards) {
+    if (card.rank !== rank) continue;
+    const arr = bySuit.get(card.suit) ?? [];
+    arr.push(card);
+    bySuit.set(card.suit, arr);
+  }
+  for (const [suit, pair] of bySuit) {
+    if (pair.length < 2) continue;
+    const door = doorOf(pair[0], trumpSuit, levelRank);
+    const slot = slotOf(pair[0], trumpSuit, levelRank);
+    const beaten = ALL_POSITIONS.some(pos =>
+      pos !== player
+      && teamOf(pos) !== teamOf(player)
+      && leadPairUnits(
+        hands[pos].filter(c => doorOf(c, trumpSuit, levelRank) === door),
+        trumpSuit, levelRank,
+      ).some(unit => unit.slot > slot));
+    if (beaten) return suit;
+  }
+  return null;
+}
+
+/**
+ * 「垫分」顺序：本方（对家）已经大出或基本确定大出时用。
+ *
+ *   1. 死对子（对手有更大的同门对子、永远赢不了墩）整对先垫 —— 一手就是 10 / 20 分；
+ *   2. 单张 10 最优先，然后单张 5、单张 K（活的 5 / 10 / K 对子不拆）；
+ *   3. 其余按普通垫牌顺序（0 分小牌先送）。
+ */
+function makeFeedPointsOrder(
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): (cards: Card[]) => Card[] {
+  return (cards) => {
+    const rest = [...cards];
+    const out: Card[] = [];
+    const takeWhere = (pred: (card: Card) => boolean) => {
+      for (const card of [...rest]) {
+        if (!pred(card)) continue;
+        rest.splice(rest.indexOf(card), 1);
+        out.push(card);
+      }
+    };
+    const isPair = (card: Card) =>
+      cards.filter(c => c.suit === card.suit && c.rank === card.rank).length >= 2;
+
+    // 1) 死对子：10 对 → K 对 → 5 对（20 / 20 / 10 分）
+    for (const rank of [Rank.Ten, Rank.King, Rank.Five]) {
+      let suit = deadPairSuit(rest, rank, hands, player, trumpSuit, levelRank);
+      while (suit !== null) {
+        takeWhere(card => card.rank === rank && card.suit === suit);
+        suit = deadPairSuit(rest, rank, hands, player, trumpSuit, levelRank);
+      }
+    }
+
+    // 2) 单张分牌：10 → 5 → K
+    for (const rank of [Rank.Ten, Rank.Five, Rank.King]) {
+      takeWhere(card => card.rank === rank && !isPair(card));
+    }
+
+    // 3) 其余
+    out.push(...sortForDiscard(rest, trumpSuit, levelRank));
+    return out;
+  };
+}
+
+/** 这手牌能不能压过当前最大（同门最优跟牌 + 毙牌两种都算） */
+function handCanBeat(
+  hand: Card[],
+  lead: HandShape,
+  bestCards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  if (lead.door === null) return false;
+  if (lead.door !== 'trump' && canRuffWithTrump(hand, lead, trumpSuit, levelRank)) {
+    return true;
+  }
+  return followOptionsFor(hand, lead, trumpSuit, levelRank)
+    .some(option => beats(option, bestCards, lead, trumpSuit, levelRank));
+}
+
+/**
+ * 本方是不是「大出或基本确定大出」：当前最大是本方的牌，
+ * 而且后面还没出牌的对手都压不过它（含毙牌）。
+ */
+function partnerLikelyWins(
+  state: PlayState,
+  hands: Hands,
+  player: PlayerPosition,
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  const best = bestPlayOf(state.trick.plays, lead, trumpSuit, levelRank);
+  if (!best || teamOf(best.player) !== teamOf(player)) return false;
+
+  const played = new Set(state.trick.plays.map(play => play.player));
+  return !ALL_POSITIONS.some(pos =>
+    pos !== player
+    && !played.has(pos)
+    && teamOf(pos) !== teamOf(player)
+    && handCanBeat(hands[pos], lead, best.cards, trumpSuit, levelRank));
 }
 
 /**
@@ -1641,7 +1759,17 @@ export function aiChoosePlay(
     tractor: state.trick.leadTractor,
     maxTractor: state.trick.leadMaxTractor,
   };
-  // 多张跟牌：先按合法最小策略出，再把白送出去的门霸换成同门的 5
+  // 多张跟牌：对家基本大出时把分牌垫给对家；
+  // 否则先按合法最小策略出，再把白送出去的门霸换成同门的 5。
+  if (partnerLikelyWins(state, hands, player, lead, trumpSuit, levelRank)) {
+    return chooseFollow(
+      hand,
+      lead,
+      trumpSuit,
+      levelRank,
+      makeFeedPointsOrder(hands, player, trumpSuit, levelRank),
+    );
+  }
   return keepDoorBossInFollow(
     chooseFollow(hand, lead, trumpSuit, levelRank),
     hand,
