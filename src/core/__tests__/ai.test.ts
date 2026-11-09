@@ -405,3 +405,130 @@ describe('AI 多张跟牌：对家基本大出时垫分', () => {
     );
   });
 });
+
+describe('AI 领出：大对子（AA / KK）不轻易拆', () => {
+  const SIDE6 = () => [
+    c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight),
+    c(Suit.Diamond, R.Eight), c(Suit.Club, R.Nine), c(Suit.Diamond, R.Nine),
+  ];
+
+  it('♥AA：对手断 ♥ 但只有单张主 → 单 A 会被毙，应整对领出', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.Ace), c(Suit.Club, R.Three),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Five), c(Suit.Diamond, R.Six),
+      ],
+      SIDE6(),
+      [c(Suit.Spade, R.Three), c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven),
+        c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight), c(Suit.Club, R.Nine)],
+      [c(Suit.Spade, R.Four), c(Suit.Diamond, R.Ten), c(Suit.Club, R.Ten),
+        c(Suit.Diamond, R.Jack), c(Suit.Club, R.Jack), c(Suit.Diamond, R.Queen)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['HA', 'HA'], '东家领出');
+  });
+
+  it('♥AA：一张张打都能大出 → 允许拆（能赢两墩）', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.Ace), c(Suit.Club, R.Three),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Five), c(Suit.Diamond, R.Six),
+      ],
+      SIDE6(), SIDE6(), SIDE6(),
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['HA'], '东家领出');
+  });
+
+  it('♥KK：对手只有单张 ♥A → 单 K 被压，应整对领出', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.King), c(Suit.Heart, R.King), c(Suit.Club, R.Three),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Five), c(Suit.Diamond, R.Six),
+      ],
+      [c(Suit.Heart, R.Ace), c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven),
+        c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight), c(Suit.Club, R.Nine)],
+      [c(Suit.Heart, R.Three), c(Suit.Diamond, R.Ten), c(Suit.Club, R.Ten),
+        c(Suit.Diamond, R.Jack), c(Suit.Club, R.Jack), c(Suit.Diamond, R.Queen)],
+      SIDE6(),
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['HK', 'HK'], '东家领出');
+  });
+
+  it('♥AKK：外面没有 ♥A → 领 ♥KK，不拆成单张 K', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.King),
+        c(Suit.Club, R.Three), c(Suit.Diamond, R.Four), c(Suit.Club, R.Five),
+      ],
+      [c(Suit.Heart, R.Three), c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven),
+        c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight), c(Suit.Club, R.Nine)],
+      [c(Suit.Heart, R.Four), c(Suit.Diamond, R.Ten), c(Suit.Club, R.Ten),
+        c(Suit.Diamond, R.Jack), c(Suit.Club, R.Jack), c(Suit.Diamond, R.Queen)],
+      SIDE6(),
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['HK', 'HK'], '东家领出');
+  });
+
+  // ---- 一对 A：能抓住对手的对 K / 对 10 才打 ----
+  const EAST_AA = () => [
+    c(Suit.Heart, R.Ace), c(Suit.Heart, R.Ace), c(Suit.Club, R.Three),
+    c(Suit.Diamond, R.Four), c(Suit.Club, R.Five), c(Suit.Diamond, R.Six),
+  ];
+  /** 对家（西）手里全是 0 分牌，加不了分 */
+  const WEST_NO_POINT = () => [
+    c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight),
+    c(Suit.Diamond, R.Eight), c(Suit.Spade, R.Three), c(Suit.Spade, R.Four),
+  ];
+  const SOUTH_LOW = () => [
+    c(Suit.Heart, R.Five), c(Suit.Heart, R.Six), c(Suit.Club, R.Jack),
+    c(Suit.Diamond, R.Jack), c(Suit.Club, R.Queen), c(Suit.Diamond, R.Queen),
+  ];
+  const acePairLead = (north: Card[], west: Card[]) =>
+    leadOf(handsOf(EAST_AA(), SOUTH_LOW(), west, north), PlayerPosition.East);
+
+  it('♥AA 能抓住对手的对 K（20 分）→ 整对领出', () => {
+    expectEqual(
+      acePairLead([
+        c(Suit.Heart, R.King), c(Suit.Heart, R.King), c(Suit.Club, R.Eight),
+        c(Suit.Diamond, R.Eight), c(Suit.Club, R.Nine), c(Suit.Diamond, R.Nine),
+      ], WEST_NO_POINT()),
+      ['HA', 'HA'],
+      '东家领出',
+    );
+  });
+
+  it('♥AA 能抓住对手的对 10（20 分）→ 整对领出', () => {
+    expectEqual(
+      acePairLead([
+        c(Suit.Heart, R.Ten), c(Suit.Heart, R.Ten), c(Suit.Club, R.Eight),
+        c(Suit.Diamond, R.Eight), c(Suit.Club, R.Nine), c(Suit.Diamond, R.Nine),
+      ], WEST_NO_POINT()),
+      ['HA', 'HA'],
+      '东家领出',
+    );
+  });
+
+  it('对手有对 K 但对 7 可顶替（抓不到 20 分）→ 不轻易打对 A', () => {
+    expectEqual(
+      acePairLead([
+        c(Suit.Heart, R.King), c(Suit.Heart, R.King), c(Suit.Heart, R.Seven),
+        c(Suit.Heart, R.Seven), c(Suit.Club, R.Nine), c(Suit.Diamond, R.Nine),
+      ], WEST_NO_POINT()),
+      ['HA'],
+      '东家领出',
+    );
+  });
+
+  it('对家只能加 10 分（凑不满 20 分）→ 也不轻易打对 A', () => {
+    expectEqual(
+      acePairLead([
+        c(Suit.Heart, R.Three), c(Suit.Heart, R.Four), c(Suit.Club, R.Eight),
+        c(Suit.Diamond, R.Eight), c(Suit.Club, R.Nine), c(Suit.Diamond, R.Nine),
+      ], [
+        c(Suit.Heart, R.King), c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven),
+        c(Suit.Club, R.Eight), c(Suit.Spade, R.Three), c(Suit.Spade, R.Four),
+      ]),
+      ['HA'],
+      '东家领出',
+    );
+  });
+});

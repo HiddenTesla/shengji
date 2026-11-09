@@ -90,6 +90,62 @@ function safePointLeadBonus(
 }
 
 /**
+ * 这张牌领出去能不能保证大出：同门没有对手更大的牌，也没有断门带主（可毙）的对手。
+ */
+function singleLeadIsSafe(
+  card: Card,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  const door = doorOf(card, trumpSuit, levelRank);
+  const slot = slotOf(card, trumpSuit, levelRank);
+  return ALL_POSITIONS
+    .filter(pos => pos !== player && teamOf(pos) !== teamOf(player))
+    .every(pos => {
+      const hand = hands[pos];
+      if (hand.some(c =>
+        doorOf(c, trumpSuit, levelRank) === door
+        && slotOf(c, trumpSuit, levelRank) > slot)) {
+        return false;
+      }
+      if (door === 'trump') return true;
+      const hasDoor = hand.some(c => doorOf(c, trumpSuit, levelRank) === door);
+      const canRuff = hand.some(c => doorOf(c, trumpSuit, levelRank) === 'trump');
+      return hasDoor || !canRuff;
+    });
+}
+
+/**
+ * 拆大对子（AA / KK）的惩罚。
+ *
+ * 领单张时，如果这张牌属于手里的大对子，而它本身并不能保证大出
+ * （同门还有对手更大的牌、或对手断门带主），拆开打通常是净亏：
+ * 整对打出去对手必须用「同型对子」才压得过，拆成单牌反而一张张喂给对手。
+ * 只有当单牌本身也稳赢（一张张打都能已方大出）时才值得拆 —— 那样能赢两墩。
+ * 主牌的大对子（吊主）同样适用。
+ */
+const SPLIT_BIG_PAIR_PENALTY = 200;
+
+function splitBigPairPenalty(
+  card: Card,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  if (card.rank !== Rank.Ace && card.rank !== Rank.King) return 0;
+  if (card.rank === levelRank) return 0;
+  const hasMate = hands[player].some(c =>
+    c.id !== card.id && c.suit === card.suit && c.rank === card.rank);
+  if (!hasMate) return 0;
+  return singleLeadIsSafe(card, hands, player, trumpSuit, levelRank)
+    ? 0
+    : SPLIT_BIG_PAIR_PENALTY;
+}
+
+/**
  * 钓主（ruff bait）评价：
  * 主动领出对手可毙的副牌组合，用少量送分换取对手主牌的消耗。
  * 每钓出 1 张主牌按 1 墩估值；但组合本身每张主牌最多允许送 5 分，
@@ -329,13 +385,15 @@ function splitKingLeadBonus(
 /**
  * 「空甩一对 A」惩罚。
  *
- * 副牌的一对 A 必然管住这一墩，但它的价值在于**收分**：
- * 只有对家能加分、或者对手被迫垫分时，打掉这对控制牌才划算。
- * 若对家加不了分（有对子必须跟非分对子，或手里根本没有能出的分牌），
- * 对手也逼不出分（没有分对子、该门剩下的牌都不是分牌），
- * 领出这对 A 就只是用一张控制牌换一墩 0 分，评级要降低。
+ * 副牌的一对 A 必然管住这一墩，但它真正的价值在**收分**：
+ * 只有能收够 20 分（一对 K / 一对 10 被抓住，或对家能加分 + 对手被迫垫分）
+ * 才值得打掉这对控制牌。
+ * 若对手根本没有大对子 —— 或者除了 K / 10 之外还有别的对子可以顶替 ——
+ * 这一对 A 只能逼出很少的分，就不该轻易打出去（控制牌换一墩小分不划算）。
  */
 const ACE_PAIR_NO_POINT_PENALTY = 200;
+/** 一对 A 至少要能收到这么多分，才值得打出去（一对 K / 对 10 = 20 分） */
+const ACE_PAIR_MIN_WORTH_POINTS = 20;
 
 /** 跟「对子」时，某家**最少**被迫要出的分数（对手视角：会挑最不值钱的跟） */
 function minPointsForcedVsPair(
@@ -427,7 +485,9 @@ function acePairLeadPenalty(
     .reduce((sum, pos) =>
       sum + minPointsForcedVsPair(hands[pos], door, trumpSuit, levelRank), 0);
 
-  return partnerPoints + opponentPoints > 0 ? 0 : ACE_PAIR_NO_POINT_PENALTY;
+  return partnerPoints + opponentPoints >= ACE_PAIR_MIN_WORTH_POINTS
+    ? 0
+    : ACE_PAIR_NO_POINT_PENALTY;
 }
 
 /**
@@ -1184,10 +1244,10 @@ function scoreWinningMultiLead(
     );
     return value + (teamOf(play.player) === teamOf(player) ? -cost : cost);
   }, 0);
-  const isKingPair = lead.type === HandType.Pair
+  const isBigPair = lead.type === HandType.Pair
     && cards.length === 2
-    && cards.every(c => c.rank === Rank.King);
-  const pairBonus = isKingPair ? SAFE_PAIR_LEAD_BONUS : 0;
+    && cards.every(c => c.rank === Rank.King || c.rank === Rank.Ace);
+  const pairBonus = isBigPair ? SAFE_PAIR_LEAD_BONUS : 0;
   return TRICK_WIN_VALUE + points + cardEconomy + captureBonus + pairBonus;
 }
 
@@ -1598,7 +1658,8 @@ export function aiChoosePlay(
       const leadBonus = safePointLeadBonus(card, hands, player, trumpSuit, levelRank);
       const splitBonus = splitKingLeadBonus(card, hands, player, trumpSuit, levelRank);
       const strategicBonus = splitBonus
-        - leadJokerPenalty(card, trumpSuit, levelRank);
+        - leadJokerPenalty(card, trumpSuit, levelRank)
+        - splitBigPairPenalty(card, hands, player, trumpSuit, levelRank);
       const score = searchTrick(
         remainingHands,
         nextPlayer(player),
