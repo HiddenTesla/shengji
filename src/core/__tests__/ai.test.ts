@@ -283,3 +283,52 @@ describe('AI 多张跟牌：垫牌顺序（5 的保留优先级高于 6/7/8/9/J�
     );
   });
 });
+
+describe('AI 多张跟牌：甩牌补牌不浪费主牌', () => {
+  // 东家（对手）甩 ♥A K Q Q（4 张、含 1 对），北家必须跟 4 张。
+  const filler = () => [
+    c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight),
+  ];
+  const followThrow = (north: Card[]): string[] => {
+    const east = [
+      c(Suit.Heart, R.Ace), c(Suit.Heart, R.King),
+      c(Suit.Heart, R.Queen), c(Suit.Heart, R.Queen),
+    ];
+    const hands = handsOf(east, filler(), filler(), north);
+    return secondSeatAfter(hands, hands[PlayerPosition.East].slice(0, 4)).sort();
+  };
+
+  it('该门只剩 ♥3、其余全是主牌 → 补最便宜的主，不送一对大王', () => {
+    // 补牌只是垫牌，不要求同型：不能为了「跟对子」把一对大王垫出去
+    expectEqual(
+      followThrow([
+        c(Suit.Heart, R.Three), c(Suit.Spade, R.Three), c(Suit.Spade, R.Four),
+        c(Suit.Joker, R.BigJoker), c(Suit.Joker, R.BigJoker),
+      ]),
+      ['H3', 'J大王', 'S3', 'S4'],
+      '北家跟牌',
+    );
+  });
+
+  it('断 ♥、有 ♣7 ♣8 与两张大王 → 用 ♣7 ♣8 + ♠3 + 一张大王', () => {
+    expectEqual(
+      followThrow([
+        c(Suit.Club, R.Seven), c(Suit.Club, R.Eight), c(Suit.Spade, R.Three),
+        c(Suit.Joker, R.BigJoker), c(Suit.Joker, R.BigJoker),
+      ]),
+      ['C7', 'C8', 'J大王', 'S3'],
+      '北家跟牌',
+    );
+  });
+
+  it('该门 ♥3 + 够用的副牌补牌 → 完全不动主牌', () => {
+    expectEqual(
+      followThrow([
+        c(Suit.Heart, R.Three), c(Suit.Club, R.Seven),
+        c(Suit.Club, R.Eight), c(Suit.Club, R.Nine), c(Suit.Joker, R.BigJoker),
+      ]),
+      ['C7', 'C8', 'C9', 'H3'],
+      '北家跟牌',
+    );
+  });
+});

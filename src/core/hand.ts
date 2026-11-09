@@ -796,9 +796,11 @@ export function chooseFollow(
   const remain = restNeed - sideTaken.length;
   if (remain > 0) {
     const handTrump = hand.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump');
+    // 补牌是「垫牌」，不要求同型：既不用凑对子，也不用凑拖拉机。
+    // 想大出必须自带同型主牌 —— 那是主动毙牌，这里不主动毙；
+    // 否则会把一对大王当成「跟对子」垫出去，白白浪费主牌。
     picked.push(...pickForGroup(
-      trumpFill, handTrump, remain,
-      lead.pairs, lead.tractor, trumpSuit, levelRank,
+      trumpFill, handTrump, remain, 0, 0, trumpSuit, levelRank,
     ));
   }
 
