@@ -21,6 +21,7 @@ import {
   HandType as HT,
   Rank as R,
   Suit as S,
+  isPointCard,
 } from './types.ts';
 import { isTrump } from './trump.ts';
 
@@ -107,6 +108,42 @@ export function sortByStrengthAsc(
     if (as !== bs) return as - bs;
     return a.rank - b.rank;
   });
+}
+
+/**
+ * 垫牌优先级分档（数字越小越先送出去）：
+ *   0 — 0 分小牌（3 / 4 / 6 / 7 / 8 / 9 / J）：送出去不亏分
+ *   1 — 5：送出去等于白送对手 5 分，比小牌更该留着
+ *   2 — 10 / Q / K / A：分牌或大牌，最后才动
+ */
+function discardBucket(card: Card): number {
+  if (card.rank === R.Five) return 1;
+  if (!isPointCard(card.rank) && card.rank <= R.Jack) return 0;
+  return 2;
+}
+
+function discardKey(card: Card, trumpSuit: Suit | null, levelRank: Rank): number {
+  const tier = card.suit === S.Joker || isTrump(card, trumpSuit, levelRank) ? 1 : 0;
+  return tier * 1000
+    + discardBucket(card) * 100
+    + slotOf(card, trumpSuit, levelRank);
+}
+
+/**
+ * 按「垫牌顺序」升序（必须先送给对手一张时，排在前面的先送）。
+ *
+ * 5 的保留优先级高于 6 / 7 / 8 / 9 / J：手上有 5 6 7 8、对手一对 A 大出时，
+ * 应先送 6 和 7，把 5（和 8）留着，而不是按点数从小到大把 5 送掉。
+ * 主牌依旧排在副牌之后（与 `sortByStrengthAsc` 一致）。
+ */
+export function sortForDiscard(
+  cards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[] {
+  return [...cards].sort(
+    (a, b) => discardKey(a, trumpSuit, levelRank) - discardKey(b, trumpSuit, levelRank),
+  );
 }
 
 // ------------------------------------------------------------
@@ -659,6 +696,13 @@ export function mandatoryFollowCards(
 // 托管 AI：构造合法出牌
 // ------------------------------------------------------------
 
+/** 自定垫牌顺序（默认按 `sortForDiscard`） */
+export type FollowOrder = (cards: Card[]) => Card[];
+
+function defaultFollowOrder(trumpSuit: Suit | null, levelRank: Rank): FollowOrder {
+  return cards => sortForDiscard(cards, trumpSuit, levelRank);
+}
+
 /** 从 group 中挑 need 张，尽量满足对子/拖拉机要求 */
 function pickForGroup(
   group: Card[],
@@ -668,6 +712,7 @@ function pickForGroup(
   leadTractor: number,
   trumpSuit: Suit | null,
   levelRank: Rank,
+  order: FollowOrder,
 ): Card[] {
   const picked: Card[] = [];
   const rest = [...group];
@@ -693,15 +738,16 @@ function pickForGroup(
     const needPairs = Math.min(leadPairs, availUnits.length, Math.floor(need / 2));
     if (needPairs > 0) {
       const unitsInGroup = pairUnits(group, trumpSuit, levelRank)
-        .sort((a, b) => a.slot - b.slot);
+        .sort((a, b) => discardKey(a.cards[0], trumpSuit, levelRank)
+          - discardKey(b.cards[0], trumpSuit, levelRank));
       for (let i = 0; i < needPairs && i < unitsInGroup.length; i++) {
         take(unitsInGroup[i].cards);
       }
     }
   }
 
-  // 3) 单张补齐（从小到大）
-  for (const c of sortByStrengthAsc(rest, trumpSuit, levelRank)) {
+  // 3) 单张补齐（按垫牌顺序，先送 0 分小牌，5 与分牌留后面）
+  for (const c of order(rest)) {
     if (picked.length >= need) break;
     picked.push(c);
   }
@@ -721,12 +767,13 @@ export function chooseLead(
   return sorted.length > 0 ? [sorted[0]] : [];
 }
 
-/** AI 跟牌：构造一手合法牌 */
+/** AI 跟牌：构造一手合法牌（`order` 可换成「垫分」等自定义顺序） */
 export function chooseFollow(
   hand: Card[],
   lead: HandShape,
   trumpSuit: Suit | null,
   levelRank: Rank,
+  order: FollowOrder = defaultFollowOrder(trumpSuit, levelRank),
 ): Card[] {
   const door = lead.door;
   if (door === null) return [];
@@ -738,7 +785,7 @@ export function chooseFollow(
   if (handInDoor.length >= need) {
     return pickForGroup(
       handInDoor, handInDoor, need,
-      lead.pairs, lead.tractor, trumpSuit, levelRank,
+      lead.pairs, lead.tractor, trumpSuit, levelRank, order,
     );
   }
 
@@ -746,9 +793,8 @@ export function chooseFollow(
   const picked = [...handInDoor];
   const restNeed = need - handInDoor.length;
   const outDoor = hand.filter(c => doorOf(c, trumpSuit, levelRank) !== door);
-  const sideFill = sortByStrengthAsc(
+  const sideFill = order(
     outDoor.filter(c => doorOf(c, trumpSuit, levelRank) !== 'trump'),
-    trumpSuit, levelRank,
   );
   const trumpFill = outDoor.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump');
 
@@ -758,20 +804,18 @@ export function chooseFollow(
   const remain = restNeed - sideTaken.length;
   if (remain > 0) {
     const handTrump = hand.filter(c => doorOf(c, trumpSuit, levelRank) === 'trump');
+    // 补牌是「垫牌」，不要求同型：既不用凑对子，也不用凑拖拉机。
+    // 想大出必须自带同型主牌 —— 那是主动毙牌，这里不主动毙；
+    // 否则会把一对大王当成「跟对子」垫出去，白白浪费主牌。
     picked.push(...pickForGroup(
-      trumpFill, handTrump, remain,
-      lead.pairs, lead.tractor, trumpSuit, levelRank,
+      trumpFill, handTrump, remain, 0, 0, trumpSuit, levelRank, order,
     ));
   }
 
   // 兜底：保证张数正好等于首出张数
   if (picked.length < need) {
     const pickedIds = new Set(picked.map(c => c.id));
-    const rest = sortByStrengthAsc(
-      hand.filter(c => !pickedIds.has(c.id)),
-      trumpSuit,
-      levelRank,
-    );
+    const rest = order(hand.filter(c => !pickedIds.has(c.id)));
     for (const c of rest) {
       if (picked.length >= need) break;
       picked.push(c);
