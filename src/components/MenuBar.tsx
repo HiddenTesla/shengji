@@ -15,6 +15,8 @@ interface MenuBarProps {
   onViewRules: () => void;
   /** 点击「出牌记录」：显示本局出牌（不含发牌记录） */
   onViewPlayLog: () => void;
+  /** 点击「导出局面」：导出当前牌局状态 */
+  onExportState: () => void;
   /** 点击「记牌器」：查看已出牌 / 剩余牌 */
   onViewTracker: () => void;
   /** 当前游戏速度档位（1..5） */
@@ -59,6 +61,7 @@ export default function MenuBar({
   onRedealSameCards,
   onViewRules,
   onViewPlayLog,
+  onExportState,
   onViewTracker,
   gameSpeed,
   onChangeSpeed,
@@ -118,6 +121,9 @@ export default function MenuBar({
             </MenuItem>
             <MenuItem onClick={() => closeThen(onRedealSameCards)}>
               原样发牌…
+            </MenuItem>
+            <MenuItem onClick={() => closeThen(onExportState)}>
+              导出局面…
             </MenuItem>
           </div>
         )}

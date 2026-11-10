@@ -75,6 +75,7 @@ import {
   encodeCards,
   serializePlayLog,
   truncateRecord,
+  toJsonc,
 } from './core/playlog.ts';
 import PlayerHand from './components/PlayerHand.tsx';
 import OpponentHand from './components/OpponentHand.tsx';
@@ -90,6 +91,7 @@ import RoundSettlement from './components/RoundSettlement.tsx';
 import PlayLogDialog from './components/PlayLogDialog.tsx';
 import CardTrackerDialog from './components/CardTrackerDialog.tsx';
 import CardComponent from './components/CardComponent.tsx';
+import StateExportDialog from './components/StateExportDialog.tsx';
 
 type Hands = Record<PlayerPosition, Card[]>
 
@@ -365,6 +367,7 @@ function App() {
   /** 出牌记录弹窗 */
   const [playLogOpen, setPlayLogOpen] = useState(false);
   const [playLogMode, setPlayLogMode] = useState<'plays' | 'full'>('plays');
+  const [stateExportOpen, setStateExportOpen] = useState(false);
 
   /** 记录一次动作前的状态（玩家 / 托管的埋底、出牌都记录） */
   function pushSnapshot(
@@ -1170,6 +1173,75 @@ function App() {
     setPlayLogOpen(true);
   }
 
+  function serializeState(format: 'json' | 'jsonc'): string {
+    const dealtHands = phase === GamePhase.Dealing
+      ? fullHandsRef.current
+      : hands ?? fullHandsRef.current;
+    const currentHands = dealtHands ?? EMPTY_HANDS;
+    const isTrumpUndecided = phase === GamePhase.Dealing
+      || phase === GamePhase.BiddingTrump;
+    const state = {
+      schemaVersion: 1,
+      phase,
+      levels: {
+        [TEAM_NAME_ZH[Team.NS]]: RANK_NAME[levels[Team.NS]],
+        [TEAM_NAME_ZH[Team.EW]]: RANK_NAME[levels[Team.EW]],
+      },
+      laps: {
+        [TEAM_NAME_ZH[Team.NS]]: laps[Team.NS],
+        [TEAM_NAME_ZH[Team.EW]]: laps[Team.EW],
+      },
+      banker: banker ? `${POSITION_NAME_ZH[banker]}家` : null,
+      trumpSuit: trumpSuit === null
+        ? (isTrumpUndecided ? '未定' : '无主')
+        : `${SUIT_SYMBOL[trumpSuit]}（${trumpSuit}）`,
+      score: {
+        defendingPoints: playState?.defendingPoints ?? 0,
+        bankerEscapePoints: playState?.bankerPoints ?? 0,
+      },
+      bottomCards: encodeCards(
+        cardIdMapRef.current,
+        buriedCards.length > 0 ? buriedCards : originalBottomRef.current,
+      ),
+      remainingHands: Object.fromEntries(ALL_POSITIONS.map(position => [
+        `${POSITION_NAME_ZH[position]}家`,
+        encodeCards(cardIdMapRef.current, currentHands[position]),
+      ])),
+      currentTrick: playState
+        ? {
+            leader: `${POSITION_NAME_ZH[playState.trick.leadPlayer]}家`,
+            played: playState.trick.plays.map(play => ({
+              player: `${POSITION_NAME_ZH[play.player]}家`,
+              cards: encodeCards(cardIdMapRef.current, play.cards),
+            })),
+            turn: playState.trick.complete
+              ? null
+              : `${POSITION_NAME_ZH[playState.turn]}家`,
+          }
+        : null,
+      cardIdFormat: '花色代码+牌面值#副本序号，例如 S5#0',
+    };
+    return format === 'jsonc'
+      ? toJsonc(state)
+      : `${JSON.stringify(state, null, 2)}\n`;
+  }
+
+  function exportState(format: 'json' | 'jsonc') {
+    const blob = new Blob([serializeState(format)], {
+      type: 'application/json;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${gameIdRef.current || 'shengji'}-state.${
+      format === 'jsonc' ? 'jsonc' : 'json'
+    }`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   // 南家报主栏：发牌/叫主阶段显示（仅南家为手动时），窗口内始终可操作
   const southManual = playerModes[PlayerPosition.South] === PlayerMode.Manual;
   const showBar = southManual && (isDealing || (isBidding && !flipping));
@@ -1285,6 +1357,7 @@ function App() {
         onRedealSameCards={() => setConfirmRedeal(true)}
         onViewRules={() => setShowRules(true)}
         onViewPlayLog={() => openPlayLog('plays')}
+        onExportState={() => setStateExportOpen(true)}
         onViewTracker={() => setShowTracker(true)}
         gameSpeed={gameSpeed}
         onChangeSpeed={setGameSpeed}
@@ -1814,6 +1887,13 @@ function App() {
         serialize={serializeLog}
         onExport={exportLog}
         onClose={() => setPlayLogOpen(false)}
+      />
+
+      <StateExportDialog
+        open={stateExportOpen}
+        serialize={serializeState}
+        onExport={exportState}
+        onClose={() => setStateExportOpen(false)}
       />
 
       {/* 记牌器：按门统计已出 / 剩余（按视角排除本家手牌） */}
