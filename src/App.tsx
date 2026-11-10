@@ -77,6 +77,7 @@ import {
   truncateRecord,
   toJsonc,
 } from './core/playlog.ts';
+import { type ParsedGameState } from './core/state.ts';
 import PlayerHand from './components/PlayerHand.tsx';
 import OpponentHand from './components/OpponentHand.tsx';
 import PlayerModeButton from './components/PlayerModeButton.tsx';
@@ -92,6 +93,7 @@ import PlayLogDialog from './components/PlayLogDialog.tsx';
 import CardTrackerDialog from './components/CardTrackerDialog.tsx';
 import CardComponent from './components/CardComponent.tsx';
 import StateExportDialog from './components/StateExportDialog.tsx';
+import StateImportDialog from './components/StateImportDialog.tsx';
 
 type Hands = Record<PlayerPosition, Card[]>
 
@@ -368,6 +370,10 @@ function App() {
   const [playLogOpen, setPlayLogOpen] = useState(false);
   const [playLogMode, setPlayLogMode] = useState<'plays' | 'full'>('plays');
   const [stateExportOpen, setStateExportOpen] = useState(false);
+  const [stateImportOpen, setStateImportOpen] = useState(false);
+  const [confirmStateImport, setConfirmStateImport] = useState(false);
+  const [pendingImportedState, setPendingImportedState] = useState<ParsedGameState | null>(null);
+  const importedStateRef = useRef<ParsedGameState | null>(null);
 
   /** 记录一次动作前的状态（玩家 / 托管的埋底、出牌都记录） */
   function pushSnapshot(
@@ -406,6 +412,7 @@ function App() {
     keepDeal = false,
     initialBanker: PlayerPosition | null = presetBanker,
   ) {
+    importedStateRef.current = null;
     presetBankerRef.current = presetBanker;
     initialBankerRef.current = initialBanker;
 
@@ -482,6 +489,10 @@ function App() {
   // 等级 / 周目 / 庄家 / 级牌全部不变；本局是否「抢庄局」也保持不变：
   // 抢庄局（首局）庄家仍由亮主者决定，非抢庄局庄家固定、叫主只定主花色。
   function redealSameCards() {
+    if (importedStateRef.current) {
+      applyImportedState(importedStateRef.current);
+      return;
+    }
     dealRound(presetBankerRef.current, true, banker);
   }
 
@@ -1226,6 +1237,75 @@ function App() {
       : `${JSON.stringify(state, null, 2)}\n`;
   }
 
+  function applyImportedState(state: ParsedGameState) {
+    importedStateRef.current = state;
+    presetBankerRef.current = state.banker;
+    initialBankerRef.current = state.banker;
+    fullHandsRef.current = null;
+    bottomRef.current = state.bottomCards;
+    originalBottomRef.current = state.bottomCards;
+    cardIdMapRef.current = state.cardIdMap;
+    gameIdRef.current = `G-import-${Math.random().toString(36).slice(2, 8)}`;
+
+    const levelRankForRound = state.levels[teamOf(state.banker)];
+    const record = createRoundRecord({
+      level: levelRankForRound,
+      playerModes: { ...playerModes },
+      deal: {
+        mode: 'shuffle',
+        hands: {
+          E: encodeCards(state.cardIdMap, state.hands.E),
+          N: encodeCards(state.cardIdMap, state.hands.N),
+          W: encodeCards(state.cardIdMap, state.hands.W),
+          S: encodeCards(state.cardIdMap, state.hands.S),
+        },
+        bottom: encodeCards(state.cardIdMap, state.bottomCards),
+      },
+    });
+    const firstPlay = state.playState.trick.plays[0];
+    if (firstPlay) {
+      state.playState.trick.plays.forEach((play, index) => {
+        appendPlay(
+          record,
+          play.player,
+          play.cards,
+          state.trumpSuit,
+          levelRankForRound,
+          index === 0,
+          [],
+          state.cardIdMap,
+        );
+      });
+    }
+    logRef.current = record;
+
+    setLevels(state.levels);
+    setLaps(state.laps);
+    setBanker(state.banker);
+    setTrumpSuit(state.trumpSuit);
+    setHands(state.hands);
+    setBuriedCards(state.bottomCards);
+    setPlayState(state.playState);
+    setPhase(GamePhase.Playing);
+    setSelectedIndices(new Set());
+    setHistory([]);
+    setAutoPaused(false);
+    setRevealed(0);
+    setDeclareToast(null);
+    setBottomTrump(false);
+    setBidSeconds(BID_WINDOW_SECONDS);
+    setFlipping(false);
+    setFlipCount(0);
+    setFlipLog([]);
+    setFlipTrumpCard(null);
+    setShowFlipLog(false);
+    setBidState(createBidState(0));
+    setPlayLogOpen(false);
+    setStateImportOpen(false);
+    setPendingImportedState(null);
+    setConfirmStateImport(false);
+  }
+
   function exportState(format: 'json' | 'jsonc') {
     const blob = new Blob([serializeState(format)], {
       type: 'application/json;charset=utf-8',
@@ -1358,6 +1438,7 @@ function App() {
         onViewRules={() => setShowRules(true)}
         onViewPlayLog={() => openPlayLog('plays')}
         onExportState={() => setStateExportOpen(true)}
+        onImportState={() => setStateImportOpen(true)}
         onViewTracker={() => setShowTracker(true)}
         gameSpeed={gameSpeed}
         onChangeSpeed={setGameSpeed}
@@ -1894,6 +1975,33 @@ function App() {
         serialize={serializeState}
         onExport={exportState}
         onClose={() => setStateExportOpen(false)}
+      />
+
+      <StateImportDialog
+        open={stateImportOpen}
+        onImportReady={state => {
+          setPendingImportedState(state);
+          setStateImportOpen(false);
+          setConfirmStateImport(true);
+        }}
+        onClose={() => setStateImportOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmStateImport}
+        title="导入局面？"
+        description="导入会终止当前对局并替换为粘贴的局面。当前进度无法恢复，确定继续吗？"
+        confirmLabel="导入局面"
+        cancelLabel="取消"
+        danger={true}
+        onConfirm={() => {
+          if (pendingImportedState) applyImportedState(pendingImportedState);
+          else setConfirmStateImport(false);
+        }}
+        onCancel={() => {
+          setConfirmStateImport(false);
+          setPendingImportedState(null);
+        }}
       />
 
       {/* 记牌器：按门统计已出 / 剩余（按视角排除本家手牌） */}

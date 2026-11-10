@@ -17,6 +17,8 @@ interface MenuBarProps {
   onViewPlayLog: () => void;
   /** 点击「导出局面」：导出当前牌局状态 */
   onExportState: () => void;
+  /** 点击「导入局面」：从 JSON/JSONC 恢复可继续的局面 */
+  onImportState: () => void;
   /** 点击「记牌器」：查看已出牌 / 剩余牌 */
   onViewTracker: () => void;
   /** 当前游戏速度档位（1..5） */
@@ -62,6 +64,7 @@ export default function MenuBar({
   onViewRules,
   onViewPlayLog,
   onExportState,
+  onImportState,
   onViewTracker,
   gameSpeed,
   onChangeSpeed,
@@ -124,6 +127,9 @@ export default function MenuBar({
             </MenuItem>
             <MenuItem onClick={() => closeThen(onExportState)}>
               导出局面…
+            </MenuItem>
+            <MenuItem onClick={() => closeThen(onImportState)}>
+              导入局面…
             </MenuItem>
           </div>
         )}

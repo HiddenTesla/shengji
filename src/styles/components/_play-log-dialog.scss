@@ -204,3 +204,23 @@
     border-color: rgba(255, 215, 0, 0.55);
   }
 }
+
+.state-import__hint {
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.state-import__text {
+  width: 100%;
+  min-height: 250px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.state-import__error {
+  margin-top: 8px;
+  color: #ff8a80;
+  font-size: 13px;
+}

@@ -6,6 +6,7 @@
 import './trick.test.ts';
 import './round.test.ts';
 import './ai.test.ts';
+import './state.test.ts';
 import { report } from './harness.ts';
 
 /** 汇总结果（供 scripts/run-tests.mjs 读取） */
