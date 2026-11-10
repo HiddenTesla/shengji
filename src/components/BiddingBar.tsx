@@ -80,37 +80,47 @@ export default function BiddingBar({
   onBid,
   onPass,
 }: BiddingBarProps) {
-  // 无主（对小王 / 对大王；必须同大小，优先用更强的对大王）
+  // 无主（必须同大小的对王）：对大王 / 对小王 强弱不同，分成两个选项
   const smallJokers = hand.filter(
     c => c.suit === Suit.Joker && c.rank === Rank.SmallJoker,
   );
   const bigJokers = hand.filter(
     c => c.suit === Suit.Joker && c.rank === Rank.BigJoker,
   );
-  const jokerDecl: Declaration | null = bigJokers.length >= 2
-    ? {
-        player,
-        suit: null,
-        strength: BidStrength.BigJokerPair,
-        cardIds: [bigJokers[0].id, bigJokers[1].id],
-      }
-    : smallJokers.length >= 2
-      ? {
-          player,
-          suit: null,
-          strength: BidStrength.SmallJokerPair,
-          cardIds: [smallJokers[0].id, smallJokers[1].id],
-        }
-      : null;
-
-  // 无主（对小王 / 对大王）若是在压自己先前的有主声明，且规则不允许反自己，则禁用
-  const jokerBlocked = jokerDecl !== null && current !== null
-    && isSelfOverride(jokerDecl, current)
-    && !rules.allowSelfOverride;
+  const jokerOptions: {
+    strength: BidStrength;
+    label: string;
+    decl: Declaration | null;
+  }[] = [
+    {
+      strength: BidStrength.BigJokerPair,
+      label: '无主·大王',
+      decl: bigJokers.length >= 2
+        ? {
+            player,
+            suit: null,
+            strength: BidStrength.BigJokerPair,
+            cardIds: [bigJokers[0].id, bigJokers[1].id],
+          }
+        : null,
+    },
+    {
+      strength: BidStrength.SmallJokerPair,
+      label: '无主·小王',
+      decl: smallJokers.length >= 2
+        ? {
+            player,
+            suit: null,
+            strength: BidStrength.SmallJokerPair,
+            cardIds: [smallJokers[0].id, smallJokers[1].id],
+          }
+        : null,
+    },
+  ];
 
   return (
     <div className="bidding-bar">
-      {/* 四色花列 */}
+      {/* 四色花列：当前（暂时）主花色高亮 */}
       {SUIT_LIST.map(suit => (
         <SuitColumn
           key={suit}
@@ -122,21 +132,29 @@ export default function BiddingBar({
           canAct={canAct}
           rules={rules}
           onBid={onBid}
+          isCurrent={current !== null && current.suit === suit}
         />
       ))}
 
-      {/* 右侧：无主 */}
-      <div className="bidding-bar__joker">
-        <BarButton
-          label="🃏无主"
-          color={SUIT_COLORS[Suit.Joker]}
-          enabled={canAct && jokerDecl !== null && canOverride(jokerDecl, current, rules)}
-          onClick={() => jokerDecl && onBid(jokerDecl)}
-          title={jokerBlocked ? '不允许反自己亮的主' : undefined}
+      {/* 无主：与四门花色同一层级，排在花色之后；大王 / 小王 分开显示 */}
+      {jokerOptions.map(option => (
+        <JokerColumn
+          key={option.strength}
+          label={option.label}
+          decl={option.decl}
+          isCurrent={current !== null
+            && current.suit === null
+            && current.strength === option.strength}
+          canAct={canAct}
+          current={current}
+          rules={rules}
+          onBid={onBid}
         />
+      ))}
 
-        {/* 不反主：立即结束等待反主（发牌结束后、已有人报主时才出现） */}
-        {onPass && (
+      {/* 不反主：结束等待的次级操作，与上面的报主选项分开展示 */}
+      {onPass && (
+        <div className="bidding-bar__pass-group">
           <button
             className="bidding-bar__pass"
             onClick={onPass}
@@ -144,8 +162,66 @@ export default function BiddingBar({
           >
             不反主
           </button>
-        )}
-      </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+
+function JokerColumn({
+  label,
+  decl,
+  isCurrent,
+  canAct,
+  current,
+  rules,
+  onBid,
+}: {
+  /** 选项名（无主·大王 / 无主·小王） */
+  label: string;
+  /** 当前手牌能否做这个声明（null = 没有对应的对王） */
+  decl: Declaration | null;
+  isCurrent: boolean;
+  canAct: boolean;
+  current: Declaration | null;
+  rules: RuleOptions;
+  onBid: (d: Declaration) => void;
+}) {
+  const color = SUIT_COLORS[Suit.Joker];
+  // 若是在压自己先前的有主声明，且规则不允许反自己，则禁用
+  const blocked = decl !== null && current !== null
+    && isSelfOverride(decl, current)
+    && !rules.allowSelfOverride;
+  const enabled = decl !== null && canAct && canOverride(decl, current, rules);
+  const pairName = label.slice(-2);
+  const title = blocked
+    ? '不允许反自己亮的主'
+    : decl
+      ? `无主：用一对${pairName}亮`
+      : `需要一对${pairName}`;
+  const className = isCurrent
+    ? 'bidding-bar__suit bidding-bar__suit--joker bidding-bar__suit--current'
+    : 'bidding-bar__suit bidding-bar__suit--joker';
+
+  return (
+    <div className={className}>
+      <button
+        className={enabled
+          ? 'bidding-bar__suit-button bidding-bar__suit-button--joker bidding-bar__suit-button--enabled'
+          : 'bidding-bar__suit-button bidding-bar__suit-button--joker'}
+        onClick={() => decl && onBid(decl)}
+        disabled={!enabled}
+        title={title}
+        style={cssVars({
+          '--suit-color': color,
+          '--suit-tint': `${color}14`,
+        })}
+      >
+        🃏
+      </button>
+      <span className="bidding-bar__joker-label">{label}</span>
     </div>
   );
 }
@@ -161,6 +237,7 @@ function SuitColumn({
   canAct,
   rules,
   onBid,
+  isCurrent,
 }: {
   suit: Suit;
   hand: Card[];
@@ -170,6 +247,8 @@ function SuitColumn({
   canAct: boolean;
   rules: RuleOptions;
   onBid: (d: Declaration) => void;
+  /** 是否是当前（暂时）的主花色 */
+  isCurrent: boolean;
 }) {
   const color = SUIT_COLORS[suit];
   const { levelCount, nonLevelCount, single, pair } =
@@ -194,7 +273,10 @@ function SuitColumn({
   const singleTitle = levelCount >= 1 ? '报主该花色（亮一张）' : '无该花色级牌';
 
   return (
-    <div className="bidding-bar__suit">
+    <div className={isCurrent
+      ? 'bidding-bar__suit bidding-bar__suit--current'
+      : 'bidding-bar__suit'}
+    >
       {/* 花色符号本身即「报主」按钮；不可用时禁用 */}
       <button
         className={singleEnabled

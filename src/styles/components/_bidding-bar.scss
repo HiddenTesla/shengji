@@ -16,22 +16,33 @@
   box-shadow: $light-panel-shadow;
 }
 
-.bidding-bar__joker {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding-left: 10px;
-  border-left: 1px solid rgba(0, 0, 0, 0.12);
-}
-
 .bidding-bar__suit {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
   min-width: 54px;
+  /* 每列都预留高亮空间，切换「当前主花色」时按钮位置不会跳 */
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+
+  /* 当前（暂时）的主花色：金色描边 + 淡金底 */
+  &--current {
+    background: rgba(255, 215, 0, 0.2);
+    border-color: rgba(191, 144, 0, 0.85);
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.45);
+  }
+}
+
+/* 无主列（大王 / 小王）：按钮下方的小标签 */
+.bidding-bar__joker-label {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #5e35b1;
+  white-space: nowrap;
 }
 
 .bidding-bar__suit-button {
@@ -83,6 +94,14 @@
     border-color: var(--action-color);
     cursor: pointer;
   }
+}
+
+.bidding-bar__pass-group {
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  margin-left: 2px;
+  border-left: 1px solid rgba(0, 0, 0, 0.12);
 }
 
 .bidding-bar__pass {
