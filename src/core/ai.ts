@@ -1556,6 +1556,58 @@ function followOptionsFor(
 }
 
 /**
+ * 多张牌一墩的极小化搜索：从 `turn` 开始，每家都用 `followOptionsFor` 的少数典型应对，
+ * 终局用同一套 `utility`（±赢墩价值 + 墩分 + 牌力消耗）评分。
+ */
+function searchMultiTrick(
+  currentHands: Hands,
+  turn: PlayerPosition,
+  plays: PlayState['trick']['plays'],
+  lead: HandShape,
+  rootTeam: ReturnType<typeof teamOf>,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+  alpha: number,
+  beta: number,
+): number {
+  if (plays.length === ALL_POSITIONS.length) {
+    return utility(plays, lead, rootTeam, trumpSuit, levelRank, 0, false, 0);
+  }
+
+  const options = followOptionsFor(currentHands[turn], lead, trumpSuit, levelRank);
+  if (options.length === 0) {
+    return utility(plays, lead, rootTeam, trumpSuit, levelRank, 0, false, 0);
+  }
+
+  const maximizing = teamOf(turn) === rootTeam;
+  let best = maximizing ? -Infinity : Infinity;
+  for (const option of options) {
+    const nextHands: Hands = {
+      ...currentHands,
+      [turn]: currentHands[turn].filter(c => !option.some(x => x.id === c.id)),
+    };
+    const nextPlays = [...plays, {
+      player: turn,
+      cards: option,
+      handType: analyzeShape(option, trumpSuit, levelRank).type,
+    }];
+    const score = searchMultiTrick(
+      nextHands, nextPlayer(turn), nextPlays, lead, rootTeam, trumpSuit, levelRank, alpha, beta,
+    );
+    if (maximizing) {
+      best = Math.max(best, score);
+      alpha = Math.max(alpha, best);
+    }
+    else {
+      best = Math.min(best, score);
+      beta = Math.min(beta, best);
+    }
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+
+/**
  * 多张领出的通用评估（完美信息、一棵很小的极小化搜索）。
  *
  * 之前只有「钓主」和「必胜对子 / AK 甩牌」两种多张领出会被评分，
@@ -1577,50 +1629,90 @@ function scoreMultiLead(
     [player]: hands[player].filter(c => !cards.some(x => x.id === c.id)),
   };
   const firstPlay = { player, cards, handType: lead.type };
+  return searchMultiTrick(
+    startHands, nextPlayer(player), [firstPlay], lead, rootTeam, trumpSuit, levelRank,
+    -Infinity, Infinity,
+  );
+}
 
-  const search = (
-    currentHands: Hands,
-    turn: PlayerPosition,
-    plays: PlayState['trick']['plays'],
-    alpha: number,
-    beta: number,
-  ): number => {
-    if (plays.length === ALL_POSITIONS.length) {
-      return utility(plays, lead, rootTeam, trumpSuit, levelRank, 0, false, 0);
-    }
+/**
+ * 多张跟牌的选择：把几种典型跟法都算一遍再选。
+ *
+ * 之前多张跟牌只走 `chooseFollow` 的「合法最小」策略，会白送分：
+ * 例如南领主牌对 10、东压对 K，北手里有「对小王」和「对 5」——
+ * 按「先送小的」垫了对 5，就把这一墩 50 分整给了对手；这里会选对小王把墩抢下来。
+ * 候选：合法最小 / 最强跟牌（对子、拖拉机、毙牌）/ 垫分（对家基本大出时）。
+ * 另外把「白送门霸」「用大主抢 0 分墩」两种代价补进评分（搜索只看一墩，看不到它们）。
+ */
+function chooseScoredFollow(
+  state: PlayState,
+  hands: Hands,
+  player: PlayerPosition,
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[] {
+  const hand = hands[player];
+  const fallback = chooseFollow(hand, lead, trumpSuit, levelRank);
+  const candidates = followOptionsFor(hand, lead, trumpSuit, levelRank);
+  if (candidates.length === 0) return fallback;
 
-    const options = followOptionsFor(currentHands[turn], lead, trumpSuit, levelRank);
-    if (options.length === 0) {
-      return utility(plays, lead, rootTeam, trumpSuit, levelRank, 0, false, 0);
-    }
+  // 「白送门霸」的改良版：把门霸换成同门的 5（合法性由 validateFollow 保证）
+  candidates.push(keepDoorBossInFollow(
+    fallback, hand, lead, hands, player, trumpSuit, levelRank,
+  ));
 
-    const maximizing = teamOf(turn) === rootTeam;
-    let best = maximizing ? -Infinity : Infinity;
-    for (const option of options) {
-      const nextHands: Hands = {
-        ...currentHands,
-        [turn]: currentHands[turn].filter(c => !option.some(x => x.id === c.id)),
-      };
-      const nextPlays = [...plays, {
-        player: turn,
-        cards: option,
-        handType: analyzeShape(option, trumpSuit, levelRank).type,
-      }];
-      const score = search(nextHands, nextPlayer(turn), nextPlays, alpha, beta);
-      if (maximizing) {
-        best = Math.max(best, score);
-        alpha = Math.max(alpha, best);
+  if (partnerLikelyWins(state, hands, player, lead, trumpSuit, levelRank)) {
+    candidates.push(chooseFollow(
+      hand, lead, trumpSuit, levelRank,
+      makeFeedPointsOrder(hands, player, trumpSuit, levelRank),
+    ));
+  }
+
+  const rootTeam = teamOf(player);
+  const tablePoints = trickPoints(state.trick.plays.flatMap(play => play.cards));
+  const seen = new Set<string>();
+  let best = fallback;
+  let bestScore = -Infinity;
+
+  for (const cards of candidates) {
+    if (cards.length === 0) continue;
+    const key = cards.map(card => card.id).sort().join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const nextHands: Hands = {
+      ...hands,
+      [player]: hand.filter(c => !cards.some(x => x.id === c.id)),
+    };
+    const plays = [...state.trick.plays, {
+      player,
+      cards,
+      handType: analyzeShape(cards, trumpSuit, levelRank).type,
+    }];
+    let score = searchMultiTrick(
+      nextHands, nextPlayer(player), plays, lead, rootTeam, trumpSuit, levelRank,
+      -Infinity, Infinity,
+    );
+
+    // 白送该门的门霸 → 降权（以后还能拿它收分）
+    for (const card of cards) {
+      if (worthKeepingAsBoss(card, hand, hands, player, trumpSuit, levelRank)) {
+        score -= GIVE_AWAY_DOOR_BOSS_PENALTY;
       }
-      else {
-        best = Math.min(best, score);
-        beta = Math.min(beta, best);
-      }
-      if (alpha >= beta) break;
     }
-    return best;
-  };
+    // 用大主去抢一个 0 分的墩 → 降权（与单张跟牌一致）
+    if (tablePoints + trickPoints(cards) === 0) {
+      score -= BIG_TRUMP_EMPTY_TRICK_PENALTY
+        * Math.max(0, ...cards.map(card => bigTrumpWeight(card, trumpSuit, levelRank)));
+    }
 
-  return search(startHands, nextPlayer(player), [firstPlay], -Infinity, Infinity);
+    if (score > bestScore) {
+      bestScore = score;
+      best = cards;
+    }
+  }
+  return best;
 }
 
 /**
@@ -1820,24 +1912,6 @@ export function aiChoosePlay(
     tractor: state.trick.leadTractor,
     maxTractor: state.trick.leadMaxTractor,
   };
-  // 多张跟牌：对家基本大出时把分牌垫给对家；
-  // 否则先按合法最小策略出，再把白送出去的门霸换成同门的 5。
-  if (partnerLikelyWins(state, hands, player, lead, trumpSuit, levelRank)) {
-    return chooseFollow(
-      hand,
-      lead,
-      trumpSuit,
-      levelRank,
-      makeFeedPointsOrder(hands, player, trumpSuit, levelRank),
-    );
-  }
-  return keepDoorBossInFollow(
-    chooseFollow(hand, lead, trumpSuit, levelRank),
-    hand,
-    lead,
-    hands,
-    player,
-    trumpSuit,
-    levelRank,
-  );
+  // 多张跟牌：几种典型跟法都评分后再选（该抢的墩抢下来，该垫的分垫给对家）
+  return chooseScoredFollow(state, hands, player, lead, trumpSuit, levelRank);
 }
