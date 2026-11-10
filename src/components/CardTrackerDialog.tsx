@@ -1,6 +1,6 @@
 // ============================================================
 // 记牌器 —— 查看「已出牌 / 剩余牌」
-// 按「门」分类：主牌门（主花色 + 副级牌 + 大小王）合成一组，
+// 按「门」分类：主牌门（大小王 + 级牌 + 主花色）合成一行，按牌力从大到小排列；
 // 其余三家花色各一组（去掉级牌，因为级牌属于主牌门）。
 // 视角：剩余 = 全副牌 - 已出 - 该家自己的手牌（即自己看不到的牌）。
 // 样式：src/styles/components/_card-tracker-dialog.scss（BEM）
@@ -74,6 +74,14 @@ const SUIT_TEXT_COLOR: Record<Suit, string> = {
   [Suit.Joker]: '#d0a0ff',
 };
 
+/** 一行里的一个格子 */
+interface TrackerCard {
+  suit: Suit;
+  rank: Rank;
+  /** 是否在点数前显示花色（一行里混门时用：级牌 / 王） */
+  showSuit?: boolean;
+}
+
 /** 一行（一个「门」） */
 interface TrackerGroup {
   key: string;
@@ -81,11 +89,9 @@ interface TrackerGroup {
   label: string;
   /** 行首标签颜色 */
   color: string;
-  /** 是否在主花色行显示「主」徽标 */
+  /** 是否显示「主」徽标 */
   badge?: boolean;
-  /** 格子里是否显示花色前缀（副级牌 / 王 行） */
-  showSuit?: boolean;
-  cards: { suit: Suit; rank: Rank }[];
+  cards: TrackerCard[];
 }
 
 function cardKey(suit: Suit, rank: Rank): string {
@@ -126,45 +132,40 @@ export default function CardTrackerDialog({
     return counts;
   }, [hands, seat]);
 
-  // 按「门」分组：主牌门（主花色 + 副级牌 + 王）在前，其余花色在后
+  // 按「门」分组：主牌门（王 + 级牌 + 主花色）在前，其余花色在后
   const groups = useMemo<TrackerGroup[]>(() => {
     const result: TrackerGroup[] = [];
-    const jokers = [
-      { suit: Suit.Joker, rank: Rank.SmallJoker },
+    const jokers: TrackerCard[] = [
       { suit: Suit.Joker, rank: Rank.BigJoker },
+      { suit: Suit.Joker, rank: Rank.SmallJoker },
     ];
     if (trumpSuit !== null) {
-      // 主花色：13 个点数全部在主牌门里
+      // 主牌门：从大到小 = 大王 → 小王 → 主级牌 → 副级牌 → 主花色 A…3
       result.push({
-        key: 'trump-suit',
+        key: 'trump',
         label: SUIT_SYMBOL[trumpSuit],
         color: SUIT_TEXT_COLOR[trumpSuit],
         badge: true,
-        cards: RANK_ORDER.map(rank => ({ suit: trumpSuit, rank })),
-      });
-      // 副级牌（其他三门的级牌）+ 大小王
-      result.push({
-        key: 'trump-level',
-        label: '级王',
-        color: SUIT_TEXT_COLOR[Suit.Joker],
-        showSuit: true,
         cards: [
+          ...jokers,
+          { suit: trumpSuit, rank: levelRank, showSuit: true },
           ...SUIT_ROWS
             .filter(suit => suit !== trumpSuit)
-            .map(suit => ({ suit, rank: levelRank })),
-          ...jokers,
+            .map(suit => ({ suit, rank: levelRank, showSuit: true })),
+          ...RANK_ORDER
+            .filter(rank => rank !== levelRank)
+            .map(rank => ({ suit: trumpSuit, rank })),
         ],
       });
     } else {
-      // 无主：四门级牌 + 大小王 组成主牌门
+      // 无主：大小王 + 四门级牌 组成主牌门
       result.push({
-        key: 'trump-level',
+        key: 'trump',
         label: '主',
         color: SUIT_TEXT_COLOR[Suit.Joker],
-        showSuit: true,
         cards: [
-          ...SUIT_ROWS.map(suit => ({ suit, rank: levelRank })),
           ...jokers,
+          ...SUIT_ROWS.map(suit => ({ suit, rank: levelRank, showSuit: true })),
         ],
       });
     }
@@ -203,7 +204,7 @@ export default function CardTrackerDialog({
       description={`视角：${seatName} · 已出 ${totalPlayed} 张 · 剩余 ${remaining} 张`}
       confirmLabel="关闭"
       hideCancel={true}
-      width={760}
+      width={990}
       onConfirm={onClose}
       onCancel={onClose}
     >
@@ -255,12 +256,12 @@ export default function CardTrackerDialog({
                 <span className="tracker__trump tracker__trump--on">主</span>
               )}
             </div>
-            {group.cards.map(({ suit, rank }) => (
+            {group.cards.map(({ suit, rank, showSuit }) => (
               <TrackerCell
                 key={cardKey(suit, rank)}
                 suit={suit}
                 rank={rank}
-                showSuit={group.showSuit === true}
+                showSuit={showSuit === true}
                 played={playedOf(suit, rank)}
                 unseen={unseenOf(suit, rank)}
                 isLevel={rank === levelRank}

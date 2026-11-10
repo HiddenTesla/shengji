@@ -16,7 +16,8 @@
 
 .dialog {
   width: var(--dialog-width, 360px);
-  max-width: calc(100vw - 40px);
+  /* 在缩放后的 .app 里排版：用设计宽度而不是真实视口宽度，否则矮窗口会把弹窗挤窄 */
+  max-width: calc(var(--app-width, 100vw) - 40px);
   padding: 20px 22px 16px;
   border-radius: 12px;
   background: $panel-bg-dark;
