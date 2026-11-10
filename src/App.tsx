@@ -1292,41 +1292,42 @@ function App() {
 
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
       <div className="level-panel">
-        <div className="level-panel__caption">
-          等级
-        </div>
-        {[Team.NS, Team.EW].map(team => {
-          const isCurrent = banker !== null && teamOf(banker) === team;
-          return (
-            <div
-              key={team}
-              className={isCurrent
-                ? 'level-panel__row level-panel__row--current'
-                : 'level-panel__row'}
-            >
-              <span className="level-panel__team">
-                {TEAM_NAME_ZH[team]}
-              </span>
-              <span className={isCurrent
-                ? 'level-panel__level level-panel__level--current'
-                : 'level-panel__level'}
+        <div className="level-panel__col">
+          <div className="level-panel__caption">
+            等级
+          </div>
+          {[Team.NS, Team.EW].map(team => {
+            const isCurrent = banker !== null && teamOf(banker) === team;
+            return (
+              <div
+                key={team}
+                className={isCurrent
+                  ? 'level-panel__row level-panel__row--current'
+                  : 'level-panel__row'}
               >
-                打 {RANK_NAME[levels[team]]}
-              </span>
-              <span
-                title={`第 ${laps[team]} 周目`}
-                className="level-panel__badge"
-              >
-                {formatLap(laps[team])}周目
-              </span>
-              {isCurrent && (
-                <span className="level-panel__badge level-panel__badge--current">
-                  本局
+                <span className="level-panel__team">
+                  {TEAM_NAME_ZH[team]}
                 </span>
-              )}
-            </div>
-          );
-        })}
+                <span className={isCurrent
+                  ? 'level-panel__level level-panel__level--current'
+                  : 'level-panel__level'}
+                >
+                  打 {RANK_NAME[levels[team]]}
+                </span>
+                <span
+                  title={`第 ${laps[team]} 周目`}
+                  className="level-panel__badge"
+                >
+                  {formatLap(laps[team])}周目
+                </span>
+                {isCurrent && (
+                  <span className="level-panel__badge level-panel__badge--current">
+                    本局
+                  </span>
+                )}
+              </div>
+            );
+          })}
         <div className="level-panel__row level-panel__row--section">
           <span className="level-panel__label">
             亮主
@@ -1338,7 +1339,9 @@ function App() {
                   {POSITION_NAME_ZH[bidState.current.player]}家
                 </b>
                 <b
-                  className="level-panel__trump-suit"
+                  className={bidState.current.suit === null
+                    ? 'level-panel__trump-suit level-panel__trump-suit--text'
+                    : 'level-panel__trump-suit'}
                   style={cssVars({ '--trump-color': trumpTextColor })}
                 >
                   {trumpOfDeclaration(bidState.current)}
@@ -1352,7 +1355,9 @@ function App() {
               ? (
                 <>
                   <b
-                    className="level-panel__trump-suit"
+                    className={trumpSuit === null
+                      ? 'level-panel__trump-suit level-panel__trump-suit--text'
+                      : 'level-panel__trump-suit'}
                     style={cssVars({ '--trump-color': trumpTextColor })}
                   >
                     {trumpOfBottomFlip(trumpSuit, flipTrumpCard)}
@@ -1385,60 +1390,67 @@ function App() {
             {banker ? `${POSITION_NAME_ZH[banker]}家` : '—'}
           </b>
         </div>
+        </div>
 
-        {/* 得分 / 逃分（出牌阶段起显示） */}
-        {playState && (
-          <div className="level-panel__scores">
-            {/* 庄家逃分（次要）/ 闲家得分（重点：字号大、颜色随分值渐变） */}
-            <div className="level-panel__score-line">
-              <span className="level-panel__score-label">庄家逃分</span>
-              <b className="level-panel__score-value">
-                {playState.bankerPoints}
-              </b>
-            </div>
-            <div className="level-panel__score-line">
-              <span className="level-panel__score-label">闲家得分</span>
-              <b
-                className="level-panel__score-value level-panel__score-value--defending"
-                style={cssVars({
-                  '--score-color': defendingScoreColor(playState.defendingPoints),
-                })}
-              >
-                {playState.defendingPoints}
-              </b>
-              <span className="level-panel__score-max">/80</span>
-            </div>
-          </div>
-        )}
-
-        {/* 断门：按出牌推断（算牌），任一家断门即列出 */}
-        {voids && (
-          <div className="level-panel__row level-panel__row--section">
-            <span className="level-panel__label">断门</span>
-            <div className="level-panel__voids">
-              {ALL_POSITIONS.filter(pos => voids[pos].length > 0).map(pos => (
-                <div key={pos} className="level-panel__void-row">
-                  <span className="level-panel__void-seat">
-                    {POSITION_NAME_ZH[pos]}家
-                  </span>
-                  {voids[pos].map(door => (
-                    <span
-                      key={door}
-                      className="level-panel__void-door"
-                      style={cssVars({ '--void-color': VOID_DOOR_COLOR[door] })}
-                    >
-                      {voidDoorLabel(door)}
-                    </span>
-                  ))}
-                </div>
-              ))}
-              {ALL_POSITIONS.every(pos => voids[pos].length === 0) && (
-                <span className="level-panel__void-none">暂无</span>
-              )}
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* ---- 右上角：比分 / 断门（放在北家手牌右侧的空白处，避免压住手牌） ---- */}
+      {playState && (
+        <div className="level-panel level-panel--right">
+          <div className="level-panel__col level-panel__col--stats">
+            {/* 得分 / 逃分（出牌阶段起显示） */}
+            <div className="level-panel__scores">
+              {/* 庄家逃分（次要）/ 闲家得分（重点：字号大、颜色随分值渐变） */}
+              <div className="level-panel__score-line">
+                <span className="level-panel__score-label">庄家逃分</span>
+                <b className="level-panel__score-value">
+                  {playState.bankerPoints}
+                </b>
+              </div>
+              <div className="level-panel__score-line">
+                <span className="level-panel__score-label">闲家得分</span>
+                <b
+                  className="level-panel__score-value level-panel__score-value--defending"
+                  style={cssVars({
+                    '--score-color': defendingScoreColor(playState.defendingPoints),
+                  })}
+                >
+                  {playState.defendingPoints}
+                </b>
+                <span className="level-panel__score-max">/80</span>
+              </div>
+            </div>
+
+            {/* 断门：按出牌推断（算牌），任一家断门即列出 */}
+            {voids && (
+              <div className="level-panel__row level-panel__row--section">
+                <span className="level-panel__label">断门</span>
+                <div className="level-panel__voids">
+                  {ALL_POSITIONS.filter(pos => voids[pos].length > 0).map(pos => (
+                    <div key={pos} className="level-panel__void-row">
+                      <span className="level-panel__void-seat">
+                        {POSITION_NAME_ZH[pos]}家
+                      </span>
+                      {voids[pos].map(door => (
+                        <span
+                          key={door}
+                          className="level-panel__void-door"
+                          style={cssVars({ '--void-color': VOID_DOOR_COLOR[door] })}
+                        >
+                          {voidDoorLabel(door)}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                  {ALL_POSITIONS.every(pos => voids[pos].length === 0) && (
+                    <span className="level-panel__void-none">暂无</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ---- 顶部：北家 ---- */}
       <div className="stage">

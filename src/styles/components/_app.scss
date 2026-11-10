@@ -36,8 +36,12 @@
   left: 12px;
   z-index: 20;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  /* 两列：左侧等级/报主/庄家，右侧得分/断门。单列太高会伸进牌桌、遮住西家手牌 */
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 14px;
+  /* 不越过北家手牌：可用宽度 = 左侧空白带（约 半个界面宽 - 北家手牌一半 - 左间距） */
+  max-width: calc(var(--app-width, 100vw) / 2 - 202px);
   padding: 8px 12px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.32);
@@ -45,6 +49,28 @@
   color: $text-on-dark;
   font-size: 16px;
   pointer-events: none;
+}
+
+.level-panel__col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 右上角：比分 / 断门（独立面板，放在北家手牌右侧的空白处） */
+.level-panel--right {
+  right: 12px;
+  left: auto;
+  flex-direction: column;
+  max-width: calc(var(--app-width, 100vw) / 2 - 202px);
+}
+
+/* 右上角面板的第一块不要顶部段落分隔线 */
+.level-panel__col--stats .level-panel__scores:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .level-panel__caption {
@@ -55,6 +81,7 @@
 
 .level-panel__row {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
   font-weight: 500;
@@ -121,6 +148,11 @@
   font-size: 19px;
   line-height: 1.1;
   color: var(--trump-color, rgba(255, 255, 255, 0.45));
+
+  /* 无主（大王/小王）：文字比花色符号长，字号收一点 */
+  &--text {
+    font-size: 15px;
+  }
 }
 
 .level-panel__trump-count {
