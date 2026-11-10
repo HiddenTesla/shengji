@@ -4,15 +4,26 @@
 
 @use '../tokens' as *;
 
+/* 触发按钮：固定在「撤销」按钮左侧（.action-row 内绝对定位），
+   不可查看时只隐藏、不占位变化，操作行里的按钮不会因此移位。 */
 .bottom-reveal__trigger {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 8px);
   padding: 4px 14px;
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
+  transform: translateY(-50%);
   border: 1px solid rgba(255, 215, 0, 0.55);
   border-radius: 5px;
   background: rgba(255, 215, 0, 0.15);
   color: $color-gold;
+
+  &--hidden {
+    visibility: hidden;
+  }
 }
 
 .bottom-reveal-overlay {

@@ -20,7 +20,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 80px;
+  /* 与有手牌时等高，最后一手牌出完后底部区域高度不变 */
+  min-height: 142px;
   font-size: 16px;
   color: rgba(255, 255, 255, 0.5);
 }

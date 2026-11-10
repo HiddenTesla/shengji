@@ -21,8 +21,17 @@
 }
 
 .opponent-hand__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 与北家翻开区同高（142 + 计数行 + 间距），最后一手牌出完后牌桌高度不变 */
+  height: 167px;
   font-size: 15px;
   color: rgba(255, 255, 255, 0.35);
+
+  &--side {
+    height: auto;
+  }
 }
 
 /* 北家翻开区：固定高度，避免显示/隐藏切换时按钮位置跳动 */

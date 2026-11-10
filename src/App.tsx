@@ -1187,6 +1187,14 @@ function App() {
   const turnIsManual = isPlaying && playingTurn !== null
     && playerModes[playingTurn] === PlayerMode.Manual;
 
+  // ---- 出牌栏占位 ----
+  // 牌桌高度必须恒定：否则「撤销 / 查看底牌 / 显示上轮」会随出牌栏出现或消失上下跳动。
+  // 北家 / 南家的出牌栏都放在底部同一行（同一时刻只有一家轮到），并始终占位；
+  // 西家 / 东家的出牌栏在各自侧栏里，不参与牌桌高度。
+  const reservePlayBarRow = isPlaying;
+  const showBottomPlayBar = turnIsManual
+    && (playingTurn === PlayerPosition.South || playingTurn === PlayerPosition.North);
+
   const handForDisplay = hands.S;
 
   const canSelectHand = (
@@ -1454,11 +1462,6 @@ function App() {
             ? toggleCard
             : undefined}
         />
-        {playingTurn === PlayerPosition.North && (
-          <div className="stage__playbar">
-            {renderPlayBar()}
-          </div>
-        )}
       </div>
 
       {/* ---- 中部：西家 + 牌桌 + 东家 ---- */}
@@ -1535,9 +1538,10 @@ function App() {
             </>
           )}
 
-          {/* 阶段提示：无边框（牌桌上方不再有框框） */}
+          {/* 阶段提示：无边框（牌桌上方不再有框框）
+              出牌阶段的「托管已暂停」用浮层显示：不占布局，避免把下方按钮顶走 */}
           {(isDealing || isBidding || isBurying || autoPaused) && (
-            <div className="phase-hint">
+            <div className={isPlaying ? 'phase-hint phase-hint--floating' : 'phase-hint'}>
               {isDealing && (
                 <div>
                   发牌中… 可抢亮
@@ -1618,12 +1622,6 @@ function App() {
             />
           )}
 
-          {/* 底牌查看（弹窗，仅南家为庄；桌中央留给出牌区） */}
-          <BottomReveal
-            cards={buriedCards}
-            canReveal={banker === PlayerPosition.South}
-          />
-
           {/* 翻底牌逐张展示 */}
           {flipping && (
             <div className="flip-strip">
@@ -1642,8 +1640,12 @@ function App() {
             </div>
           )}
 
-          {/* 撤销 / 继续托管 */}
+          {/* 撤销 / 继续托管 / 查看底牌（查看底牌的按钮固定在这一行） */}
           <div className="action-row">
+            <BottomReveal
+              cards={buriedCards}
+              canReveal={banker === PlayerPosition.South}
+            />
             <button
               className="undo-button"
               onClick={undo}
@@ -1732,10 +1734,10 @@ function App() {
           </div>
         )}
 
-        {/* 出牌控制栏 */}
-        {isPlaying && turnIsManual && playingTurn === PlayerPosition.South && playState && (
-          <div className="center-row center-row--spaced">
-            {renderPlayBar()}
+        {/* 出牌控制栏：北家 / 南家共用这一行，始终占位（牌桌高度不随轮次变化） */}
+        {reservePlayBarRow && playState && (
+          <div className="center-row center-row--spaced center-row--playbar">
+            {showBottomPlayBar && renderPlayBar()}
           </div>
         )}
 

@@ -79,6 +79,15 @@ export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProp
     ? state.tricks[state.tricks.length - 1]
     : null;
   const compare = showLast && lastTrick !== null;
+  // 勾选「显示上轮」时四家统一使用同一个宽度（取需要最宽的那家）：
+  // 否则各槽位按自己张数变宽，左右两列不等宽 → 中间的信息 / 「显示上轮」会左右漂移。
+  const compareWidth = useMemo(() => {
+    if (!compare || !lastTrick) return null;
+    return Math.max(...SLOTS.map(slot => compareSlotWidth(Math.max(
+      trick.plays.find(p => p.player === slot.player)?.cards.length ?? 0,
+      lastTrick.plays.find(p => p.player === slot.player)?.cards.length ?? 0,
+    ))));
+  }, [compare, lastTrick, trick.plays]);
   // 断门推断：只依据已出的牌（撤销后重算，自然回退）
   const voids = useMemo(
     () => inferVoids([...state.tricks, state.trick], trumpSuit, levelRank),
@@ -107,6 +116,7 @@ export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProp
               lastIsLead={compare && lastTrick.leadPlayer === slot.player}
               lastIsWinner={compare && lastTrick.winner === slot.player}
               dimCurrent={compare}
+              compareWidth={compareWidth}
               attempt={isLeadSlot ? trick.throwAttempt : []}
               attemptOpen={openTrick === trickNo}
               onToggleAttempt={() => setOpenTrick(openTrick === trickNo ? null : trickNo)}
@@ -124,21 +134,25 @@ export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProp
         <div className="trick-area__trick-no">
           第 {trickNo} 墩
         </div>
-        {leadLabel && <div>首出 {leadLabel}</div>}
-        {trick.leadCount > 0 && <div>{trick.leadCount} 张</div>}
+        {leadLabel && (
+          <div>
+            首出 {leadLabel} · {trick.leadCount} 张
+          </div>
+        )}
         {curPoints > 0 && (
           <div className="trick-area__points">本墩 {curPoints} 分</div>
         )}
-        {currentLeader && (
-          <div className="trick-area__leader">
-            当前最大：{POSITION_NAME_ZH[currentLeader]}家
-          </div>
-        )}
-        {trick.complete && trick.winner && (
-          <div className="trick-area__winner">
-            {POSITION_NAME_ZH[trick.winner]}家赢
-          </div>
-        )}
+        {trick.complete && trick.winner
+          ? (
+            <div className="trick-area__winner">
+              {POSITION_NAME_ZH[trick.winner]}家赢
+            </div>
+          )
+          : currentLeader && (
+            <div className="trick-area__leader">
+              当前最大：{POSITION_NAME_ZH[currentLeader]}家
+            </div>
+          )}
         {lastTrick && (
           <label
             className="trick-area__last-check"
@@ -213,6 +227,7 @@ function PlaySlot({
   lastIsLead,
   lastIsWinner,
   dimCurrent,
+  compareWidth,
   attempt,
   attemptOpen,
   onToggleAttempt,
@@ -233,6 +248,8 @@ function PlaySlot({
   lastIsWinner: boolean;
   /** 本墩的牌是否虚化（勾选「显示上轮」时） */
   dimCurrent: boolean;
+  /** 四家统一的区域宽度（勾选「显示上轮」时；null = 未勾选） */
+  compareWidth: number | null;
   /** 甩牌失败时「原本想甩的牌」（本墩内展示在实际出牌旁） */
   attempt: Card[];
   /** 「欲甩的牌」折叠框是否展开 */
@@ -246,9 +263,9 @@ function PlaySlot({
 }) {
   const n = cards.length;
   const compare = lastCards.length > 0;
-  // 两组并排时各占一半宽度：按张数适当加宽，避免额外的高度
-  const outerW = compare ? compareSlotWidth(Math.max(n, lastCards.length)) : SLOT_W;
-  const groupW = compare ? (outerW - COMPARE_GAP) / 2 : SLOT_W;
+  // 两组并排时各占一半宽度；宽度由 TrickArea 统一给出，保证四家一致
+  const outerW = compareWidth ?? SLOT_W;
+  const groupW = compare ? (outerW - COMPARE_GAP) / 2 : outerW;
   const current = compare ? layoutCompare(cards, groupW) : layoutCards(cards, groupW);
   const previous = layoutCompare(lastCards, groupW);
 

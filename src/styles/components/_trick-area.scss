@@ -31,10 +31,13 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  min-width: 82px;
+  /* 固定尺寸：信息行随出牌增减时，牌桌尺寸与下方按钮位置不跳动 */
+  width: 96px;
+  height: 105px;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
   text-align: center;
+  white-space: nowrap;
 }
 
 .trick-area__trick-no {
@@ -61,7 +64,8 @@
   display: flex;
   gap: 5px;
   align-items: center;
-  margin-top: 4px;
+  /* 固定在中央信息格的最下面（信息行多少都不影响它的位置） */
+  margin-top: auto;
   font-size: 14px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.78);

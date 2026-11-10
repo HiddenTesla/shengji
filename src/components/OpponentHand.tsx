@@ -102,7 +102,10 @@ export default function OpponentHand({
           playerMode={playerMode}
           onToggleMode={onToggleMode}
         />
-        <div className="opponent-hand__empty">
+        <div className={isSide
+          ? 'opponent-hand__empty opponent-hand__empty--side'
+          : 'opponent-hand__empty'}
+        >
           无手牌
         </div>
       </div>

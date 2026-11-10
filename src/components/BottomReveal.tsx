@@ -20,6 +20,7 @@ interface BottomRevealProps {
 
 export default function BottomReveal({ cards, canReveal }: BottomRevealProps) {
   const [open, setOpen] = useState(false);
+  const canShow = canReveal && cards.length > 0;
 
   // Esc 关闭弹窗
   useEffect(() => {
@@ -31,23 +32,31 @@ export default function BottomReveal({ cards, canReveal }: BottomRevealProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
-  if (!canReveal || cards.length === 0) return null;
+  // 变得不可查看时（换局 / 庄家不是南家）自动关掉弹窗
+  useEffect(() => {
+    if (!canShow) setOpen(false);
+  }, [canShow]);
 
   const points = cards.reduce((sum, c) => sum + pointValue(c.rank), 0);
 
   return (
     <>
-      {/* 触发按钮（仅占一个小按钮，不占用出牌区） */}
+      {/* 触发按钮：不可查看时也保留位置（隐藏），避免操作行里的其它按钮跟着移动 */}
       <button
-        className="bottom-reveal__trigger"
+        className={canShow
+          ? 'bottom-reveal__trigger'
+          : 'bottom-reveal__trigger bottom-reveal__trigger--hidden'}
         onClick={() => setOpen(true)}
         title="查看埋入的底牌"
+        disabled={!canShow}
+        aria-hidden={!canShow}
+        tabIndex={canShow ? 0 : -1}
       >
         🂠 查看底牌
       </button>
 
       {/* 弹窗 */}
-      {open && (
+      {canShow && open && (
         <div
           className="bottom-reveal-overlay"
           onClick={() => setOpen(false)}
