@@ -130,6 +130,7 @@ function GroupSection({
             <div
               key={card.id}
               className="player-hand__card"
+              data-hand-card-id={card.id}
               style={cssVars({ '--card-index': idx })}
             >
               <CardComponent

@@ -31,6 +31,7 @@ interface TrickAreaProps {
   state: PlayState;
   trumpSuit: Suit | null;
   levelRank: Rank;
+  animatingCardIds: Set<string>;
 }
 
 /** 出牌区用的牌缩放（比手牌更小） */
@@ -65,7 +66,12 @@ const TURN_ARROW: Record<PlayerPosition, string> = {
   [PlayerPosition.East]: '▶',
 };
 
-export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProps) {
+export default function TrickArea({
+  state,
+  trumpSuit,
+  levelRank,
+  animatingCardIds,
+}: TrickAreaProps) {
   const { trick } = state;
   const trickNo = state.tricks.length + 1;
   const leadLabel = trick.leadDoor ? doorLabel(trick.leadDoor) : null;
@@ -111,6 +117,7 @@ export default function TrickArea({ state, trumpSuit, levelRank }: TrickAreaProp
             <PlaySlot
               player={slot.player}
               cards={play?.cards ?? []}
+              animatingCardIds={animatingCardIds}
               voids={voids[slot.player]}
               lastCards={lastPlay?.cards ?? []}
               lastIsLead={compare && lastTrick.leadPlayer === slot.player}
@@ -222,6 +229,7 @@ function compareSlotWidth(n: number): number {
 function PlaySlot({
   player,
   cards,
+  animatingCardIds,
   voids,
   lastCards,
   lastIsLead,
@@ -238,6 +246,7 @@ function PlaySlot({
 }: {
   player: PlayerPosition;
   cards: Card[];
+  animatingCardIds: Set<string>;
   /** 该家已断的门（根据出牌推断；空数组 = 未断） */
   voids: Door[];
   /** 上一墩该家出的牌（勾选「显示上轮」时传入；空数组 = 不显示） */
@@ -369,7 +378,10 @@ function PlaySlot({
           {cards.map((c, i) => (
             <div
               key={c.id}
-              className="play-slot__card"
+              className={animatingCardIds.has(c.id)
+                ? 'play-slot__card play-slot__card--animating'
+                : 'play-slot__card'}
+              data-play-card-id={c.id}
               style={cssVars({
                 '--card-index': i,
                 '--card-step': `${current.step}px`,

@@ -93,7 +93,7 @@ export default function OpponentHand({
 
   if (cardCount === 0) {
     return (
-      <div className="opponent-hand">
+      <div className="opponent-hand" data-player-hand={position}>
         <LabelRow
           position={position}
           faceUp={faceUp}
@@ -116,7 +116,7 @@ export default function OpponentHand({
   if (!isSide) {
     const width = maxShow * OVERLAP_H + CARD_W;
     return (
-      <div className="opponent-hand">
+      <div className="opponent-hand" data-player-hand={position}>
         <LabelRow
           position={position}
           faceUp={showCardsFaceUp}
@@ -176,6 +176,7 @@ export default function OpponentHand({
     <div className={position === 'W'
       ? 'opponent-hand opponent-hand--start'
       : 'opponent-hand opponent-hand--end'}
+      data-player-hand={position}
     >
       <LabelRow
         position={position}
@@ -277,6 +278,7 @@ function SideGroupColumns({
                         <div
                           key={card.id}
                           className="side-columns__card"
+                          data-hand-card-id={card.id}
                           style={cssVars({ '--card-index': i })}
                         >
                           <CardComponent

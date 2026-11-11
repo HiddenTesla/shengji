@@ -99,6 +99,10 @@ type Hands = Record<PlayerPosition, Card[]>
 
 /** 发牌前的空手牌（记牌器用） */
 const EMPTY_HANDS: Hands = { E: [], S: [], W: [], N: [] };
+const CARD_ANIMATION_SPEED = 3;
+const CARD_ANIMATION_DURATION = Math.round(
+  700 * SPEED_MULTIPLIERS[CARD_ANIMATION_SPEED - 1],
+);
 
 /** 记牌器：本局已经出的每一手牌（已收的墩 + 当前墩已出的牌） */
 function playedPlaysOf(state: PlayState | null): PlayedCards[] {
@@ -250,6 +254,7 @@ function App() {
   // ---- 游戏状态 ----
   const [hands, setHands] = useState<Hands | null>(null);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  const [animatingCardIds, setAnimatingCardIds] = useState<Set<string>>(new Set());
   const [gameSpeed, setGameSpeed] = useState(3);
   const [playerModes, setPlayerModes] = useState<Record<PlayerPosition, PlayerMode>>({
     E: PlayerMode.Auto,
@@ -335,6 +340,166 @@ function App() {
   );
   const gameDelay = (baseMs: number) =>
     Math.round(baseMs * SPEED_MULTIPLIERS[gameSpeed - 1]);
+
+  function releaseAnimatingCards(cardIds: string[]) {
+    setAnimatingCardIds(prev => {
+      const next = new Set(prev);
+      cardIds.forEach(id => next.delete(id));
+      return next;
+    });
+  }
+
+  function runCardFlight(
+    cardSvg: SVGElement,
+    start: { left: number; top: number; width: number; height: number },
+    end: { left: number; top: number; width: number; height: number },
+    collect: boolean,
+  ): Promise<void> {
+    const clone = cardSvg.cloneNode(true) as SVGElement;
+    Object.assign(clone.style, {
+      position: 'fixed',
+      left: `${start.left}px`,
+      top: `${start.top}px`,
+      width: `${start.width}px`,
+      height: `${start.height}px`,
+      margin: '0',
+      zIndex: '10000',
+      pointerEvents: 'none',
+      transformOrigin: 'top left',
+    });
+    document.body.appendChild(clone);
+    const dx = end.left - start.left;
+    const dy = end.top - start.top;
+    const scaleX = end.width / start.width;
+    const scaleY = end.height / start.height;
+    const animation = clone.animate([
+      { transform: 'translate(0, 0) scale(1, 1)', opacity: 1 },
+      {
+        transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`,
+        opacity: collect ? 0.25 : 1,
+      },
+    ], {
+      duration: CARD_ANIMATION_DURATION,
+      easing: 'cubic-bezier(0.2, 0.75, 0.25, 1)',
+      fill: 'forwards',
+    });
+
+    return new Promise(resolve => {
+      const cleanup = () => {
+        clone.remove();
+        resolve();
+      };
+      animation.addEventListener('finish', cleanup, { once: true });
+      animation.addEventListener('cancel', cleanup, { once: true });
+    });
+  }
+
+  function animatePlayedCards(player: PlayerPosition, cards: Card[]) {
+    const cardIds = cards.map(card => card.id);
+    const handRoot = document.querySelector<HTMLElement>(
+      `[data-player-hand="${player}"]`,
+    );
+    const sources = cards.map(card => {
+      const source = handRoot
+        ? Array.from(handRoot.querySelectorAll<SVGElement>('[data-card-id]'))
+          .find(element => element.dataset.cardId === card.id) ?? null
+        : null;
+      const sourceRect = source?.getBoundingClientRect();
+      const handRect = handRoot?.getBoundingClientRect();
+      const width = sourceRect?.width ?? 71;
+      const height = sourceRect?.height ?? 96;
+      return {
+        id: card.id,
+        source: source?.cloneNode(true) as SVGElement | null,
+        start: sourceRect
+          ? {
+              left: sourceRect.left,
+              top: sourceRect.top,
+              width: sourceRect.width,
+              height: sourceRect.height,
+            }
+          : {
+              left: (handRect?.left ?? 0) + ((handRect?.width ?? width) - width) / 2,
+              top: (handRect?.top ?? 0) + ((handRect?.height ?? height) - height) / 2,
+              width,
+              height,
+            },
+      };
+    });
+    setAnimatingCardIds(prev => new Set([...prev, ...cardIds]));
+
+    requestAnimationFrame(() => {
+      const flights = sources.flatMap(source => {
+        const target = Array.from(
+          document.querySelectorAll<HTMLElement>('.trick-area [data-play-card-id]'),
+        ).find(element => element.dataset.playCardId === source.id);
+        const targetSvg = target?.querySelector<SVGElement>('[data-card-id]');
+        if (!targetSvg) return [];
+        const targetRect = targetSvg.getBoundingClientRect();
+        const svg = source.source ?? targetSvg;
+        return [runCardFlight(
+          svg,
+          source.start,
+          {
+            left: targetRect.left,
+            top: targetRect.top,
+            width: targetRect.width,
+            height: targetRect.height,
+          },
+          false,
+        )];
+      });
+      void Promise.all(flights).then(() => releaseAnimatingCards(cardIds));
+    });
+  }
+
+  function animateTrickToWinner(cards: Card[], winner: PlayerPosition): Promise<void> {
+    const cardIds = cards.map(card => card.id);
+    const trickArea = document.querySelector<HTMLElement>('.trick-area');
+    const handRoot = document.querySelector<HTMLElement>(
+      `[data-player-hand="${winner}"]`,
+    );
+    const destination = handRoot?.getBoundingClientRect()
+      ?? trickArea?.getBoundingClientRect();
+    if (!destination) return Promise.resolve();
+
+    const sources = cards.flatMap(card => {
+      const element = Array.from(
+        document.querySelectorAll<HTMLElement>('.trick-area [data-play-card-id]'),
+      ).find(candidate => candidate.dataset.playCardId === card.id);
+      const svg = element?.querySelector<SVGElement>('[data-card-id]');
+      if (!svg) return [];
+      const rect = svg.getBoundingClientRect();
+      return [{
+        svg: svg.cloneNode(true) as SVGElement,
+        rect: {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+        },
+      }];
+    });
+    if (sources.length === 0) return Promise.resolve();
+    setAnimatingCardIds(prev => new Set([...prev, ...cardIds]));
+    const flights = sources.map(({ svg, rect }, index) => {
+      const width = Math.max(8, rect.width * 0.18);
+      const height = Math.max(11, rect.height * 0.18);
+      const spread = (index - (sources.length - 1) / 2) * 2;
+      return runCardFlight(
+        svg,
+        rect,
+        {
+          left: destination.left + destination.width / 2 - width / 2 + spread,
+          top: destination.top + destination.height / 2 - height / 2 + spread,
+          width,
+          height,
+        },
+        true,
+      );
+    });
+    return Promise.all(flights).then(() => releaseAnimatingCards(cardIds));
+  }
   // 用 ref 持有最新 bidState，避免闭包陷阱
   const bidStateRef = useRef(bidState);
   bidStateRef.current = bidState;
@@ -930,6 +1095,8 @@ function App() {
       pushSnapshot('play', false, hs, cur, GamePhase.Playing);
       const res = applyPlay(hs, cur, cur.turn, cards, trumpSuitRef.current, levelRank);
       recordAppliedPlay(cur, res.state);
+      const appliedPlay = res.state.trick.plays[res.state.trick.plays.length - 1];
+      if (appliedPlay) animatePlayedCards(cur.turn, appliedPlay.cards);
       setHands(res.hands);
       setPlayState(res.state);
     }, gameDelay(800));
@@ -942,7 +1109,9 @@ function App() {
     if (phase !== GamePhase.Playing) return;
     if (!playState?.trick.complete) return;
 
-    const t = setTimeout(() => {
+    let cancelled = false;
+    const collectCurrentTrick = () => {
+      if (cancelled) return;
       const cur = playStateRef.current;
       const hs = handsRef.current;
       if (!cur || !hs || !cur.trick.complete) return;
@@ -963,8 +1132,24 @@ function App() {
       setHands(res.hands);
       setPlayState(res.state);
       if (res.roundOver) setPhase(GamePhase.RoundEnd);
+    };
+
+    const t = setTimeout(() => {
+      const cur = playStateRef.current;
+      if (!cur || !cur.trick.complete) return;
+      const winner = cur.trick.winner;
+      if (winner) {
+        const cards = cur.trick.plays.flatMap(play => play.cards);
+        void animateTrickToWinner(cards, winner).then(collectCurrentTrick);
+      }
+      else {
+        collectCurrentTrick();
+      }
     }, gameDelay(1100));
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, playState]);
 
@@ -990,6 +1175,8 @@ function App() {
     pushSnapshot('play', true, hands, playState, phase);
     const res = applyPlay(hands, playState, playState.turn, cards, trumpSuit, levelRank);
     recordAppliedPlay(playState, res.state);
+    const appliedPlay = res.state.trick.plays[res.state.trick.plays.length - 1];
+    if (appliedPlay) animatePlayedCards(playState.turn, appliedPlay.cards);
     if (playerModes[playState.turn] === PlayerMode.Manual) {
       setVisibility(prev => prev[playState.turn]
         ? prev
@@ -1776,6 +1963,7 @@ function App() {
               state={playState}
               trumpSuit={trumpSuit}
               levelRank={levelRank}
+              animatingCardIds={animatingCardIds}
             />
           )}
 
@@ -1939,7 +2127,7 @@ function App() {
           )}
         </div>
 
-        <div className="hand-row">
+        <div className="hand-row" data-player-hand={PlayerPosition.South}>
           {isBurying && bankerIsAuto ? (
             <div className="auto-bury">
               {autoPaused

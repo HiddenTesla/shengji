@@ -369,6 +369,7 @@ export default function CardComponent({
       height={h}
       viewBox={`0 0 ${CARD_WIDTH} ${CARD_HEIGHT}`}
       className={className}
+      data-card-id={card.id}
       style={style}
       onClick={onClick}
     >

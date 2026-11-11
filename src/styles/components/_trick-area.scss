@@ -221,6 +221,10 @@
   top: 0;
   left: calc(var(--card-index, 0) * var(--card-step, 0px));
   z-index: var(--card-index, 0);
+
+  &--animating {
+    opacity: 0;
+  }
 }
 
 /* 甩牌失败：折叠框浮层（往牌桌外侧展开，不影响布局） */
