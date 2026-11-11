@@ -13,6 +13,7 @@ import {
   type RoundRecord,
   decodeCardId,
 } from '../core/playlog.ts';
+import { type Door, doorLabel, doorOf } from '../core/hand.ts';
 import {
   HandType,
   isPointCard,
@@ -21,8 +22,6 @@ import {
   Rank,
   RANK_NAME,
   Suit,
-  SUIT_NAME_ZH,
-  SUIT_SYMBOL,
 } from '../core/types.ts';
 import CardComponent from './CardComponent.tsx';
 
@@ -101,7 +100,7 @@ export default function PlayLogDialog({
   /** 复制成功提示（短暂显示「已复制」） */
   const [copied, setCopied] = useState(false);
   const [playerFilter, setPlayerFilter] = useState<PlayerRecordFilter>('all');
-  const [suitFilter, setSuitFilter] = useState<Suit | 'all'>('all');
+  const [doorFilter, setDoorFilter] = useState<Door | 'all'>('all');
   const [scoreFilter, setScoreFilter] = useState<ScoreFilter>('any');
   const [rankFilter, setRankFilter] = useState<Rank | ''>('');
   const [rankComparison, setRankComparison] = useState<RankComparison | ''>('');
@@ -122,7 +121,7 @@ export default function PlayLogDialog({
     setShowJson(mode === 'full');
     setCopied(false);
     setPlayerFilter('all');
-    setSuitFilter('all');
+    setDoorFilter('all');
     setScoreFilter('any');
     setRankFilter('');
     setRankComparison('');
@@ -189,7 +188,11 @@ export default function PlayLogDialog({
           if (scoreFilter === 'without' && hasScore) return new Set<string>();
           return new Set(cards
             .filter(card => (
-              (suitFilter === 'all' || card.suit === suitFilter)
+              (
+                doorFilter === 'all'
+                || doorOf(card, record?.trump?.suit ?? null, record?.level ?? Rank.Two)
+                  === doorFilter
+              )
               && (
                 scoreFilter !== 'with'
                 || isPointCard(card.rank)
@@ -222,7 +225,7 @@ export default function PlayLogDialog({
     0,
   );
   const hasFilters = playerFilter !== 'all'
-    || suitFilter !== 'all'
+    || doorFilter !== 'all'
     || scoreFilter !== 'any'
     || rankFilter !== ''
     || rankComparison !== '';
@@ -272,17 +275,20 @@ export default function PlayLogDialog({
                 </select>
               </label>
               <label className="log-filters__control">
-                <span>花色</span>
+                <span>门</span>
                 <select
-                  value={suitFilter}
-                  onChange={event => setSuitFilter(event.target.value as Suit | 'all')}
+                  value={doorFilter}
+                  onChange={event => setDoorFilter(event.target.value as Door | 'all')}
                 >
                   <option value="all">全部</option>
-                  {Object.values(Suit).map(suit => (
-                    <option key={suit} value={suit}>
-                      {SUIT_SYMBOL[suit]} {SUIT_NAME_ZH[suit]}
-                    </option>
-                  ))}
+                  {[Suit.Spade, Suit.Heart, Suit.Club, Suit.Diamond]
+                    .filter(suit => record?.trump?.suit !== suit)
+                    .map(suit => (
+                      <option key={suit} value={suit}>
+                        {doorLabel(suit)}
+                      </option>
+                    ))}
+                  <option value="trump">主牌</option>
                 </select>
               </label>
               <label className="log-filters__control">
@@ -331,7 +337,7 @@ export default function PlayLogDialog({
                   className="log-panel__chip"
                   onClick={() => {
                     setPlayerFilter('all');
-                    setSuitFilter('all');
+                    setDoorFilter('all');
                     setScoreFilter('any');
                     setRankFilter('');
                     setRankComparison('');
