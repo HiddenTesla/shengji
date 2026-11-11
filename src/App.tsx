@@ -356,6 +356,7 @@ function App() {
     collect: boolean,
   ): Promise<void> {
     const clone = cardSvg.cloneNode(true) as SVGElement;
+    clone.classList.remove('card--selected');
     Object.assign(clone.style, {
       position: 'fixed',
       left: `${start.left}px`,
@@ -366,6 +367,9 @@ function App() {
       zIndex: '10000',
       pointerEvents: 'none',
       transformOrigin: 'top left',
+      filter: 'none',
+      transition: 'none',
+      willChange: 'transform, opacity',
     });
     document.body.appendChild(clone);
     const dx = end.left - start.left;
@@ -376,7 +380,7 @@ function App() {
       { transform: 'translate(0, 0) scale(1, 1)', opacity: 1 },
       {
         transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`,
-        opacity: collect ? 0.25 : 1,
+        opacity: collect ? 0 : 1,
       },
     ], {
       duration: CARD_ANIMATION_DURATION,
