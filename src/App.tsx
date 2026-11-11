@@ -848,7 +848,7 @@ function App() {
     }, gameDelay(900));
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, banker, autoPaused]);
+  }, [phase, banker, autoPaused, playerModes]);
 
   // ---- 出牌阶段：进入后由庄家领出 ----
   useEffect(() => {
