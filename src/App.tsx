@@ -573,6 +573,9 @@ function App() {
   // ---- 切换玩家模式 ----
   function toggleMode(pos: PlayerPosition) {
     setAutoPaused(false);
+    if (playerModes[pos] === PlayerMode.Auto) {
+      setVisibility(prev => prev[pos] ? prev : { ...prev, [pos]: true });
+    }
     setPlayerModes(prev => ({
       ...prev,
       [pos]: prev[pos] === PlayerMode.Manual ? PlayerMode.Auto : PlayerMode.Manual,
@@ -987,6 +990,11 @@ function App() {
     pushSnapshot('play', true, hands, playState, phase);
     const res = applyPlay(hands, playState, playState.turn, cards, trumpSuit, levelRank);
     recordAppliedPlay(playState, res.state);
+    if (playerModes[playState.turn] === PlayerMode.Manual) {
+      setVisibility(prev => prev[playState.turn]
+        ? prev
+        : { ...prev, [playState.turn]: true });
+    }
     setHands(res.hands);
     setPlayState(res.state);
     setSelectedIndices(new Set());
