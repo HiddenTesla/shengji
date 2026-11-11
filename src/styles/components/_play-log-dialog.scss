@@ -104,6 +104,13 @@
   }
 }
 
+.log-filters__mode {
+  align-items: center;
+  margin-left: auto;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
 .log-list__empty {
   padding: 28px 0;
   font-size: 14px;
@@ -161,6 +168,25 @@
 .log-play__cards {
   display: flex;
   gap: 3px;
+}
+
+.log-play__card {
+  display: inline-flex;
+  border-radius: 5px;
+  transition: filter 120ms ease, opacity 120ms ease, transform 120ms ease;
+
+  &--highlight {
+    position: relative;
+    z-index: 1;
+    outline: 2px solid #ffd54f;
+    outline-offset: 1px;
+    box-shadow: 0 0 8px 2px rgba(255, 193, 7, 0.55);
+  }
+
+  &--dimmed {
+    filter: grayscale(0.35) brightness(0.82);
+    opacity: 0.86;
+  }
 }
 
 .log-play__shape {
