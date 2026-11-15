@@ -194,13 +194,16 @@ export default function RoundSettlement({
         </>
       )}
 
-      {/* 操作按钮 */}
+      {/* 下一局信息（单独一行，避免把按钮挤成两行文字） */}
       <div className="settlement__footer">
         <span className="settlement__footer-text">
           下一局打「{nextTeamName}队」的级牌（{nextLevelName}）
           ｜周目 南北 {formatLap(nextLaps[Team.NS])} · 东西 {formatLap(nextLaps[Team.EW])}
         </span>
-        <span className="settlement__spacer" />
+      </div>
+
+      {/* 操作按钮（同一行，每个按钮文字不换行） */}
+      <div className="settlement__actions">
         {onViewInitialHands && (
           <button
             className="settlement__button settlement__button--ghost"

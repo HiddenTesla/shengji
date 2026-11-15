@@ -168,15 +168,26 @@
   gap: 10px;
 }
 
+/* 操作按钮行：「初始手牌 / 完整日志 / 下一局」同排，文字不换行 */
+.settlement__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
 .settlement__footer-text {
   font-size: 12px;
   color: $text-on-dark-dim;
 }
 
 .settlement__button {
-  padding: 7px 20px;
+  padding: 7px 16px;
   font-size: 14px;
   font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   border: 1px solid rgba(255, 215, 0, 0.6);
   border-radius: 7px;
