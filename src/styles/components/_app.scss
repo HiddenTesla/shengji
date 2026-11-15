@@ -603,6 +603,10 @@
   font-size: 12px;
   letter-spacing: 1px;
   color: $text-on-dark-dim;
+
+  &--spaced {
+    margin-top: 16px;
+  }
 }
 
 .rules-dialog__list {
@@ -685,8 +689,8 @@
   }
 }
 
-/* ---- 重新发牌弹窗：种子单选 + 输入 ---- */
-.redeal-option {
+/* ---- 选项弹窗：单选行 / 种子输入（新的一局、重新发牌共用） ---- */
+.option-radio {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -700,7 +704,7 @@
   }
 }
 
-.redeal-option__radio {
+.option-radio__control {
   width: 15px;
   height: 15px;
   cursor: inherit;
@@ -711,7 +715,7 @@
   }
 }
 
-.redeal-option__text {
+.option-radio__text {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -719,7 +723,7 @@
   min-width: 0;
 }
 
-.redeal-option__seed {
+.option-radio__value {
   font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
   font-size: 12px;
   font-weight: 700;
@@ -727,7 +731,7 @@
   word-break: break-all;
 }
 
-.redeal-option__input {
+.option-input {
   width: calc(100% - 23px);
   margin-left: 23px;
   padding: 5px 8px;
@@ -751,18 +755,7 @@
   }
 }
 
-.redeal-option__hint {
-  margin-left: 23px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.5);
-
-  &--bad {
-    color: #ff8a80;
-  }
-}
-
-.redeal-option__format {
+.option-format {
   margin-left: 23px;
   font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
   font-size: 12px;
@@ -779,6 +772,10 @@
   font-size: 14px;
   color: $text-on-dark;
   cursor: pointer;
+
+  &--indent {
+    margin-left: 23px;
+  }
 }
 
 .option-select {
@@ -803,6 +800,15 @@
 .option-hint {
   font-size: 12px;
   color: $text-on-dark-dim;
+
+  &--indent {
+    margin-left: 23px;
+    line-height: 1.5;
+  }
+
+  &--bad {
+    color: #ff8a80;
+  }
 }
 
 .option-checkbox {

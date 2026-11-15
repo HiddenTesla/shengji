@@ -338,6 +338,12 @@ function App() {
   const [startLevel, setStartLevel] = useState<Rank>(Rank.Two);
   /** 「新的一局」对话框中待确认的起始级牌 */
   const [draftStartLevel, setDraftStartLevel] = useState<Rank>(Rank.Two);
+  /** 「新的一局」对话框中待确认的洗牌种子来源 */
+  const [draftSeedMode, setDraftSeedMode] = useState<'random' | 'current' | 'custom'>('random');
+  /** 「新的一局」对话框中「指定种子」的输入 */
+  const [draftSeedInput, setDraftSeedInput] = useState('');
+  /** 「新的一局」的庄家：'bid' = 抢庄（由亮主者决定），否则为指定庄家 */
+  const [draftBankerMode, setDraftBankerMode] = useState<'bid' | PlayerPosition>('bid');
 
   /** 两队各自的级牌（标准双升：本局打庄家队的级牌） */
   const [levels, setLevels] = useState<LevelBoard>(() => initialLevelBoard());
@@ -594,11 +600,13 @@ function App() {
   // keepDeal = true 时**不洗牌**，沿用上一次发好的手牌与底部（「重新发牌 · 使用当前种子」）。
   // initialBanker：发牌开始时已有的庄家（「重新发牌」沿用原庄家），默认等于 presetBanker。
   // fixedSeed：指定了就用这个种子洗牌（「重新发牌 · 指定种子」），否则随机生成。
+  // levelOverride：只影响日志里的本局级牌（「新的一局」刚改过 levels，state 还是旧值）。
   function dealRound(
     presetBanker: PlayerPosition | null,
     keepDeal = false,
     initialBanker: PlayerPosition | null = presetBanker,
     fixedSeed?: Seed,
+    levelOverride?: Rank,
   ) {
     importedStateRef.current = null;
     presetBankerRef.current = presetBanker;
@@ -637,7 +645,7 @@ function App() {
     cardIdMapRef.current = buildCardIdMap(nextHands, nextBottom);
     gameIdRef.current = `G-${Math.random().toString(36).slice(2, 10)}`;
     logRef.current = createRoundRecord({
-      level: levels[teamOf(initialBanker ?? PlayerPosition.South)],
+      level: levelOverride ?? levels[teamOf(initialBanker ?? PlayerPosition.South)],
       playerModes: { ...playerModes },
       deal: {
         mode: keepDeal ? 'sameDeal' : 'shuffle',
@@ -673,11 +681,17 @@ function App() {
     setPhase(GamePhase.Dealing);
   }
 
-  // ---- 新游戏：等级回到起始级牌（默认 2），周目重新从 1 开始，庄家由叫主决定 ----
-  function startNewGame(level: Rank = startLevel) {
+  // ---- 新游戏：等级回到起始级牌（默认 2），周目重新从 1 开始 ----
+  // options.banker 省略 / null → 抢庄（庄家由亮主者决定）；指定则固定庄家（叫主只定主花色）。
+  // options.seed 省略 → 随机种子。
+  function startNewGame(
+    level: Rank = startLevel,
+    options?: { seed?: Seed; banker?: PlayerPosition | null },
+  ) {
+    const bankerOption = options?.banker ?? null;
     setLevels(initialLevelBoard(level));
     setLaps(initialLapBoard());
-    dealRound(null);
+    dealRound(bankerOption, false, bankerOption, options?.seed, level);
   }
 
   // ---- 重新发牌：清除报主记录，按种子重新发牌 ----
@@ -701,6 +715,10 @@ function App() {
   const redealCustomSeed = parseSeed(redealSeedInput);
   const redealSeedValid = redealCustomSeed !== null;
 
+  /** 「新的一局 · 指定种子」的解析结果（其他模式不需要校验） */
+  const draftNewGameSeed = parseSeed(draftSeedInput);
+  const draftNewGameSeedValid = draftSeedMode !== 'custom' || draftNewGameSeed !== null;
+
   /** 打开「重新发牌」：默认「使用当前种子」（导入局面没有种子时改为「指定种子」） */
   function openRedealDialog() {
     setRedealMode(dealSeed === null ? 'custom' : 'current');
@@ -712,6 +730,22 @@ function App() {
     const useCurrent = redealMode === 'current' && seedRef.current !== null;
     setConfirmRedeal(false);
     redealRound(useCurrent ? null : redealCustomSeed);
+  }
+
+  /** 「新的一局」确认：按草稿的等级 / 规则 / 种子 / 庄家开新局 */
+  function startNewGameFromDialog() {
+    setConfirmNewGame(false);
+    setRules(draftRules);
+    setStartLevel(draftStartLevel);
+    const seed = draftSeedMode === 'custom'
+      ? draftNewGameSeed ?? undefined
+      : draftSeedMode === 'current'
+        ? seedRef.current ?? undefined
+        : undefined;
+    startNewGame(draftStartLevel, {
+      seed,
+      banker: draftBankerMode === 'bid' ? null : draftBankerMode,
+    });
   }
 
   // ---- 逐张发牌动画 ----
@@ -1400,6 +1434,9 @@ function App() {
       onNewGame={() => {
         setDraftRules(rules);
         setDraftStartLevel(startLevel);
+        setDraftSeedMode('random');
+        setDraftSeedInput(dealSeed ?? '');
+        setDraftBankerMode('bid');
         setConfirmNewGame(true);
       }}
       onRedeal={openRedealDialog}
@@ -2480,32 +2517,32 @@ function App() {
           洗牌种子
         </div>
         <div className="rules-dialog__list rules-dialog__list--options">
-          <label className={dealSeed === null ? 'redeal-option redeal-option--disabled' : 'redeal-option'}>
+          <label className={dealSeed === null ? 'option-radio option-radio--disabled' : 'option-radio'}>
             <input
               type="radio"
               name="redeal-seed-mode"
-              className="redeal-option__radio"
+              className="option-radio__control"
               checked={redealMode === 'current'}
               disabled={dealSeed === null}
               onChange={() => setRedealMode('current')}
             />
-            <span className="redeal-option__text">
+            <span className="option-radio__text">
               使用当前种子
-              <span className="redeal-option__seed">
+              <span className="option-radio__value">
                 {dealSeed === null ? '（导入局面，无种子）' : dealSeed}
               </span>
             </span>
           </label>
 
-          <label className="redeal-option">
+          <label className="option-radio">
             <input
               type="radio"
               name="redeal-seed-mode"
-              className="redeal-option__radio"
+              className="option-radio__control"
               checked={redealMode === 'custom'}
               onChange={() => setRedealMode('custom')}
             />
-            <span className="redeal-option__text">
+            <span className="option-radio__text">
               指定种子
             </span>
           </label>
@@ -2515,7 +2552,7 @@ function App() {
             inputMode="text"
             maxLength={39}
             spellCheck={false}
-            className="redeal-option__input"
+            className="option-input"
             value={redealSeedInput}
             placeholder="9f86:d0e4:6a2e:7b12:4c1f:88aa:0b3d:5e71"
             disabled={redealMode !== 'custom'}
@@ -2524,13 +2561,13 @@ function App() {
             )}
           />
 
-          <div className="redeal-option__format">
+          <div className="option-format">
             128 位 · IPv6 式 8 组十六进制（每组 1~4 位，可用 :: 压缩）
           </div>
 
           <div className={redealMode === 'custom' && !redealSeedValid
-            ? 'redeal-option__hint redeal-option__hint--bad'
-            : 'redeal-option__hint'}
+            ? 'option-hint option-hint--bad option-hint--indent'
+            : 'option-hint option-hint--indent'}
           >
             {redealMode === 'custom' && !redealSeedValid
               ? '种子格式不正确：需 128 位（8 组十六进制，或 0 ~ 2^128-1 的十进制整数）'
@@ -2539,20 +2576,17 @@ function App() {
         </div>
       </ConfirmDialog>
 
-      {/* 新的一局确认框 */}
+      {/* 新的一局确认框：起始等级 / 规则 / 种子 / 庄家 */}
       <ConfirmDialog
         open={confirmNewGame}
         title="开始新的一局？"
         description={`当前这局的进度将全部清空：手牌、分数、等级都会重置，\n双方从打 ${RANK_NAME[draftStartLevel]} 重新开始。`}
+        width={460}
         confirmLabel="开始新的一局"
         cancelLabel="取消"
         danger={true}
-        onConfirm={() => {
-          setConfirmNewGame(false);
-          setRules(draftRules);
-          setStartLevel(draftStartLevel);
-          startNewGame(draftStartLevel);
-        }}
+        confirmDisabled={!draftNewGameSeedValid}
+        onConfirm={startNewGameFromDialog}
         onCancel={() => setConfirmNewGame(false)}
       >
         <div className="rules-dialog__caption">
@@ -2586,6 +2620,133 @@ function App() {
               }))}
             />
             允许反自己亮的主
+          </label>
+        </div>
+
+        <div className="rules-dialog__caption rules-dialog__caption--spaced">
+          洗牌种子
+        </div>
+        <div className="rules-dialog__list rules-dialog__list--options">
+          <label className="option-radio">
+            <input
+              type="radio"
+              name="new-game-seed-mode"
+              className="option-radio__control"
+              checked={draftSeedMode === 'random'}
+              onChange={() => setDraftSeedMode('random')}
+            />
+            <span className="option-radio__text">
+              随机种子
+            </span>
+          </label>
+
+          <label className={dealSeed === null
+            ? 'option-radio option-radio--disabled'
+            : 'option-radio'}
+          >
+            <input
+              type="radio"
+              name="new-game-seed-mode"
+              className="option-radio__control"
+              checked={draftSeedMode === 'current'}
+              disabled={dealSeed === null}
+              onChange={() => setDraftSeedMode('current')}
+            />
+            <span className="option-radio__text">
+              使用当前种子
+              <span className="option-radio__value">
+                {dealSeed === null ? '（导入局面，无种子）' : dealSeed}
+              </span>
+            </span>
+          </label>
+
+          <label className="option-radio">
+            <input
+              type="radio"
+              name="new-game-seed-mode"
+              className="option-radio__control"
+              checked={draftSeedMode === 'custom'}
+              onChange={() => setDraftSeedMode('custom')}
+            />
+            <span className="option-radio__text">
+              指定种子
+            </span>
+          </label>
+
+          <input
+            type="text"
+            inputMode="text"
+            maxLength={39}
+            spellCheck={false}
+            className="option-input"
+            value={draftSeedInput}
+            placeholder="9f86:d0e4:6a2e:7b12:4c1f:88aa:0b3d:5e71"
+            disabled={draftSeedMode !== 'custom'}
+            onChange={event => setDraftSeedInput(
+              event.target.value.toLowerCase().replace(/[^0-9a-f:]/g, '').slice(0, 39),
+            )}
+          />
+
+          <div className="option-format">
+            128 位 · IPv6 式 8 组十六进制（每组 1~4 位，可用 :: 压缩）
+          </div>
+
+          <div className={draftSeedMode === 'custom' && !draftNewGameSeedValid
+            ? 'option-hint option-hint--bad option-hint--indent'
+            : 'option-hint option-hint--indent'}
+          >
+            {draftSeedMode === 'custom' && !draftNewGameSeedValid
+              ? '种子格式不正确：需 128 位（8 组十六进制，或 0 ~ 2^128-1 的十进制整数）'
+              : '同一种子每次发到的牌完全相同；「指定种子」可复现某一局。'}
+          </div>
+        </div>
+
+        <div className="rules-dialog__caption rules-dialog__caption--spaced">
+          庄家
+        </div>
+        <div className="rules-dialog__list rules-dialog__list--options">
+          <label className="option-radio">
+            <input
+              type="radio"
+              name="new-game-banker"
+              className="option-radio__control"
+              checked={draftBankerMode === 'bid'}
+              onChange={() => setDraftBankerMode('bid')}
+            />
+            <span className="option-radio__text">
+              抢庄（庄家由亮主者决定）
+            </span>
+          </label>
+
+          <label className="option-radio">
+            <input
+              type="radio"
+              name="new-game-banker"
+              className="option-radio__control"
+              checked={draftBankerMode !== 'bid'}
+              onChange={() => setDraftBankerMode(PlayerPosition.East)}
+            />
+            <span className="option-radio__text">
+              指定庄家
+            </span>
+          </label>
+
+          <label className="option-row option-row--indent">
+            <select
+              className="option-select"
+              value={draftBankerMode === 'bid' ? PlayerPosition.East : draftBankerMode}
+              disabled={draftBankerMode === 'bid'}
+              onChange={event => setDraftBankerMode(event.target.value as PlayerPosition)}
+            >
+              {ALL_POSITIONS.map(position => (
+                <option key={position} value={position} className="option-item">
+                  {POSITION_NAME_ZH[position]}家
+                </option>
+              ))}
+            </select>
+            <span className="option-hint">
+              {draftBankerMode === 'bid' ? '默认：亮主者坐庄' : '叫主只定主花色，不改庄家'}
+            </span>
           </label>
         </div>
       </ConfirmDialog>
