@@ -644,6 +644,133 @@
   color: rgba(255, 255, 255, 0.55);
 }
 
+/* ---- 查看种子弹窗内容 ---- */
+.seed-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.seed-dialog__value {
+  padding: 8px 12px;
+  font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-align: center;
+  color: $color-gold;
+  word-break: break-all;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 215, 0, 0.35);
+  border-radius: 6px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.seed-dialog__copy {
+  align-self: flex-end;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+}
+
+/* ---- 重新发牌弹窗：种子单选 + 输入 ---- */
+.redeal-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: $text-on-dark;
+  cursor: pointer;
+
+  &--disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.redeal-option__radio {
+  width: 15px;
+  height: 15px;
+  cursor: inherit;
+  accent-color: $color-gold;
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+
+.redeal-option__text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.redeal-option__seed {
+  font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: $color-gold;
+  word-break: break-all;
+}
+
+.redeal-option__input {
+  width: calc(100% - 23px);
+  margin-left: 23px;
+  padding: 5px 8px;
+  font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  color: #f2f2f2;
+  color-scheme: dark;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: rgba(255, 215, 0, 0.6);
+  }
+}
+
+.redeal-option__hint {
+  margin-left: 23px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.5);
+
+  &--bad {
+    color: #ff8a80;
+  }
+}
+
+.redeal-option__format {
+  margin-left: 23px;
+  font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.2px;
+  color: rgba(255, 255, 255, 0.66);
+}
+
 /* 选项行（等级下拉 / 复选开关共用） */
 .option-row {
   display: flex;

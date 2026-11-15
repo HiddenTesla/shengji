@@ -24,7 +24,7 @@ import {
 } from './core/types.ts';
 import { groupCardsForDisplay } from './core/card.ts';
 import { cssVars } from './utils/cssVars.ts';
-import { createDecks, shuffleCards, dealCards } from './core/deck.ts';
+import { createDecks, shuffleCards, dealCards, randomSeed, parseSeed, type Seed } from './core/deck.ts';
 import {
   type Declaration,
   type BidState,
@@ -283,6 +283,10 @@ function App() {
   const bottomRef = useRef<Card[]>([]);
   /** 本次发牌的**原始**底牌（埋底后 bottomRef 会被覆盖，这里始终保留） */
   const originalBottomRef = useRef<Card[]>([]);
+  /** 本局洗牌种子（128 位，IPv6 式字符串；开局随机生成，导入局面时为 null） */
+  const [dealSeed, setDealSeed] = useState<Seed | null>(null);
+  /** 同上，供 dealRound / 日志同步读取（setState 是异步的） */
+  const seedRef = useRef<Seed | null>(null);
   const [revealed, setRevealed] = useState(0);
   /** 报主泡泡（发牌 / 叫主途中有人亮主、反主时在桌面中央短暂显示） */
   const [declareToast, setDeclareToast] = useState<DeclareToast | null>(null);
@@ -312,12 +316,20 @@ function App() {
   const [autoPaused, setAutoPaused] = useState(false);
   /** 「新的一局」确认框 */
   const [confirmNewGame, setConfirmNewGame] = useState(false);
-  /** 「原样发牌」确认框 */
+  /** 「重新发牌」确认框 */
   const [confirmRedeal, setConfirmRedeal] = useState(false);
+  /** 重新发牌：使用当前种子 / 指定种子（默认第一种） */
+  const [redealMode, setRedealMode] = useState<'current' | 'custom'>('current');
+  /** 重新发牌：「指定种子」的输入（字符串，便于编辑与校验） */
+  const [redealSeedInput, setRedealSeedInput] = useState('');
   /** 「自定义规则」信息框（只读，说明「新的一局」里的可选规则） */
   const [showRules, setShowRules] = useState(false);
   /** 记牌器（已出牌 / 剩余牌） */
   const [showTracker, setShowTracker] = useState(false);
+  /** 「查看种子」弹窗 */
+  const [showSeed, setShowSeed] = useState(false);
+  /** 「查看种子」里复制成功的短暂提示 */
+  const [seedCopied, setSeedCopied] = useState(false);
   /** 本局生效的可选规则 */
   const [rules, setRules] = useState<RuleOptions>(DEFAULT_RULE_OPTIONS);
   /** 「新的一局」对话框中待确认的规则 */
@@ -529,7 +541,7 @@ function App() {
   // 与 React 渲染时序无关，因此不可能出现「预设丢了 → 退化成东家」的情况。
   // null = 本局庄家由叫主（亮主者）决定（首局 / 新游戏 / 抢庄局）。
   const presetBankerRef = useRef<PlayerPosition | null>(null);
-  // 本局发牌开始时展示的庄家（「原样发牌」保留原庄家；抢庄局下仍可被亮主者取代）
+  // 本局发牌开始时展示的庄家（「重新发牌」保留原庄家；抢庄局下仍可被亮主者取代）
   const initialBankerRef = useRef<PlayerPosition | null>(null);
 
   /** 本局出牌记录（每局重建；下一局发牌时清空） */
@@ -579,17 +591,19 @@ function App() {
   // ---- 重新发牌 ----
   // presetBanker 非空时以它为庄家（用于「下一局」：庄家由升级规则预定，叫主只定主花色）；
   // 为空时庄家仍由叫主（亮主者）决定（用于首局 / 新游戏 / 抢庄局）。
-  // keepDeal = true 时**不洗牌**，沿用上一次发好的手牌与底部（「原样发牌」）。
-  // initialBanker：发牌开始时已有的庄家（「原样发牌」沿用原庄家），默认等于 presetBanker。
+  // keepDeal = true 时**不洗牌**，沿用上一次发好的手牌与底部（「重新发牌 · 使用当前种子」）。
+  // initialBanker：发牌开始时已有的庄家（「重新发牌」沿用原庄家），默认等于 presetBanker。
+  // fixedSeed：指定了就用这个种子洗牌（「重新发牌 · 指定种子」），否则随机生成。
   function dealRound(
     presetBanker: PlayerPosition | null,
     keepDeal = false,
     initialBanker: PlayerPosition | null = presetBanker,
+    fixedSeed?: Seed,
   ) {
     importedStateRef.current = null;
     presetBankerRef.current = presetBanker;
     initialBankerRef.current = initialBanker;
-    // 发牌 = 正式开局（从开始界面进入对局、「下一局」、原样发牌都走这里）
+    // 发牌 = 正式开局（从开始界面进入对局、「下一局」、重新发牌都走这里）
     setStarted(true);
 
     let nextHands: Hands;
@@ -598,8 +612,12 @@ function App() {
       nextHands = fullHandsRef.current;
       nextBottom = originalBottomRef.current;
     } else {
+      // 指定种子时用固定种子，否则每局随机生成；种子写进日志，「查看种子」可复制
+      const seed = fixedSeed ?? randomSeed();
+      seedRef.current = seed;
+      setDealSeed(seed);
       const deck = createDecks();
-      shuffleCards(deck);
+      shuffleCards(deck, seed);
       const result = dealCards(deck, BOTTOM_COUNT);
       nextHands = {
         E: result.hands.E,
@@ -623,6 +641,7 @@ function App() {
       playerModes: { ...playerModes },
       deal: {
         mode: keepDeal ? 'sameDeal' : 'shuffle',
+        seed: seedRef.current ?? undefined,
         hands: {
           E: encodeCards(cardIdMapRef.current, nextHands.E),
           N: encodeCards(cardIdMapRef.current, nextHands.N),
@@ -661,15 +680,38 @@ function App() {
     dealRound(null);
   }
 
-  // ---- 原样发牌：牌序不变（手牌 / 底牌与刚才完全一致），清除报主记录重新发牌 ----
+  // ---- 重新发牌：清除报主记录，按种子重新发牌 ----
+  // seed = null  → 使用当前种子（牌序不变：直接复用已发好的手牌与底牌）
+  // seed = 种子  → 用指定种子重新洗牌（四家手牌与底牌都会变）
   // 等级 / 周目 / 庄家 / 级牌全部不变；本局是否「抢庄局」也保持不变：
   // 抢庄局（首局）庄家仍由亮主者决定，非抢庄局庄家固定、叫主只定主花色。
-  function redealSameCards() {
-    if (importedStateRef.current) {
+  function redealRound(seed: Seed | null) {
+    if (importedStateRef.current && seed === null) {
       applyImportedState(importedStateRef.current);
       return;
     }
-    dealRound(presetBankerRef.current, true, banker);
+    if (seed === null) {
+      dealRound(presetBankerRef.current, true, banker);
+      return;
+    }
+    dealRound(presetBankerRef.current, false, banker, seed);
+  }
+
+  /** 「指定种子」的解析结果（非法 = null） */
+  const redealCustomSeed = parseSeed(redealSeedInput);
+  const redealSeedValid = redealCustomSeed !== null;
+
+  /** 打开「重新发牌」：默认「使用当前种子」（导入局面没有种子时改为「指定种子」） */
+  function openRedealDialog() {
+    setRedealMode(dealSeed === null ? 'custom' : 'current');
+    setRedealSeedInput(dealSeed === null ? '' : String(dealSeed));
+    setConfirmRedeal(true);
+  }
+
+  function confirmRedealRound() {
+    const useCurrent = redealMode === 'current' && seedRef.current !== null;
+    setConfirmRedeal(false);
+    redealRound(useCurrent ? null : redealCustomSeed);
   }
 
   // ---- 逐张发牌动画 ----
@@ -904,7 +946,7 @@ function App() {
       setTrumpSuit(suit);
       setBottomTrump(true);
       setFlipping(false);
-      // 翻底定主：庄家仍取预定庄家（「下一局」）或发牌时已有的庄家（「原样发牌」），
+      // 翻底定主：庄家仍取预定庄家（「下一局」）或发牌时已有的庄家（「重新发牌」），
       // 都没有（真正的首局）才退回东家
       const flipBanker = presetBankerRef.current
         ?? initialBankerRef.current
@@ -1320,9 +1362,39 @@ function App() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [started]);
 
+  // ---- 「查看种子」：复制种子到剪贴板（非安全上下文回退 execCommand） ----
+  async function copySeed() {
+    if (dealSeed === null) return;
+    const text = String(dealSeed);
+    let done = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      done = true;
+    }
+    catch {
+      // 权限被拒 / 非安全上下文：走下面的回退
+    }
+    if (!done) {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      try {
+        document.execCommand('copy');
+      }
+      finally {
+        area.remove();
+      }
+    }
+    setSeedCopied(true);
+    window.setTimeout(() => setSeedCopied(false), 1600);
+  }
+
   // ---- 顶部菜单栏（开始界面与对局中共用） ----
   // 还没开局时（开始界面）菜单仍保留：可开新局 / 导入局面 / 看规则 / 调速度；
-  // 依赖「本局已发牌」的项（原样发牌 / 导出局面 / 出牌记录 / 记牌器）由 hasActiveRound 置灰。
+  // 依赖「本局已发牌」的项（重新发牌 / 导出局面 / 出牌记录 / 记牌器）由 hasActiveRound 置灰。
   const menuBar = (
     <MenuBar
       onNewGame={() => {
@@ -1330,12 +1402,16 @@ function App() {
         setDraftStartLevel(startLevel);
         setConfirmNewGame(true);
       }}
-      onRedealSameCards={() => setConfirmRedeal(true)}
+      onRedeal={openRedealDialog}
       onViewRules={() => setShowRules(true)}
       onViewPlayLog={() => openPlayLog('plays')}
       onExportState={() => setStateExportOpen(true)}
       onImportState={() => setStateImportOpen(true)}
       onViewTracker={() => setShowTracker(true)}
+      onViewSeed={() => {
+        setSeedCopied(false);
+        setShowSeed(true);
+      }}
       gameSpeed={gameSpeed}
       onChangeSpeed={setGameSpeed}
       hasActiveRound={started}
@@ -1501,6 +1577,9 @@ function App() {
     originalBottomRef.current = state.bottomCards;
     cardIdMapRef.current = state.cardIdMap;
     gameIdRef.current = `G-import-${Math.random().toString(36).slice(2, 8)}`;
+    // 导入局面只有牌面快照，没有种子
+    seedRef.current = null;
+    setDealSeed(null);
 
     const levelRankForRound = state.levels[teamOf(state.banker)];
     const record = createRoundRecord({
@@ -2355,20 +2434,110 @@ function App() {
         </div>
       </ConfirmDialog>
 
-      {/* 原样发牌确认框 */}
+      {/* 本局洗牌种子（只读）：每局随机生成；重新发牌时可指定 */}
+      <ConfirmDialog
+        open={showSeed}
+        title="本局种子"
+        description={dealSeed === null
+          ? '当前局面是导入的，没有种子记录。'
+          : '128 位洗牌种子（IPv6 式 8 组十六进制）。\n种子固定时，四家手牌与 8 张底牌完全相同。'}
+        width={480}
+        confirmLabel="知道了"
+        hideCancel={true}
+        onConfirm={() => setShowSeed(false)}
+        onCancel={() => setShowSeed(false)}
+      >
+        {dealSeed !== null && (
+          <div className="seed-dialog">
+            <span className="seed-dialog__value">
+              {dealSeed}
+            </span>
+            <button
+              type="button"
+              className="seed-dialog__copy"
+              onClick={copySeed}
+            >
+              {seedCopied ? '✅ 已复制' : '📋 复制'}
+            </button>
+          </div>
+        )}
+      </ConfirmDialog>
+
+      {/* 重新发牌确认框：使用当前种子 / 指定种子 */}
       <ConfirmDialog
         open={confirmRedeal}
-        title="原样发牌？"
-        description={'牌序不变：四家手牌与 8 张底牌和刚才完全一致，\n会清除报主记录并重新发牌；庄家与级牌都不变。\n（抢庄局仍为抢庄局：庄家由亮主者决定。）'}
-        confirmLabel="原样发牌"
+        title="重新发牌？"
+        description={'会清除报主记录并重新发牌；庄家与级牌都不变。\n（抢庄局仍为抢庄局：庄家由亮主者决定。）'}
+        width={460}
+        confirmLabel="重新发牌"
         cancelLabel="取消"
         danger={true}
-        onConfirm={() => {
-          setConfirmRedeal(false);
-          redealSameCards();
-        }}
+        confirmDisabled={redealMode === 'custom' && !redealSeedValid}
+        onConfirm={confirmRedealRound}
         onCancel={() => setConfirmRedeal(false)}
-      />
+      >
+        <div className="rules-dialog__caption">
+          洗牌种子
+        </div>
+        <div className="rules-dialog__list rules-dialog__list--options">
+          <label className={dealSeed === null ? 'redeal-option redeal-option--disabled' : 'redeal-option'}>
+            <input
+              type="radio"
+              name="redeal-seed-mode"
+              className="redeal-option__radio"
+              checked={redealMode === 'current'}
+              disabled={dealSeed === null}
+              onChange={() => setRedealMode('current')}
+            />
+            <span className="redeal-option__text">
+              使用当前种子
+              <span className="redeal-option__seed">
+                {dealSeed === null ? '（导入局面，无种子）' : dealSeed}
+              </span>
+            </span>
+          </label>
+
+          <label className="redeal-option">
+            <input
+              type="radio"
+              name="redeal-seed-mode"
+              className="redeal-option__radio"
+              checked={redealMode === 'custom'}
+              onChange={() => setRedealMode('custom')}
+            />
+            <span className="redeal-option__text">
+              指定种子
+            </span>
+          </label>
+
+          <input
+            type="text"
+            inputMode="text"
+            maxLength={39}
+            spellCheck={false}
+            className="redeal-option__input"
+            value={redealSeedInput}
+            placeholder="9f86:d0e4:6a2e:7b12:4c1f:88aa:0b3d:5e71"
+            disabled={redealMode !== 'custom'}
+            onChange={event => setRedealSeedInput(
+              event.target.value.toLowerCase().replace(/[^0-9a-f:]/g, '').slice(0, 39),
+            )}
+          />
+
+          <div className="redeal-option__format">
+            128 位 · IPv6 式 8 组十六进制（每组 1~4 位，可用 :: 压缩）
+          </div>
+
+          <div className={redealMode === 'custom' && !redealSeedValid
+            ? 'redeal-option__hint redeal-option__hint--bad'
+            : 'redeal-option__hint'}
+          >
+            {redealMode === 'custom' && !redealSeedValid
+              ? '种子格式不正确：需 128 位（8 组十六进制，或 0 ~ 2^128-1 的十进制整数）'
+              : '同一种子每次发到的牌完全相同；当前种子可在「查看 → 查看种子」里看到。'}
+          </div>
+        </div>
+      </ConfirmDialog>
 
       {/* 新的一局确认框 */}
       <ConfirmDialog

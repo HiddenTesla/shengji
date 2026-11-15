@@ -9,8 +9,8 @@ import { SPEED_LEVELS } from '../utils/speed.ts';
 interface MenuBarProps {
   /** 点击「新的一局」：只负责发起请求，由 App 弹确认框 */
   onNewGame: () => void;
-  /** 点击「原样发牌」：牌序不变，仅清除报主记录重新发牌 */
-  onRedealSameCards: () => void;
+  /** 点击「重新发牌」：可选择沿用当前种子或指定种子重新发牌 */
+  onRedeal: () => void;
   /** 点击「自定义规则」：由 App 弹出只读的规则选项说明 */
   onViewRules: () => void;
   /** 点击「出牌记录」：显示本局出牌（不含发牌记录） */
@@ -21,6 +21,8 @@ interface MenuBarProps {
   onImportState: () => void;
   /** 点击「记牌器」：查看已出牌 / 剩余牌 */
   onViewTracker: () => void;
+  /** 点击「查看种子」：显示本局的洗牌种子 */
+  onViewSeed: () => void;
   /** 当前游戏速度档位（1..5） */
   gameSpeed: number;
   /** 选择速度档位（「选项 → 游戏速度」，不需要弹框） */
@@ -65,12 +67,13 @@ type MenuKey = 'game' | 'view' | 'options'
 
 export default function MenuBar({
   onNewGame,
-  onRedealSameCards,
+  onRedeal,
   onViewRules,
   onViewPlayLog,
   onExportState,
   onImportState,
   onViewTracker,
+  onViewSeed,
   gameSpeed,
   onChangeSpeed,
   hasActiveRound = true,
@@ -130,9 +133,9 @@ export default function MenuBar({
             </MenuItem>
             <MenuItem
               disabled={!hasActiveRound}
-              onClick={() => closeThen(onRedealSameCards)}
+              onClick={() => closeThen(onRedeal)}
             >
-              原样发牌…
+              重新发牌…
             </MenuItem>
             <MenuItem
               disabled={!hasActiveRound}
@@ -170,6 +173,12 @@ export default function MenuBar({
               onClick={() => closeThen(onViewTracker)}
             >
               记牌器…
+            </MenuItem>
+            <MenuItem
+              disabled={!hasActiveRound}
+              onClick={() => closeThen(onViewSeed)}
+            >
+              查看种子…
             </MenuItem>
             <MenuItem onClick={() => closeThen(onViewRules)}>
               自定义规则…

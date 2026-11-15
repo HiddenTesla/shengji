@@ -61,6 +61,12 @@
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.85);
 
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
+    box-shadow: none;
+  }
+
   &--confirm {
     padding: 8px 20px;
     font-weight: 700;
