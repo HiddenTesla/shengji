@@ -1622,8 +1622,7 @@ function App() {
   // 北家 / 南家的出牌栏都放在底部同一行（同一时刻只有一家轮到），并始终占位；
   // 西家 / 东家的出牌栏在各自侧栏里，不参与牌桌高度。
   const reservePlayBarRow = isPlaying;
-  const showBottomPlayBar = turnIsManual
-    && (playingTurn === PlayerPosition.South || playingTurn === PlayerPosition.North);
+  const showBottomPlayBar = turnIsManual && playingTurn === PlayerPosition.South;
 
   const handForDisplay = shownHands.S;
 
@@ -1708,6 +1707,10 @@ function App() {
   const northBidBar = renderBiddingBar(PlayerPosition.North);
   const westBidBar = renderBiddingBar(PlayerPosition.West, true);
   const eastBidBar = renderBiddingBar(PlayerPosition.East, true);
+  // 北家出牌栏：放在北家手牌旁边（不再与南家共用底部那一行）；尺寸与南家一致
+  const northPlayBar = playingTurn === PlayerPosition.North
+    ? renderPlayBar()
+    : null;
 
   return (
     <div className="app" style={uiScaleStyle}>
@@ -1910,6 +1913,12 @@ function App() {
         />
         {northBidBar}
         </div>
+        {/* 北家出牌栏：放在北家手牌下方（手牌翻开后很宽，没法并排） */}
+        {northPlayBar && (
+          <div className="stage__under">
+            {northPlayBar}
+          </div>
+        )}
       </div>
 
       {/* ---- 中部：西家 + 牌桌 + 东家 ---- */}
@@ -2191,7 +2200,7 @@ function App() {
           </div>
         )}
 
-        {/* 出牌控制栏：北家 / 南家共用这一行，始终占位（牌桌高度不随轮次变化） */}
+        {/* 出牌控制栏（南家）：始终占位（牌桌高度不随轮次变化） */}
         {reservePlayBarRow && playState && (
           <div className="center-row center-row--spaced center-row--playbar">
             {showBottomPlayBar && renderPlayBar()}
