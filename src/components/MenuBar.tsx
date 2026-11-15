@@ -25,6 +25,8 @@ interface MenuBarProps {
   gameSpeed: number;
   /** 选择速度档位（「选项 → 游戏速度」，不需要弹框） */
   onChangeSpeed: (level: number) => void;
+  /** 是否已有本局（已发过牌）：false = 开始界面，依赖本局的菜单项置灰 */
+  hasActiveRound?: boolean;
 }
 
 /**
@@ -32,10 +34,12 @@ interface MenuBarProps {
  * 绝对定位的浮层直接用 `top: var(--menu-bar-offset)`。
  */
 
-function MenuItem({ onClick, checked, children }: {
+function MenuItem({ onClick, checked, disabled, children }: {
   onClick: () => void;
   /** 传入时按「单选」项渲染（前面带勾） */
   checked?: boolean;
+  /** 不可用（如开始界面里需要已有牌局的项） */
+  disabled?: boolean;
   children: ReactNode;
 }) {
   const isRadio = checked !== undefined;
@@ -43,6 +47,7 @@ function MenuItem({ onClick, checked, children }: {
     <button
       role={isRadio ? 'menuitemradio' : 'menuitem'}
       aria-checked={isRadio ? checked : undefined}
+      disabled={disabled}
       className={checked ? 'menu-bar__item menu-bar__item--checked' : 'menu-bar__item'}
       onClick={onClick}
     >
@@ -68,6 +73,7 @@ export default function MenuBar({
   onViewTracker,
   gameSpeed,
   onChangeSpeed,
+  hasActiveRound = true,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<MenuKey | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -122,10 +128,16 @@ export default function MenuBar({
             <MenuItem onClick={() => closeThen(onNewGame)}>
               新的一局…
             </MenuItem>
-            <MenuItem onClick={() => closeThen(onRedealSameCards)}>
+            <MenuItem
+              disabled={!hasActiveRound}
+              onClick={() => closeThen(onRedealSameCards)}
+            >
               原样发牌…
             </MenuItem>
-            <MenuItem onClick={() => closeThen(onExportState)}>
+            <MenuItem
+              disabled={!hasActiveRound}
+              onClick={() => closeThen(onExportState)}
+            >
               导出局面…
             </MenuItem>
             <MenuItem onClick={() => closeThen(onImportState)}>
@@ -147,10 +159,16 @@ export default function MenuBar({
 
         {openMenu === 'view' && (
           <div role="menu" className="menu-bar__dropdown">
-            <MenuItem onClick={() => closeThen(onViewPlayLog)}>
+            <MenuItem
+              disabled={!hasActiveRound}
+              onClick={() => closeThen(onViewPlayLog)}
+            >
               出牌记录…
             </MenuItem>
-            <MenuItem onClick={() => closeThen(onViewTracker)}>
+            <MenuItem
+              disabled={!hasActiveRound}
+              onClick={() => closeThen(onViewTracker)}
+            >
               记牌器…
             </MenuItem>
             <MenuItem onClick={() => closeThen(onViewRules)}>

@@ -252,6 +252,8 @@ function App() {
   const uiScaleStyle = useUiScale();
 
   // ---- 游戏状态 ----
+  /** 是否已开始游戏：载入页面时停在开始界面，点「开始游戏」才发牌 */
+  const [started, setStarted] = useState(false);
   const [hands, setHands] = useState<Hands | null>(null);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [animatingCardIds, setAnimatingCardIds] = useState<Set<string>>(new Set());
@@ -584,6 +586,8 @@ function App() {
     importedStateRef.current = null;
     presetBankerRef.current = presetBanker;
     initialBankerRef.current = initialBanker;
+    // 发牌 = 正式开局（从开始界面进入对局、「下一局」、原样发牌都走这里）
+    setStarted(true);
 
     let nextHands: Hands;
     let nextBottom: Card[];
@@ -1303,21 +1307,69 @@ function App() {
   // 浏览器只显示自带的通用提示文案（无法自定义内容）；
   // 需同时 preventDefault 并设置 returnValue，旧版浏览器只看 returnValue。
   useEffect(() => {
+    // 还没开始游戏（开始界面）时不需要阻拦刷新：没有任何进度会丢
+    if (!started) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, []);
+  }, [started]);
 
-  // ---- 初始发牌 ----
-  useMemo(() => {
-    if (!hands) startNewGame();
-  }, []);
+  // ---- 顶部菜单栏（开始界面与对局中共用） ----
+  // 还没开局时（开始界面）菜单仍保留：可开新局 / 导入局面 / 看规则 / 调速度；
+  // 依赖「本局已发牌」的项（原样发牌 / 导出局面 / 出牌记录 / 记牌器）由 hasActiveRound 置灰。
+  const menuBar = (
+    <MenuBar
+      onNewGame={() => {
+        setDraftRules(rules);
+        setDraftStartLevel(startLevel);
+        setConfirmNewGame(true);
+      }}
+      onRedealSameCards={() => setConfirmRedeal(true)}
+      onViewRules={() => setShowRules(true)}
+      onViewPlayLog={() => openPlayLog('plays')}
+      onExportState={() => setStateExportOpen(true)}
+      onImportState={() => setStateImportOpen(true)}
+      onViewTracker={() => setShowTracker(true)}
+      gameSpeed={gameSpeed}
+      onChangeSpeed={setGameSpeed}
+      hasActiveRound={started}
+    />
+  );
+
+  // ---- 开始界面内容（载入页面后先不开始新游戏，等玩家点「开始游戏」） ----
+  // 注意：它渲染在主页面的 `.app` 里（菜单栏与各种弹窗始终可用）。
+  const startScreen = (
+    <div className="start-screen">
+      <div className="start-screen__title">
+        升级
+      </div>
+      <div className="start-screen__subtitle">
+        拖拉机 · 80 分 · 四人两副牌
+      </div>
+      <button
+        type="button"
+        className="start-screen__button"
+        onClick={() => startNewGame()}
+      >
+        开始游戏
+      </button>
+      <div className="start-screen__hint">
+        点击开始后由叫主定庄，双方从打 {RANK_NAME[startLevel]} 起打。
+      </div>
+      <div className="start-screen__hint start-screen__hint--dim">
+        起始等级可在开始后通过「游戏 → 新的一局」调整。
+      </div>
+    </div>
+  );
 
   // ---- 渲染 ----
-  if (!hands) return null;
+  if (started && !hands) return null;
+
+  /** 渲染期手牌：开始界面（未发牌）时按空手牌处理 */
+  const shownHands = hands ?? EMPTY_HANDS;
 
   const isBidding = phase === GamePhase.BiddingTrump;
   const isDealing = phase === GamePhase.Dealing;
@@ -1438,6 +1490,7 @@ function App() {
 
   function applyImportedState(state: ParsedGameState) {
     importedStateRef.current = state;
+    setStarted(true);
     presetBankerRef.current = state.banker;
     initialBankerRef.current = state.banker;
     fullHandsRef.current = null;
@@ -1546,7 +1599,7 @@ function App() {
   const showBottomPlayBar = turnIsManual
     && (playingTurn === PlayerPosition.South || playingTurn === PlayerPosition.North);
 
-  const handForDisplay = hands.S;
+  const handForDisplay = shownHands.S;
 
   const canSelectHand = (
     (isBurying && banker === PlayerPosition.South && !bankerIsAuto)
@@ -1559,7 +1612,7 @@ function App() {
 
   const buryFlat = isBurying
     ? groupCardsForDisplay(
-      banker ? hands[banker] : [],
+      banker ? shownHands[banker] : [],
       trumpSuit,
       levelRank,
     ).flatMap(g => g.cards)
@@ -1571,21 +1624,21 @@ function App() {
   // 出牌：已选牌（含自动选中的必出牌）+ 合法性
   const playFlat = isPlaying
     ? groupCardsForDisplay(
-      playState && playingTurn ? hands[playingTurn] : [],
+      playState && playingTurn ? shownHands[playingTurn] : [],
       trumpSuit,
       levelRank,
     ).flatMap(g => g.cards)
     : [];
   const forcedPlayIndices = isPlaying && playState && turnIsManual
     && !playState.trick.complete
-    ? forcedFollowIndicesOf(hands[playState.turn], playState.trick, trumpSuit, levelRank)
+    ? forcedFollowIndicesOf(shownHands[playState.turn], playState.trick, trumpSuit, levelRank)
     : new Set<number>();
   const effectiveSelectedIndices = forcedPlayIndices.size === 0
     ? selectedIndices
     : new Set([...selectedIndices, ...forcedPlayIndices]);
   const selectedPlayCards = playFlat.filter((_, i) => effectiveSelectedIndices.has(i));
   const playValidation = isPlaying && playState
-    ? validatePlay(playState, hands[playState.turn], selectedPlayCards, trumpSuit, levelRank)
+    ? validatePlay(playState, shownHands[playState.turn], selectedPlayCards, trumpSuit, levelRank)
     : null;
   const selectedCanBeatCurrent = playValidation?.ok && playState
     ? canBeatCurrentPlay(playState, selectedPlayCards, trumpSuit, levelRank)
@@ -1628,21 +1681,14 @@ function App() {
   return (
     <div className="app" style={uiScaleStyle}>
       {/* ---- 顶部菜单栏 ---- */}
-      <MenuBar onNewGame={() => {
-        setDraftRules(rules);
-        setDraftStartLevel(startLevel);
-        setConfirmNewGame(true);
-      }}
-        onRedealSameCards={() => setConfirmRedeal(true)}
-        onViewRules={() => setShowRules(true)}
-        onViewPlayLog={() => openPlayLog('plays')}
-        onExportState={() => setStateExportOpen(true)}
-        onImportState={() => setStateImportOpen(true)}
-        onViewTracker={() => setShowTracker(true)}
-        gameSpeed={gameSpeed}
-        onChangeSpeed={setGameSpeed}
-      />
+      {menuBar}
 
+      {/* ---- 未开局：开始界面（菜单栏保留在顶部） ---- */}
+      {!started && startScreen}
+
+      {/* ---- 对局界面：发牌后才渲染（开始界面不显示等级面板 / 牌桌） ---- */}
+      {started && (
+        <>
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
       <div className="level-panel">
         <div className="level-panel__col">
@@ -1809,7 +1855,7 @@ function App() {
       <div className="stage">
         <OpponentHand
           position={PlayerPosition.North}
-          cards={hands.N}
+          cards={shownHands.N}
           levelRank={levelRank}
           trumpSuit={trumpSuit}
           faceUp={visibility.N}
@@ -1835,7 +1881,7 @@ function App() {
         <div className="table__west">
           <OpponentHand
             position={PlayerPosition.West}
-            cards={hands.W}
+            cards={shownHands.W}
             levelRank={levelRank}
             trumpSuit={trumpSuit}
             faceUp={visibility.W}
@@ -2037,7 +2083,7 @@ function App() {
         <div className="table__east">
           <OpponentHand
             position={PlayerPosition.East}
-            cards={hands.E}
+            cards={shownHands.E}
             levelRank={levelRank}
             trumpSuit={trumpSuit}
             faceUp={visibility.E}
@@ -2112,7 +2158,7 @@ function App() {
           {!isBurying && showBar && (
             <BiddingBar
               player={PlayerPosition.South}
-              hand={hands.S}
+              hand={shownHands.S}
               levelRank={levelRank}
               current={bidState.current}
               canAct={barCanAct}
@@ -2160,6 +2206,10 @@ function App() {
         </div>
       )}
 
+        </>
+      )}
+
+      {/* 以下弹窗 / 对话框两种界态都要渲染（开始界面也能「新的一局」「导入局面」等） */}
       {/* 出牌记录：菜单「查看」= 仅出牌；结算 = 完整日志 + 导出 */}
       <PlayLogDialog
         open={playLogOpen}
