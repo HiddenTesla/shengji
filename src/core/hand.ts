@@ -162,9 +162,14 @@ export interface HandShape {
   tractor: number;
   /**
    * 这手牌里最长的「连续对子段」长度（对数）；不足 2 对记 0。
-   * 与 `tractor` 的区别：甩牌里夹着的拖拉机也算（判定毙牌是否「带够拖拉机」用）。
+   * 与 `tractor` 的区别：甩牌里夹着的拖拉机也算。
    */
   maxTractor: number;
+  /**
+   * 各段「连续对子段（拖拉机）」的长度（对数，仅含 ≥2 的段）。
+   * 用于毙牌合法性：毙牌的拖拉机结构需「覆盖」领出的拖拉机结构（见 `tractorsCover`）。
+   */
+  tractorRuns: number[];
 }
 
 interface PairUnit {
@@ -246,6 +251,72 @@ export function maxTractorLength(
   return best >= 2 ? best : 0;
 }
 
+/** 一段拖拉机（连续对子段）的信息 */
+export interface TractorRun {
+  /** 对数（≥2） */
+  length: number;
+  /** 该段最大的门内槽位（用于比较「顶拖」） */
+  topSlot: number;
+}
+
+/** 列出这手牌里每一段拖拉机（连续对子段，长度 ≥ 2） */
+export function handTractorRuns(
+  cards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): TractorRun[] {
+  return slotRuns(pairUnits(cards, trumpSuit, levelRank))
+    .filter(run => run.length >= 2)
+    .map(run => ({ length: run.length, topSlot: run.maxSlot }));
+}
+
+/** 这手牌里「最大的对子」所在的门内槽位；没有对子返回 -Infinity */
+export function handTopPairSlot(
+  cards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  let best = -Infinity;
+  for (const unit of pairUnits(cards, trumpSuit, levelRank)) {
+    if (unit.slot > best) best = unit.slot;
+  }
+  return best;
+}
+
+/**
+ * 毙牌的拖拉机结构能否「覆盖」领出的拖拉机结构。
+ *
+ * 把领出的每段拖拉机（长度）看作要放置的「段」，把毙牌的每段连续对子段看作「容器」：
+ * 一段长度 L 的连续对子可以拆成若干段连续的更短拖拉机（各段长度之和 ≤ L）。
+ * 因此只要能把这些「段」装进这些「容器」（每个容器内长度之和 ≤ 容器长度）即可。
+ * 也就是说，更长的拖拉机可以替代若干更短的拖拉机（如 3 连对可顶 2 连对；4 连对可顶两个 2 连对）。
+ */
+export function tractorsCover(
+  candidateRuns: number[],
+  requiredRuns: number[],
+): boolean {
+  if (requiredRuns.length === 0) return true;
+  const items = [...requiredRuns].sort((a, b) => b - a);
+  const caps = [...candidateRuns].sort((a, b) => b - a);
+  if (caps.length === 0) return false;
+
+  const place = (i: number): boolean => {
+    if (i === items.length) return true;
+    const need = items[i];
+    for (let j = 0; j < caps.length; j++) {
+      if (caps[j] < need) continue;
+      caps[j] -= need;
+      if (place(i + 1)) {
+        caps[j] += need;
+        return true;
+      }
+      caps[j] += need;
+    }
+    return false;
+  };
+  return place(0);
+}
+
 // ------------------------------------------------------------
 // 手牌结构标记（UI：对子 / 拖拉机）
 // ------------------------------------------------------------
@@ -324,13 +395,13 @@ export function analyzeShape(
 ): HandShape {
   const count = cards.length;
   if (count === 0) {
-    return { type: HT.Throw, door: null, count: 0, pairs: 0, tractor: 0, maxTractor: 0 };
+    return { type: HT.Throw, door: null, count: 0, pairs: 0, tractor: 0, maxTractor: 0, tractorRuns: [] };
   }
 
   const door = doorOf(cards[0], trumpSuit, levelRank);
   const mixed = cards.some(c => doorOf(c, trumpSuit, levelRank) !== door);
   if (mixed) {
-    return { type: HT.Throw, door: null, count, pairs: 0, tractor: 0, maxTractor: 0 };
+    return { type: HT.Throw, door: null, count, pairs: 0, tractor: 0, maxTractor: 0, tractorRuns: [] };
   }
 
   const units = pairUnits(cards, trumpSuit, levelRank);
@@ -343,9 +414,11 @@ export function analyzeShape(
     if (findTractorRun(units, pairs)) tractor = pairs;
   }
 
-  // 整手牌里最长的一段拖拉机（甩牌里夹着的也算）
-  const longestRun = longestRunFromUnits(units);
-  const maxTractor = longestRun >= 2 ? longestRun : 0;
+  // 各段拖拉机（连续对子段，长度 ≥ 2）的长度；甩牌里夹着的也算
+  const tractorRuns = slotRuns(units)
+    .filter(run => run.length >= 2)
+    .map(run => run.length);
+  const maxTractor = tractorRuns.length > 0 ? Math.max(...tractorRuns) : 0;
 
   let type: HandType;
   if (count === 1) type = HT.Single;
@@ -353,7 +426,7 @@ export function analyzeShape(
   else if (tractor >= 2) type = HT.Tractor;
   else type = HT.Throw;
 
-  return { type, door, count, pairs, tractor, maxTractor };
+  return { type, door, count, pairs, tractor, maxTractor, tractorRuns };
 }
 
 // ------------------------------------------------------------
@@ -850,5 +923,9 @@ export function cardsLabel(cards: Card[]): string {
 //    纯 Single / Pair / Tractor 领出不是甩牌，**不受**此检查（如 4455 可随便领出）。
 // 4. 毙牌 / 垫牌：该门不足时的补牌不限牌型（可任意垫牌，也可用主牌毙）；
 //    想大出必须用主牌同型毙（trick.ts::canCompete 负责判定），
-//    且甩牌里含对子 / 拖拉机时，毙牌也必须带够对子（`pairs`）与不短于领出的拖拉机
-//    （`maxTractor`），否则只算垫牌（trick.ts::tierOf 负责判定）。
+//    且甩牌里含对子 / 拖拉机时，毙牌也必须「带够」：
+//    对子数不少于领出（`pairs`），拖拉机结构必须能覆盖领出的拖拉机结构
+//    （更长的拖可替代若干更短的拖，但数量不能少，见 `tractorsCover`），
+//    否则只算垫牌（trick.ts::tierOf 负责判定）。
+// 5. 盖毙甩牌的大小：由领出结构决定——无对子比顶张、有对无拖比顶对、
+//    有拖拉机比最长拖拉机（长度优先，再比顶张）；同大先出者赢（trick.ts::beats）。

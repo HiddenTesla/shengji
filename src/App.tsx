@@ -24,6 +24,7 @@ import {
 } from './core/types.ts';
 import { groupCardsForDisplay } from './core/card.ts';
 import { cssVars } from './utils/cssVars.ts';
+import { enqueueSelection } from './utils/selection.ts';
 import { createDecks, shuffleCards, dealCards, randomSeed, parseSeed, type Seed } from './core/deck.ts';
 import {
   type Declaration,
@@ -136,6 +137,7 @@ function forcedFollowIndicesOf(
     pairs: trick.leadPairs,
     tractor: trick.leadTractor,
     maxTractor: trick.leadMaxTractor,
+    tractorRuns: trick.leadTractorRuns,
   };
   const forced = mandatoryFollowCards(hand, lead, trumpSuit, levelRank);
   if (forced.length === 0) return result;
@@ -811,10 +813,12 @@ function App() {
       else {
         // 埋底阶段：最多选择与底牌等量的牌
         if (phase === GamePhase.Burying && next.size >= BOTTOM_COUNT) return prev;
-        // 出牌跟出阶段：最多选到首出张数
+        // 出牌跟出阶段：选满首出张数后继续点新牌 = 队列，挤掉最早选中的一张（必出牌不可挤）
         if (phase === GamePhase.Playing) {
           const ps = playStateRef.current;
-          if (ps && !isLeading(ps) && next.size >= ps.trick.leadCount) return prev;
+          if (ps && !isLeading(ps) && next.size >= ps.trick.leadCount) {
+            return enqueueSelection(next, index, ps.trick.leadCount, forced) ?? prev;
+          }
         }
         next.add(index);
       }

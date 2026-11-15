@@ -993,6 +993,7 @@ function pointCardPassPenalty(
     pairs: trick.leadPairs,
     tractor: trick.leadTractor,
     maxTractor: trick.leadMaxTractor,
+    tractorRuns: trick.leadTractorRuns,
   };
   if (judgePlays(trick.plays, lead, trumpSuit, levelRank) !== currentHighPlayer) {
     return 0;
@@ -1854,6 +1855,7 @@ export function aiChoosePlay(
       pairs: state.trick.leadPairs,
       tractor: state.trick.leadTractor,
       maxTractor: state.trick.leadMaxTractor,
+      tractorRuns: state.trick.leadTractorRuns,
     };
     const rootTeam = teamOf(player);
     let bestCard: Card | null = null;
@@ -1911,6 +1913,7 @@ export function aiChoosePlay(
     pairs: state.trick.leadPairs,
     tractor: state.trick.leadTractor,
     maxTractor: state.trick.leadMaxTractor,
+    tractorRuns: state.trick.leadTractorRuns,
   };
   // 多张跟牌：几种典型跟法都评分后再选（该抢的墩抢下来，该垫的分垫给对家）
   return chooseScoredFollow(state, hands, player, lead, trumpSuit, levelRank);

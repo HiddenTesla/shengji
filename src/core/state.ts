@@ -320,6 +320,7 @@ export function parseGameState(text: string): ParsedGameState {
     leadPairs: leadShape?.pairs ?? 0,
     leadTractor: leadShape?.tractor ?? 0,
     leadMaxTractor: leadShape?.maxTractor ?? 0,
+    leadTractorRuns: leadShape?.tractorRuns ?? [],
     throwBlocked: false,
     throwAttempt: [],
     plays: played,

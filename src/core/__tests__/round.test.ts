@@ -19,7 +19,7 @@ import {
 import { createDecks, dealCards, shuffleCards } from '../deck.ts';
 import { aiChooseBury } from '../bury.ts';
 import { aiChoosePlay } from '../ai.ts';
-import { analyzeShape } from '../hand.ts';
+import { analyzeShape, tractorsCover } from '../hand.ts';
 import {
   type PlayState,
   applyPlay,
@@ -134,8 +134,9 @@ function checkTrickWinner(state: PlayState, trumpSuit: Suit | null): string | nu
   if (shape.pairs < trick.leadPairs) {
     return `毙牌对子不够：领出 ${trick.leadPairs} 个，毙牌 ${shape.pairs} 个`;
   }
-  if (shape.maxTractor < trick.leadMaxTractor) {
-    return `毙牌拖拉机不够长：领出 ${trick.leadMaxTractor} 对，毙牌 ${shape.maxTractor} 对`;
+  if (!tractorsCover(shape.tractorRuns, trick.leadTractorRuns)) {
+    return `毙牌拖拉机结构不足：领出 [${trick.leadTractorRuns.join(',')}]，`
+      + `毙牌 [${shape.tractorRuns.join(',')}]`;
   }
   return null;
 }
