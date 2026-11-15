@@ -1582,6 +1582,29 @@ function App() {
   const showBar = southManual && (isDealing || (isBidding && !flipping));
   const barCanAct = !flipping && (isDealing || isBidding);
 
+  /** 报主栏（每家在各自位置）：该家为手动、发牌/叫主阶段（翻底时不可报）才显示 */
+  function renderBiddingBar(position: PlayerPosition, vertical = false) {
+    if (playerModes[position] !== PlayerMode.Manual) return null;
+    if (isBurying || !(isDealing || (isBidding && !flipping))) return null;
+    return (
+      <BiddingBar
+        player={position}
+        hand={shownHands[position]}
+        levelRank={levelRank}
+        current={bidState.current}
+        canAct={barCanAct}
+        rules={rules}
+        vertical={vertical}
+        onBid={applyDeclare}
+        // 「不反主」是全局动作，只放在南家栏上（避免同时出现四个）
+        onPass={position === PlayerPosition.South
+          && isBidding && !flipping && bidState.current !== null
+          ? passBidding
+          : undefined}
+      />
+    );
+  }
+
   // 埋底：显示庄家手牌（南家为庄家时即南家手牌）
   const bankerIsAuto = banker !== null && playerModes[banker] === PlayerMode.Auto;
   const buryingManualBanker = isBurying && banker !== null && !bankerIsAuto;
@@ -1680,6 +1703,11 @@ function App() {
       />
     );
   }
+
+  // 各家报主栏（该家为手动且处于发牌/叫主阶段时才非 null）；东/西家竖排
+  const northBidBar = renderBiddingBar(PlayerPosition.North);
+  const westBidBar = renderBiddingBar(PlayerPosition.West, true);
+  const eastBidBar = renderBiddingBar(PlayerPosition.East, true);
 
   return (
     <div className="app" style={uiScaleStyle}>
@@ -1856,6 +1884,10 @@ function App() {
 
       {/* ---- 顶部：北家 ---- */}
       <div className="stage">
+        <div className={northBidBar
+          ? 'stage__line stage__line--with-bar'
+          : 'stage__line'}
+        >
         <OpponentHand
           position={PlayerPosition.North}
           cards={shownHands.N}
@@ -1876,12 +1908,15 @@ function App() {
             ? toggleCard
             : undefined}
         />
+        {northBidBar}
+        </div>
       </div>
 
       {/* ---- 中部：西家 + 牌桌 + 东家 ---- */}
       <div className="table">
         {/* 西家 */}
         <div className="table__west">
+          <div className="side-line">
           <OpponentHand
             position={PlayerPosition.West}
             cards={shownHands.W}
@@ -1902,6 +1937,7 @@ function App() {
               ? toggleCard
               : undefined}
           />
+          {westBidBar}          </div>
           {playingTurn === PlayerPosition.West && (
             <div className="table__west-playbar">
               {renderPlayBar(true)}
@@ -2087,6 +2123,7 @@ function App() {
 
         {/* 东家 */}
         <div className="table__east">
+          <div className="side-line side-line--east">
           <OpponentHand
             position={PlayerPosition.East}
             cards={shownHands.E}
@@ -2107,6 +2144,8 @@ function App() {
               ? toggleCard
               : undefined}
           />
+          {eastBidBar}
+          </div>
           {playingTurn === PlayerPosition.East && (
             <div className="table__east-playbar">
               {renderPlayBar(true)}
@@ -2161,20 +2200,7 @@ function App() {
 
         {/* 南家报主栏（发牌/叫主阶段） */}
         <div className="center-row">
-          {!isBurying && showBar && (
-            <BiddingBar
-              player={PlayerPosition.South}
-              hand={shownHands.S}
-              levelRank={levelRank}
-              current={bidState.current}
-              canAct={barCanAct}
-              rules={rules}
-              onBid={applyDeclare}
-              onPass={isBidding && !flipping && bidState.current !== null
-                ? passBidding
-                : undefined}
-            />
-          )}
+          {!isBurying && showBar && renderBiddingBar(PlayerPosition.South)}
           {/* 南家非手动时不显示报主栏：给出原因（否则容易以为「报主框消失了」） */}
           {!isBurying && !showBar && !southManual && (isDealing || isBidding) && (
             <div className="bid-placeholder">

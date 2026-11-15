@@ -1,5 +1,5 @@
 // ============================================================
-// 四花色报主栏（仅南家，发牌/叫主阶段）
+// 四花色报主栏（南家 / 北家横排；东家 / 西家竖排）
 // 样式：src/styles/components/_bidding-bar.scss（BEM）
 // ============================================================
 
@@ -20,7 +20,7 @@ import {
 import { cssVars } from '../utils/cssVars.ts';
 
 interface BiddingBarProps {
-  /** 该栏归属玩家（南家） */
+  /** 该栏归属玩家 */
   player: PlayerPosition;
   /** 当前手牌（发牌阶段会逐张增长） */
   hand: Card[];
@@ -32,6 +32,8 @@ interface BiddingBarProps {
   canAct: boolean;
   /** 叫主相关的规则开关 */
   rules: RuleOptions;
+  /** 竖排（东 / 西家：一列一门，节省横向空间） */
+  vertical?: boolean;
   onBid: (d: Declaration) => void;
   /**
    * 「不反主」：立即结束等待反主。
@@ -77,6 +79,7 @@ export default function BiddingBar({
   current,
   canAct,
   rules,
+  vertical = false,
   onBid,
   onPass,
 }: BiddingBarProps) {
@@ -119,7 +122,10 @@ export default function BiddingBar({
   ];
 
   return (
-    <div className="bidding-bar">
+    <div className={vertical
+      ? 'bidding-bar bidding-bar--vertical'
+      : 'bidding-bar'}
+    >
       {/* 四色花列：当前（暂时）主花色高亮 */}
       {SUIT_LIST.map(suit => (
         <SuitColumn

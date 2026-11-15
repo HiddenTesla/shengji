@@ -117,3 +117,59 @@
   background: rgba(84, 110, 122, 0.1);
   color: #37474f;
 }
+
+/* ---- 竖排变体（东 / 西家）：一列一门，每门一行 ---- */
+.bidding-bar--vertical {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  padding: 5px 6px;
+  border-radius: 10px;
+
+  .bidding-bar__suit {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 3px;
+    min-width: 0;
+    padding: 2px 3px;
+    border-radius: 7px;
+  }
+
+  .bidding-bar__suit-button {
+    width: 30px;
+    height: 30px;
+    font-size: 18px;
+    border-radius: 7px;
+  }
+
+  .bidding-bar__count {
+    min-width: 10px;
+    font-size: 12px;
+  }
+
+  .bidding-bar__action {
+    min-width: 0;
+    padding: 2px 5px;
+    font-size: 11px;
+  }
+
+  .bidding-bar__joker-label {
+    font-size: 9px;
+  }
+
+  .bidding-bar__pass-group {
+    justify-content: center;
+    padding-top: 3px;
+    padding-left: 0;
+    margin-left: 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+    border-left: none;
+  }
+
+  .bidding-bar__pass {
+    min-width: 0;
+    padding: 2px 6px;
+    font-size: 11px;
+  }
+}

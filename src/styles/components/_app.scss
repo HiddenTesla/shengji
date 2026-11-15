@@ -252,6 +252,29 @@
   padding-top: 12px;
 }
 
+/* 北家手牌 + 报主栏（并排：加高 stage 会把牌桌压矮，东西家手牌会被裁） */
+.stage__line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  /* 有报主栏时整行会变宽，右侧留给左上角等级面板，避免手牌从面板下面穿过 */
+  &--with-bar {
+    padding-left: 212px;
+  }
+}
+
+/* 东 / 西家：手牌 + 竖排报主栏（并排，栏靠向桌面中央） */
+.side-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+
+  &--east {
+    flex-direction: row-reverse;
+  }
+}
+
 .table {
   flex: 1;
   min-height: 0;
