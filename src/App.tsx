@@ -89,6 +89,7 @@ import BottomReveal from './components/BottomReveal.tsx';
 import TrickArea from './components/TrickArea.tsx';
 import PlayBar from './components/PlayBar.tsx';
 import RoundSettlement from './components/RoundSettlement.tsx';
+import InitialHandsDialog from './components/InitialHandsDialog.tsx';
 import PlayLogDialog from './components/PlayLogDialog.tsx';
 import CardTrackerDialog from './components/CardTrackerDialog.tsx';
 import CardComponent from './components/CardComponent.tsx';
@@ -540,6 +541,8 @@ function App() {
   /** 出牌记录弹窗 */
   const [playLogOpen, setPlayLogOpen] = useState(false);
   const [playLogMode, setPlayLogMode] = useState<'plays' | 'full'>('plays');
+  /** 结算里的「四家初始手牌」弹窗 */
+  const [initialHandsOpen, setInitialHandsOpen] = useState(false);
   const [stateExportOpen, setStateExportOpen] = useState(false);
   const [stateImportOpen, setStateImportOpen] = useState(false);
   const [confirmStateImport, setConfirmStateImport] = useState(false);
@@ -2030,6 +2033,9 @@ function App() {
               laps={laps}
               levelSettlement={levelSettlement}
               onViewPlayLog={() => openPlayLog('full')}
+              onViewInitialHands={fullHandsRef.current
+                ? () => setInitialHandsOpen(true)
+                : undefined}
               onNextRound={startNextRound}
             />
           )}
@@ -2235,6 +2241,18 @@ function App() {
           setConfirmStateImport(true);
         }}
         onClose={() => setStateImportOpen(false)}
+      />
+
+      {/* 四家初始手牌（结算里点「🃏 初始手牌」打开）：可切换埋底前 / 埋底后 */}
+      <InitialHandsDialog
+        open={initialHandsOpen}
+        hands={fullHandsRef.current}
+        bottomCards={originalBottomRef.current}
+        buriedCards={buriedCards}
+        banker={banker}
+        trumpSuit={trumpSuit}
+        levelRank={levelRank}
+        onClose={() => setInitialHandsOpen(false)}
       />
 
       <ConfirmDialog
