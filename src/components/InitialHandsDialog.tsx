@@ -163,12 +163,18 @@ export default function InitialHandsDialog({
               <div className="initial-hands__groups">
                 {groupCardsForDisplay(cards, trumpSuit, levelRank).map(group => (
                   <div key={String(group.kind)} className="initial-hands__group">
-                    <span
-                      className="initial-hands__group-label"
+                    {/* 门标签 + 该门张数（张数在花色下方） */}
+                    <div
+                      className="initial-hands__group-info"
                       style={cssVars({ '--suit-color': GROUP_TEXT_COLOR[group.kind] })}
                     >
-                      {group.kind === 'trump' ? '主牌' : SUIT_SYMBOL[group.kind]}
-                    </span>
+                      <span className="initial-hands__group-label">
+                        {group.kind === 'trump' ? '主牌' : SUIT_SYMBOL[group.kind]}
+                      </span>
+                      <span className="initial-hands__group-count">
+                        {group.cards.length}
+                      </span>
+                    </div>
                     <div className="initial-hands__cards">
                       {group.cards.map(card => {
                         // 从底牌拿到的牌（两种视图都标：埋底后剩下的底牌同样高亮）

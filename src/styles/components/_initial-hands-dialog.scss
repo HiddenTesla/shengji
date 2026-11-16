@@ -116,10 +116,27 @@
   gap: 4px;
 }
 
+/* 门标签 + 该门张数（竖排在牌左侧，张数在花色下方） */
+.initial-hands__group-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1;
+}
+
 .initial-hands__group-label {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--suit-color, #{$text-on-dark});
+}
+
+.initial-hands__group-count {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--suit-color, #{$text-on-dark});
+  opacity: 0.7;
 }
 
 .initial-hands__cards {
