@@ -24,6 +24,7 @@ import {
   type HandShape,
   type PlayValidation,
   analyzeShape,
+  sortPlayedDesc,
   throwFallback,
   validateFollow,
   validateLead,
@@ -290,6 +291,8 @@ export function applyPlay(
     ? resolveLead(hands, player, cards, trumpSuit, levelRank)
     : null;
   const played = resolved ? resolved.cards : cards;
+  // 展示顺序：从大到小、同门聚在一起（规则判定与顺序无关）
+  const shown = sortPlayedDesc(played, trumpSuit, levelRank);
 
   const newHands: Hands = {
     ...hands,
@@ -298,7 +301,7 @@ export function applyPlay(
 
   const play: PlayedCards = {
     player,
-    cards: played,
+    cards: shown,
     handType: analyzeShape(played, trumpSuit, levelRank).type,
   };
   const trick: TrickState = { ...state.trick, plays: [...state.trick.plays, play] };
@@ -315,7 +318,9 @@ export function applyPlay(
     trick.leadTractorRuns = shape.tractorRuns;
     // 甩牌合法性：在牌已经打出**之后**判定；被拦则已按「自动出小」改出
     trick.throwBlocked = resolved?.throwBlocked ?? false;
-    trick.throwAttempt = resolved?.throwAttempt ?? [];
+    trick.throwAttempt = resolved?.throwAttempt
+      ? sortPlayedDesc(resolved.throwAttempt, trumpSuit, levelRank)
+      : [];
   }
 
   // 四家出完 → 等待收墩

@@ -147,6 +147,54 @@ export function sortForDiscard(
 }
 
 // ------------------------------------------------------------
+// 出牌展示顺序
+// ------------------------------------------------------------
+
+/**
+ * 出牌展示顺序：**从大到小**，并且同门的牌聚在一起。
+ *
+ * 甩牌 / 杂牌跟牌时，如果按选中（或 AI 选牌）的原始顺序摆出来，
+ * 对子和拖拉机经常会被别的门插在中间，看上去像被拆开了。
+ *
+ * - 先按「门」分组：主牌门永远在最前，其余各门按「该门最大牌」从大到小；
+ * - 组内按门内槽位从大到小（同槽位的牌必然相邻 → 对子 / 拖拉机不会被拆）。
+ *
+ * 只用于展示（出牌区 / 出牌记录），规则判定全部与顺序无关。
+ */
+export function sortPlayedDesc(
+  cards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[] {
+  const groups = new Map<Door, { cards: Card[]; top: number }>();
+  for (const card of cards) {
+    const door = doorOf(card, trumpSuit, levelRank);
+    const slot = slotOf(card, trumpSuit, levelRank);
+    const group = groups.get(door);
+    if (group) {
+      group.cards.push(card);
+      group.top = Math.max(group.top, slot);
+    } else {
+      groups.set(door, { cards: [card], top: slot });
+    }
+  }
+
+  // 主牌门优先；其余门按顶张从大到小（同顶张保持首次出现的先后）
+  const ordered = [...groups.entries()].sort((a, b) => {
+    const at = a[0] === 'trump' ? 1 : 0;
+    const bt = b[0] === 'trump' ? 1 : 0;
+    if (at !== bt) return bt - at;
+    return b[1].top - a[1].top;
+  });
+
+  return ordered.flatMap(([, group]) =>
+    [...group.cards].sort(
+      (a, b) => slotOf(b, trumpSuit, levelRank) - slotOf(a, trumpSuit, levelRank),
+    ),
+  );
+}
+
+// ------------------------------------------------------------
 // 牌型
 // ------------------------------------------------------------
 

@@ -9,6 +9,7 @@ import './ai.test.ts';
 import './state.test.ts';
 import './deck.test.ts';
 import './selection.test.ts';
+import './playorder.test.ts';
 import { report } from './harness.ts';
 
 /** 汇总结果（供 scripts/run-tests.mjs 读取） */
