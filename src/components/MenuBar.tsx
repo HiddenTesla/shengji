@@ -27,6 +27,10 @@ interface MenuBarProps {
   gameSpeed: number;
   /** 选择速度档位（「选项 → 游戏速度」，不需要弹框） */
   onChangeSpeed: (level: number) => void;
+  /** 是否开启「增强鼠标右键」（右键 = 出牌 / 埋底） */
+  rightClickConfirm?: boolean;
+  /** 选择是否开启「增强鼠标右键」（「选项 → 增强鼠标右键 → 开启 / 关闭」） */
+  onChangeRightClick?: (enabled: boolean) => void;
   /** 是否已有本局（已发过牌）：false = 开始界面，依赖本局的菜单项置灰 */
   hasActiveRound?: boolean;
 }
@@ -76,6 +80,8 @@ export default function MenuBar({
   onViewSeed,
   gameSpeed,
   onChangeSpeed,
+  rightClickConfirm = false,
+  onChangeRightClick,
   hasActiveRound = true,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<MenuKey | null>(null);
@@ -199,7 +205,35 @@ export default function MenuBar({
 
         {openMenu === 'options' && (
           <div role="menu" className="menu-bar__dropdown">
-            {/* 目前只有一个选项：光标移到「游戏速度」上，右侧展开速度子菜单 */}
+            {/* 增强鼠标右键：右键 = 点「出牌 / 埋底」；hover 后右侧展开「开启 / 关闭」子菜单 */}
+            {onChangeRightClick && (
+              <div className="menu-bar__submenu-group">
+                <button
+                  role="menuitem"
+                  aria-haspopup="menu"
+                  title="右键 = 点「出牌 / 埋底」，同时屏蔽浏览器右键菜单"
+                  className="menu-bar__item menu-bar__item--parent"
+                >
+                  增强鼠标右键
+                  <span className="menu-bar__arrow">▸</span>
+                </button>
+                <div role="menu" className="menu-bar__submenu">
+                  <MenuItem
+                    checked={rightClickConfirm}
+                    onClick={() => closeThen(() => onChangeRightClick(true))}
+                  >
+                    开启
+                  </MenuItem>
+                  <MenuItem
+                    checked={!rightClickConfirm}
+                    onClick={() => closeThen(() => onChangeRightClick(false))}
+                  >
+                    关闭
+                  </MenuItem>
+                </div>
+              </div>
+            )}
+            {/* 光标移到「游戏速度」上，右侧展开速度子菜单 */}
             <div className="menu-bar__submenu-group">
               <button
                 role="menuitem"

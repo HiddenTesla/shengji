@@ -261,6 +261,8 @@ function App() {
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [animatingCardIds, setAnimatingCardIds] = useState<Set<string>>(new Set());
   const [gameSpeed, setGameSpeed] = useState(3);
+  /** 增强鼠标右键：开启后右键 = 点「出牌 / 埋底」（同时屏蔽浏览器右键菜单） */
+  const [rightClickConfirm, setRightClickConfirm] = useState(false);
   const [playerModes, setPlayerModes] = useState<Record<PlayerPosition, PlayerMode>>({
     E: PlayerMode.Auto,
     S: PlayerMode.Manual,
@@ -1455,6 +1457,8 @@ function App() {
       }}
       gameSpeed={gameSpeed}
       onChangeSpeed={setGameSpeed}
+      rightClickConfirm={rightClickConfirm}
+      onChangeRightClick={setRightClickConfirm}
       hasActiveRound={started}
     />
   );
@@ -1832,8 +1836,31 @@ function App() {
     ? renderPlayBar()
     : null;
 
+  /**
+   * 增强鼠标右键：右键 = 点「出牌 / 埋底」。
+   * 开关打开时屏蔽浏览器右键菜单（弹窗里也只屏蔽，不触发动作）；
+   * 只在「轮到自己 / 自己埋底」时生效，其余时候右键什么也不做。
+   */
+  function handleContextMenu(event: React.MouseEvent<HTMLDivElement>) {
+    if (!rightClickConfirm) return;
+    event.preventDefault();
+    const target = event.target;
+    if (target instanceof Element && target.closest('.dialog-overlay, .log-overlay')) {
+      return;
+    }
+    if (turnIsManual && playState && !playState.trick.complete) {
+      commitPlay();
+      return;
+    }
+    if (buryingManualBanker) confirmBury();
+  }
+
   return (
-    <div className="app" style={uiScaleStyle}>
+    <div
+      className="app"
+      style={uiScaleStyle}
+      onContextMenu={handleContextMenu}
+    >
       {/* ---- 顶部菜单栏 ---- */}
       {menuBar}
 
