@@ -2252,10 +2252,7 @@ function App() {
 
           {/* 撤销 / 继续托管 / 查看底牌（查看底牌的按钮固定在这一行） */}
           <div className="action-row">
-            <BottomReveal
-              cards={buriedCards}
-              canReveal={banker === PlayerPosition.South}
-            />
+            <BottomReveal cards={buriedCards} />
             <button
               className="undo-button"
               onClick={undo}
