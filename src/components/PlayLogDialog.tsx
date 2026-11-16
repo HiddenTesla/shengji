@@ -13,9 +13,15 @@ import {
   type RoundRecord,
   decodeCardId,
 } from '../core/playlog.ts';
+import { type Door, doorLabel, doorOf } from '../core/hand.ts';
 import {
   HandType,
+  isPointCard,
+  type PlayerPosition,
   POSITION_NAME_ZH,
+  Rank,
+  RANK_NAME,
+  Suit,
 } from '../core/types.ts';
 import CardComponent from './CardComponent.tsx';
 
@@ -50,6 +56,34 @@ function shapeLabel(shape: PlayRecord['shape'], isLead: boolean): string {
   }
 }
 
+type RankComparison = 'gt' | 'gte' | 'eq' | 'lte' | 'lt';
+type ScoreFilter = 'any' | 'with' | 'without';
+type PlayerRecordFilter = PlayerPosition | 'all';
+type FilterDisplayMode = 'none' | 'filter' | 'highlight';
+
+const RANK_COMPARISONS: { value: RankComparison; label: string }[] = [
+  { value: 'gt', label: '>' },
+  { value: 'gte', label: '≥' },
+  { value: 'eq', label: '=' },
+  { value: 'lte', label: '≤' },
+  { value: 'lt', label: '<' },
+];
+
+function matchesRank(rank: Rank, comparison: RankComparison, target: Rank): boolean {
+  switch (comparison) {
+    case 'gt':
+      return rank > target;
+    case 'gte':
+      return rank >= target;
+    case 'eq':
+      return rank === target;
+    case 'lte':
+      return rank <= target;
+    case 'lt':
+      return rank < target;
+  }
+}
+
 export default function PlayLogDialog({
   open,
   mode,
@@ -65,6 +99,12 @@ export default function PlayLogDialog({
   const [showJson, setShowJson] = useState(false);
   /** 复制成功提示（短暂显示「已复制」） */
   const [copied, setCopied] = useState(false);
+  const [playerFilter, setPlayerFilter] = useState<PlayerRecordFilter>('all');
+  const [doorFilter, setDoorFilter] = useState<Door | 'all'>('all');
+  const [scoreFilter, setScoreFilter] = useState<ScoreFilter>('any');
+  const [rankFilter, setRankFilter] = useState<Rank | ''>('');
+  const [rankComparison, setRankComparison] = useState<RankComparison | ''>('');
+  const [filterDisplayMode, setFilterDisplayMode] = useState<FilterDisplayMode>('filter');
 
   useEffect(() => {
     if (!open) return;
@@ -80,6 +120,12 @@ export default function PlayLogDialog({
     if (!open) return;
     setShowJson(mode === 'full');
     setCopied(false);
+    setPlayerFilter('all');
+    setDoorFilter('all');
+    setScoreFilter('any');
+    setRankFilter('');
+    setRankComparison('');
+    setFilterDisplayMode('filter');
   }, [open, mode]);
 
   useEffect(() => {
@@ -129,10 +175,60 @@ export default function PlayLogDialog({
 
   const hasPlays = record !== null
     && record.tricks.some(trick => trick.plays.length > 0);
+  const allTrickItems = (record?.tricks ?? [])
+    .map((trick, index) => ({
+      trick,
+      index,
+      plays: trick.plays.map(play => ({
+        play,
+        matchingCardIds: (() => {
+          if (playerFilter !== 'all' && play.player !== playerFilter) return new Set<string>();
+          const cards = play.cards.map(decodeCardId);
+          const hasScore = cards.some(card => isPointCard(card.rank));
+          if (scoreFilter === 'without' && hasScore) return new Set<string>();
+          return new Set(cards
+            .filter(card => (
+              (
+                doorFilter === 'all'
+                || doorOf(card, record?.trump?.suit ?? null, record?.level ?? Rank.Two)
+                  === doorFilter
+              )
+              && (
+                scoreFilter !== 'with'
+                || isPointCard(card.rank)
+              )
+              && (
+                rankFilter === ''
+                || rankComparison === ''
+                || matchesRank(card.rank, rankComparison, rankFilter)
+              )
+            ))
+            .map(card => card.id));
+        })(),
+      })),
+    }))
+    .filter(item => item.plays.length > 0);
+  const filteredTrickItems = allTrickItems
+    .map(item => ({
+      ...item,
+      plays: item.plays.filter(play => play.matchingCardIds.size > 0),
+    }))
+    .filter(item => item.plays.length > 0);
 
   // 只反转「墩」的顺序；墩内仍按出牌顺序（领出 → 跟出）
-  const trickItems = (record?.tricks ?? []).map((trick, index) => ({ trick, index }));
+  const trickItems = filterDisplayMode === 'filter'
+    ? [...filteredTrickItems]
+    : [...allTrickItems];
   if (order === 'desc') trickItems.reverse();
+  const filteredPlayCount = filteredTrickItems.reduce(
+    (count, item) => count + item.plays.length,
+    0,
+  );
+  const hasFilters = playerFilter !== 'all'
+    || doorFilter !== 'all'
+    || scoreFilter !== 'any'
+    || rankFilter !== ''
+    || rankComparison !== '';
 
   return (
     <div className="log-overlay" onClick={onClose}>
@@ -149,7 +245,13 @@ export default function PlayLogDialog({
           </div>
           {record && (
             <span className="log-panel__count">
-              共 {record.tricks.length} 墩
+              {hasFilters
+                ? filterDisplayMode === 'highlight'
+                  ? `共 ${allTrickItems.length} 墩 · 高亮 ${filteredPlayCount} 手`
+                  : filterDisplayMode === 'filter'
+                    ? `匹配 ${filteredTrickItems.length} 墩 · ${filteredPlayCount} 手`
+                    : `共 ${allTrickItems.length} 墩 · 未应用筛选`
+                : `共 ${record.tricks.length} 墩`}
             </span>
           )}
           <button className="log-panel__close" onClick={onClose} aria-label="关闭">
@@ -158,77 +260,200 @@ export default function PlayLogDialog({
         </div>
 
         {!showingJson ? (
-          <div className="log-list">
-            {!hasPlays && (
-              <div className="log-list__empty">
-                本局还没有出牌记录
+          <>
+            <div className="log-filters" aria-label="出牌记录筛选">
+              <label className="log-filters__control">
+                <span>玩家</span>
+                <select
+                  value={playerFilter}
+                  onChange={event => setPlayerFilter(event.target.value as PlayerRecordFilter)}
+                >
+                  <option value="all">全部</option>
+                  {Object.entries(POSITION_NAME_ZH).map(([position, name]) => (
+                    <option key={position} value={position}>{name}家</option>
+                  ))}
+                </select>
+              </label>
+              <label className="log-filters__control">
+                <span>门</span>
+                <select
+                  value={doorFilter}
+                  onChange={event => setDoorFilter(event.target.value as Door | 'all')}
+                >
+                  <option value="all">全部</option>
+                  {[Suit.Spade, Suit.Heart, Suit.Club, Suit.Diamond]
+                    .filter(suit => record?.trump?.suit !== suit)
+                    .map(suit => (
+                      <option key={suit} value={suit}>
+                        {doorLabel(suit)}
+                      </option>
+                    ))}
+                  <option value="trump">主牌</option>
+                </select>
+              </label>
+              <label className="log-filters__control">
+                <span>分数</span>
+                <select
+                  value={scoreFilter}
+                  onChange={event => setScoreFilter(event.target.value as ScoreFilter)}
+                >
+                  <option value="any">不限</option>
+                  <option value="with">含分牌</option>
+                  <option value="without">不含分牌</option>
+                </select>
+              </label>
+              <label className="log-filters__control">
+                <span>点数</span>
+                <select
+                  value={rankComparison}
+                  onChange={event => setRankComparison(
+                    event.target.value as RankComparison | '',
+                  )}
+                  aria-label="点数比较方式"
+                >
+                  <option value="">无选择</option>
+                  {RANK_COMPARISONS.map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <select
+                  value={rankFilter}
+                  onChange={event => setRankFilter(
+                    event.target.value === '' ? '' : Number(event.target.value) as Rank,
+                  )}
+                  aria-label="比较点数"
+                >
+                  <option value="">不限</option>
+                  {Object.values(Rank)
+                    .filter((rank): rank is Rank => typeof rank === 'number')
+                    .sort((a, b) => a - b)
+                    .map(rank => (
+                      <option key={rank} value={rank}>{RANK_NAME[rank]}</option>
+                    ))}
+                </select>
+              </label>
+              {hasFilters && (
+                <button
+                  className="log-panel__chip"
+                  onClick={() => {
+                    setPlayerFilter('all');
+                    setDoorFilter('all');
+                    setScoreFilter('any');
+                    setRankFilter('');
+                    setRankComparison('');
+                  }}
+                >
+                  清除筛选
+                </button>
+              )}
+              <div className="log-panel__chip-group log-filters__mode">
+                <span>显示</span>
+                <button
+                  className={chipClass(filterDisplayMode === 'none')}
+                  onClick={() => setFilterDisplayMode('none')}
+                >
+                  无
+                </button>
+                <button
+                  className={chipClass(filterDisplayMode === 'filter')}
+                  onClick={() => setFilterDisplayMode('filter')}
+                >
+                  筛选
+                </button>
+                <button
+                  className={chipClass(filterDisplayMode === 'highlight')}
+                  onClick={() => setFilterDisplayMode('highlight')}
+                >
+                  高亮
+                </button>
               </div>
-            )}
-
-            {trickItems.map(({ trick, index }) => (
-              <div
-                key={index}
-                className="log-trick"
-              >
-                <div className="log-trick__header">
-                  <b className="log-trick__no">第 {index + 1} 墩</b>
-                  <span className="log-trick__meta">
-                    领出 {POSITION_NAME_ZH[trick.leadPlayer]}家
-                  </span>
-                  {trick.winner && (
-                    <span className="log-trick__meta">
-                      · 赢家 {POSITION_NAME_ZH[trick.winner]}家
-                    </span>
-                  )}
-                  {trick.points !== undefined && (
-                    <span className="log-trick__points">
-                      · {trick.points} 分
-                    </span>
-                  )}
-                  {trick.scoreAfter && (
-                    <span className="log-trick__score">
-                      闲 {trick.scoreAfter.defending} / 庄 {trick.scoreAfter.banker}
-                    </span>
-                  )}
+            </div>
+            <div className="log-list">
+              {!hasPlays && (
+                <div className="log-list__empty">
+                  本局还没有出牌记录
                 </div>
+              )}
+              {hasPlays && filterDisplayMode === 'filter' && trickItems.length === 0 && (
+                <div className="log-list__empty">
+                  没有符合条件的出牌记录
+                </div>
+              )}
 
-                {trick.plays.map((play, playIndex) => (
-                  <div
-                    key={playIndex}
-                    className="log-play"
-                  >
-                    <span className="log-play__player">
-                      {POSITION_NAME_ZH[play.player]}家
+              {trickItems.map(({ trick, index, plays }) => (
+                <div
+                  key={index}
+                  className="log-trick"
+                >
+                  <div className="log-trick__header">
+                    <b className="log-trick__no">第 {index + 1} 墩</b>
+                    <span className="log-trick__meta">
+                      领出 {POSITION_NAME_ZH[trick.leadPlayer]}家
                     </span>
-                    <div className="log-play__cards">
-                      {play.cards.map(id => (
-                        <CardComponent
-                          key={id}
-                          card={decodeCardId(id)}
-                          faceUp={true}
-                          small={true}
-                          scale={0.52}
-                        />
-                      ))}
-                    </div>
-                    <span className="log-play__shape">
-                      {shapeLabel(play.shape, playIndex === 0)}
-                    </span>
-                    {play.shape.points !== undefined && (
-                      <span className="log-play__points">
-                        +{play.shape.points}
+                    {trick.winner && (
+                      <span className="log-trick__meta">
+                        · 赢家 {POSITION_NAME_ZH[trick.winner]}家
                       </span>
                     )}
-                    {play.throw && (
-                      <span className="log-play__throw">
-                        甩牌被拦 · 欲甩 {play.throw.attempted.length} 张
+                    {trick.points !== undefined && (
+                      <span className="log-trick__points">
+                        · {trick.points} 分
+                      </span>
+                    )}
+                    {trick.scoreAfter && (
+                      <span className="log-trick__score">
+                        闲 {trick.scoreAfter.defending} / 庄 {trick.scoreAfter.banker}
                       </span>
                     )}
                   </div>
-                ))}
-              </div>
-            ))}
-          </div>
+
+                  {plays.map(({ play, matchingCardIds }) => (
+                    <div
+                      key={play.player}
+                      className="log-play"
+                    >
+                      <span className="log-play__player">
+                        {POSITION_NAME_ZH[play.player]}家
+                      </span>
+                      <div className="log-play__cards">
+                        {play.cards.map(id => (
+                          <span
+                            key={id}
+                            className={hasFilters
+                              && filterDisplayMode === 'highlight'
+                              ? matchingCardIds.has(id)
+                                ? 'log-play__card log-play__card--highlight'
+                                : 'log-play__card log-play__card--dimmed'
+                              : 'log-play__card'}
+                          >
+                            <CardComponent
+                              card={decodeCardId(id)}
+                              faceUp={true}
+                              small={true}
+                              scale={0.52}
+                            />
+                          </span>
+                        ))}
+                      </div>
+                      <span className="log-play__shape">
+                        {shapeLabel(play.shape, play.player === trick.leadPlayer)}
+                      </span>
+                      {play.shape.points !== undefined && (
+                        <span className="log-play__points">
+                          +{play.shape.points}
+                        </span>
+                      )}
+                      {play.throw && (
+                        <span className="log-play__throw">
+                          甩牌被拦 · 欲甩 {play.throw.attempted.length} 张
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </>
         ) : (
           <pre className="log-text">
             {fullText}

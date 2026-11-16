@@ -24,6 +24,7 @@ import {
   type HandShape,
   type PlayValidation,
   analyzeShape,
+  sortPlayedDesc,
   throwFallback,
   validateFollow,
   validateLead,
@@ -58,8 +59,10 @@ export interface TrickState {
   leadPairs: number;
   /** 首出拖拉机长度（对数，0 = 非拖拉机） */
   leadTractor: number;
-  /** 首出里最长的一段拖拉机（对数，0 = 无）；毙牌需带不短于它的拖拉机 */
+  /** 首出里最长的一段拖拉机（对数，0 = 无） */
   leadMaxTractor: number;
+  /** 首出里各段拖拉机的长度（对数，仅 ≥2 的段）；毙牌结构判定用 */
+  leadTractorRuns: number[];
   /** 首出为甩牌且已被三家管住（**出牌之后**判定；此时已按「自动出小」改出） */
   throwBlocked: boolean;
   /** 甩牌失败时，原本想甩的牌（本墩内展示用；空数组 = 未失败） */
@@ -111,6 +114,7 @@ function emptyTrick(leadPlayer: PlayerPosition): TrickState {
     leadPairs: 0,
     leadTractor: 0,
     leadMaxTractor: 0,
+    leadTractorRuns: [],
     throwBlocked: false,
     throwAttempt: [],
     plays: [],
@@ -173,6 +177,7 @@ export function validatePlay(
     pairs: trick.leadPairs,
     tractor: trick.leadTractor,
     maxTractor: trick.leadMaxTractor,
+    tractorRuns: trick.leadTractorRuns,
   };
   return validateFollow(hand, lead, cards, trumpSuit, levelRank);
 }
@@ -194,6 +199,7 @@ export function judgeTrick(
     pairs: trick.leadPairs,
     tractor: trick.leadTractor,
     maxTractor: trick.leadMaxTractor,
+    tractorRuns: trick.leadTractorRuns,
   };
   return judgePlays(trick.plays, lead, trumpSuit, levelRank);
 }
@@ -230,6 +236,7 @@ export function canBeatCurrentPlay(
     pairs: trick.leadPairs,
     tractor: trick.leadTractor,
     maxTractor: trick.leadMaxTractor,
+    tractorRuns: trick.leadTractorRuns,
   };
   return beats(cards, best.cards, lead, trumpSuit, levelRank);
 }
@@ -284,6 +291,8 @@ export function applyPlay(
     ? resolveLead(hands, player, cards, trumpSuit, levelRank)
     : null;
   const played = resolved ? resolved.cards : cards;
+  // 展示顺序：从大到小、同门聚在一起（规则判定与顺序无关）
+  const shown = sortPlayedDesc(played, trumpSuit, levelRank);
 
   const newHands: Hands = {
     ...hands,
@@ -292,7 +301,7 @@ export function applyPlay(
 
   const play: PlayedCards = {
     player,
-    cards: played,
+    cards: shown,
     handType: analyzeShape(played, trumpSuit, levelRank).type,
   };
   const trick: TrickState = { ...state.trick, plays: [...state.trick.plays, play] };
@@ -306,9 +315,12 @@ export function applyPlay(
     trick.leadPairs = shape.pairs;
     trick.leadTractor = shape.tractor;
     trick.leadMaxTractor = shape.maxTractor;
+    trick.leadTractorRuns = shape.tractorRuns;
     // 甩牌合法性：在牌已经打出**之后**判定；被拦则已按「自动出小」改出
     trick.throwBlocked = resolved?.throwBlocked ?? false;
-    trick.throwAttempt = resolved?.throwAttempt ?? [];
+    trick.throwAttempt = resolved?.throwAttempt
+      ? sortPlayedDesc(resolved.throwAttempt, trumpSuit, levelRank)
+      : [];
   }
 
   // 四家出完 → 等待收墩

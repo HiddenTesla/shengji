@@ -23,6 +23,7 @@ import {
 } from './types.ts';
 import { type Door, analyzeShape } from './hand.ts';
 import { trickPoints } from './scoring.ts';
+import type { Seed } from './deck.ts';
 
 /** JSON 中的稳定卡牌 ID，如 "S5#0"、"J17#1" */
 export type JsonCardId = string
@@ -70,7 +71,8 @@ export interface TrickRecord {
 
 export interface DealRecord {
   mode: 'shuffle' | 'sameDeal';
-  seed?: number;
+  /** 128 位洗牌种子（IPv6 式 8 组十六进制，如 `9f86:d0e4:…:5e71`） */
+  seed?: Seed;
   hands: Record<PlayerPosition, JsonCardId[]>;
   bottom: JsonCardId[];
 }

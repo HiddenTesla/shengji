@@ -18,6 +18,8 @@ interface ConfirmDialogProps {
   width?: number;
   /** 确认按钮是否为危险操作（红色） */
   danger?: boolean;
+  /** 禁用确认按钮（如输入校验未通过） */
+  confirmDisabled?: boolean;
   /** 附加内容（如规则选项），渲染在说明文字与按钮之间 */
   children?: ReactNode;
   onConfirm: () => void;
@@ -33,6 +35,7 @@ export default function ConfirmDialog({
   hideCancel = false,
   width = 360,
   danger = false,
+  confirmDisabled = false,
   children,
   onConfirm,
   onCancel,
@@ -42,11 +45,11 @@ export default function ConfirmDialog({
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onCancel();
-      if (event.key === 'Enter') onConfirm();
+      if (event.key === 'Enter' && !confirmDisabled) onConfirm();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, onCancel, onConfirm]);
+  }, [open, onCancel, onConfirm, confirmDisabled]);
 
   if (!open) return null;
 
@@ -92,6 +95,7 @@ export default function ConfirmDialog({
             className={danger
               ? 'dialog__button dialog__button--confirm dialog__button--danger'
               : 'dialog__button dialog__button--confirm'}
+            disabled={confirmDisabled}
             onClick={onConfirm}
           >
             {confirmLabel}

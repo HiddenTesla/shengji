@@ -1,7 +1,7 @@
 // ============================================================
 // 底牌查看 —— 以弹窗（modal）的形式查看埋入的 8 张底牌
 // 桌中央留给出牌区，底牌不再常驻显示
-// 仅当南家为庄（canReveal）时可查看
+// 埋底后即可查看（与谁做庄无关：庄家为东/北/西家时同样可查）
 // ============================================================
 
 import { useState, useEffect } from 'react';
@@ -12,15 +12,13 @@ import {
 import CardComponent from './CardComponent.tsx';
 
 interface BottomRevealProps {
-  /** 底牌（8 张） */
+  /** 底牌（8 张）；空数组 = 尚未埋底 / 本局无底牌，按钮隐藏且不可点 */
   cards: Card[];
-  /** 是否允许查看（南家为庄） */
-  canReveal: boolean;
 }
 
-export default function BottomReveal({ cards, canReveal }: BottomRevealProps) {
+export default function BottomReveal({ cards }: BottomRevealProps) {
   const [open, setOpen] = useState(false);
-  const canShow = canReveal && cards.length > 0;
+  const canShow = cards.length > 0;
 
   // Esc 关闭弹窗
   useEffect(() => {
@@ -32,7 +30,7 @@ export default function BottomReveal({ cards, canReveal }: BottomRevealProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
-  // 变得不可查看时（换局 / 庄家不是南家）自动关掉弹窗
+  // 变得不可查看时（新的一局 / 底牌清空）自动关掉弹窗
   useEffect(() => {
     if (!canShow) setOpen(false);
   }, [canShow]);

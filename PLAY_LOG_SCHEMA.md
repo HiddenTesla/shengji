@@ -126,12 +126,13 @@ PlayRecord
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|:---:|------|
-| `mode` | `"shuffle" \| "sameDeal"` | ✅ | `sameDeal` = 菜单「原样发牌…」 |
-| `seed` | integer | | 仅在洗牌用了可复现种子时记录（当前 `App` 未传 seed，可先留空） |
+| `mode` | `"shuffle" \| "sameDeal"` | ✅ | `sameDeal` = 菜单「重新发牌…」的「使用当前种子」 |
+| `seed` | string | ✅（`shuffle` 时） | **128 位**洗牌种子（sfc32），IPv6 式 8 组 4 位小写十六进制，如 `9f86:d0e4:6a2e:7b12:4c1f:88aa:0b3d:5e71`。种子固定 → 发牌完全可复现；`sameDeal` 沿用上一次的种子；导入局面时缺失 |
 | `hands` | `{E,N,W,S: cardId[]}` | ✅ | **发牌后的初始手牌**（每人 25 张） |
 | `bottom` | `cardId[]` | ✅ | 原始底牌 8 张（抠底计分与「拿底」都依赖它） |
 
-> 由于当前洗牌可能未固定 seed，**完整 `hands` 快照是必需的**，不能只靠 seed 复现。
+> 即使有 `seed`，**完整 `hands` 快照仍然必需**：种子只能在同一套洗牌实现下复现，
+> 而匹配算法 / 牌序一旦改动，旧种子的牌面就会变。
 
 ### 3.2 `trump`（最终生效的亮主）
 
@@ -266,7 +267,7 @@ PlayRecord
 
       "deal": {
         "mode": "shuffle",
-        "seed": 123456789,
+        "seed": "9f86:d0e4:6a2e:7b12:4c1f:88aa:0b3d:5e71",
         "hands": {
           "E": ["S2#0", "S2#1", "...",],
           "N": ["...",],
@@ -489,7 +490,7 @@ function replayRound(round: RoundRecord, trumpSuit: Suit | null, levelRank: Rank
 | # | 问题 | 建议 |
 |---|------|------|
 | 1 | 「新的一局」与「下一局」的边界 | **已定**：每局一份 `PlayLog`（`rounds` 只有 1 项），下一局发牌时重建；不跨局累积 |
-| 2 | 是否记录洗牌 seed | 记录（若能给 `shuffleCards` 传 seed）；完整 `hands` 快照仍然必需 |
+| 2 | 是否记录洗牌 seed | **已定**：记录（`App` 每局随机生成并写入 `deal.seed`，菜单「查看 → 查看种子」可查看）；完整 `hands` 快照仍然必需 |
 | 3 | 被反掉的中间亮主声明 | 当前只记最终 `trump`；如需完整过程可加 `trump.bids[]`（每项带 `atDealt`） |
 | 4 | 是否记录托管 / 手动切换 | 当前只记本局起始 `playerModes`；如需逐手归属，可给 `PlayRecord` 加 `mode` |
 | 5 | 进行中的部分墩是否允许导出 | 建议允许，`plays` 长度 1..4；完成的一局必须为 4 |
@@ -573,7 +574,7 @@ function replayRound(round: RoundRecord, trumpSuit: Suit | null, levelRank: Rank
       "required": ["mode", "hands", "bottom"],
       "properties": {
         "mode": { "enum": ["shuffle", "sameDeal"] },
-        "seed": { "type": "integer" },
+        "seed": { "type": "string", "pattern": "^[0-9a-f]{4}(:[0-9a-f]{4}){7}$" },
         "hands": {
           "type": "object",
           "required": ["E", "N", "W", "S"],

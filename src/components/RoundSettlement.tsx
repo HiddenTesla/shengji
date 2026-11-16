@@ -39,6 +39,8 @@ interface RoundSettlementProps {
   levelSettlement: LevelSettlement | null;
   /** 点击「完整日志」：由 App 打开本局日志（可导出 JSON / JSONC） */
   onViewPlayLog: () => void;
+  /** 点击「初始手牌」（四家发牌时的手牌，可切换埋底前 / 埋底后）；未提供则不显示按钮 */
+  onViewInitialHands?: () => void;
   /** 点击「下一局」 */
   onNextRound: () => void;
 }
@@ -54,6 +56,7 @@ export default function RoundSettlement({
   laps,
   levelSettlement,
   onViewPlayLog,
+  onViewInitialHands,
   onNextRound,
 }: RoundSettlementProps) {
   const total = defendingPoints + bankerPoints;
@@ -191,13 +194,25 @@ export default function RoundSettlement({
         </>
       )}
 
-      {/* 操作按钮 */}
+      {/* 下一局信息（单独一行，避免把按钮挤成两行文字） */}
       <div className="settlement__footer">
         <span className="settlement__footer-text">
           下一局打「{nextTeamName}队」的级牌（{nextLevelName}）
           ｜周目 南北 {formatLap(nextLaps[Team.NS])} · 东西 {formatLap(nextLaps[Team.EW])}
         </span>
-        <span className="settlement__spacer" />
+      </div>
+
+      {/* 操作按钮（同一行，每个按钮文字不换行） */}
+      <div className="settlement__actions">
+        {onViewInitialHands && (
+          <button
+            className="settlement__button settlement__button--ghost"
+            onClick={onViewInitialHands}
+            title="查看四家发牌时的手牌（可切换埋底前 / 埋底后）"
+          >
+            🃏 初始手牌
+          </button>
+        )}
         <button
           className="settlement__button settlement__button--ghost"
           onClick={onViewPlayLog}

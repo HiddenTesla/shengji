@@ -1,0 +1,68 @@
+// ============================================================
+// StartScreen —— 载入页面后的开始界面（不自动开局）
+// ============================================================
+
+@use '../tokens' as *;
+
+.start-screen {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+
+.start-screen__title {
+  font-size: 56px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
+  color: $color-gold;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+}
+
+.start-screen__subtitle {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: $text-on-dark-muted;
+}
+
+.start-screen__button {
+  margin-top: 14px;
+  padding: 12px 56px;
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, $color-gold, $color-gold-deep);
+  color: $color-text-strong;
+  box-shadow: 0 6px 22px rgba(255, 215, 0, 0.35);
+
+  &:hover {
+    filter: brightness(1.06);
+  }
+
+  &:active {
+    transform: translateY(1px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+  }
+}
+
+.start-screen__hint {
+  font-size: 13px;
+  color: $text-on-dark-dim;
+
+  &--dim {
+    color: rgba(255, 255, 255, 0.32);
+  }
+}

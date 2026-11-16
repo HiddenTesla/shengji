@@ -36,8 +36,12 @@
   left: 12px;
   z-index: 20;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  /* 两列：左侧等级/报主/庄家，右侧得分/断门。单列太高会伸进牌桌、遮住西家手牌 */
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 14px;
+  /* 不越过北家手牌：可用宽度 = 左侧空白带（约 半个界面宽 - 北家手牌一半 - 左间距） */
+  max-width: calc(var(--app-width, 100vw) / 2 - 202px);
   padding: 8px 12px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.32);
@@ -45,6 +49,28 @@
   color: $text-on-dark;
   font-size: 16px;
   pointer-events: none;
+}
+
+.level-panel__col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 右上角：比分 / 断门（独立面板，放在北家手牌右侧的空白处） */
+.level-panel--right {
+  right: 12px;
+  left: auto;
+  flex-direction: column;
+  max-width: calc(var(--app-width, 100vw) / 2 - 202px);
+}
+
+/* 右上角面板的第一块不要顶部段落分隔线 */
+.level-panel__col--stats .level-panel__scores:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .level-panel__caption {
@@ -55,6 +81,7 @@
 
 .level-panel__row {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
   font-weight: 500;
@@ -121,6 +148,11 @@
   font-size: 19px;
   line-height: 1.1;
   color: var(--trump-color, rgba(255, 255, 255, 0.45));
+
+  /* 无主（大王/小王）：文字比花色符号长，字号收一点 */
+  &--text {
+    font-size: 15px;
+  }
 }
 
 .level-panel__trump-count {
@@ -218,6 +250,45 @@
   align-items: center;
   justify-content: center;
   padding-top: 12px;
+}
+
+/* 北家手牌 + 报主栏（并排：加高 stage 会把牌桌压矮，东西家手牌会被裁） */
+.stage__line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  /* 有报主栏时整行会变宽，右侧留给左上角等级面板，避免手牌从面板下面穿过 */
+  &--with-bar {
+    padding-left: 212px;
+  }
+}
+
+/* 北家出牌栏（浮层）：绝对定位、不占布局 —— 出现/消失时牌桌与中心元素完全不动。
+   位置在北家手牌正下方，会盖在牌桌顶部（轮到北家时北家的出牌位本来就是空的）。 */
+.stage {
+  position: relative;
+  z-index: 5;
+}
+
+.stage__under {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  z-index: 5;
+  margin-top: 4px;
+  transform: translateX(-50%);
+}
+
+/* 东 / 西家：手牌 + 竖排报主栏（并排，栏靠向桌面中央） */
+.side-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+
+  &--east {
+    flex-direction: row-reverse;
+  }
 }
 
 .table {
@@ -532,6 +603,10 @@
   font-size: 12px;
   letter-spacing: 1px;
   color: $text-on-dark-dim;
+
+  &--spaced {
+    margin-top: 16px;
+  }
 }
 
 .rules-dialog__list {
@@ -573,6 +648,122 @@
   color: rgba(255, 255, 255, 0.55);
 }
 
+/* ---- 查看种子弹窗内容 ---- */
+.seed-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.seed-dialog__value {
+  padding: 8px 12px;
+  font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-align: center;
+  color: $color-gold;
+  word-break: break-all;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 215, 0, 0.35);
+  border-radius: 6px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.seed-dialog__copy {
+  align-self: flex-end;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+}
+
+/* ---- 选项弹窗：单选行 / 种子输入（新的一局、重新发牌共用） ---- */
+.option-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: $text-on-dark;
+  cursor: pointer;
+
+  &--disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.option-radio__control {
+  width: 15px;
+  height: 15px;
+  cursor: inherit;
+  accent-color: $color-gold;
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+
+.option-radio__text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.option-radio__value {
+  font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: $color-gold;
+  word-break: break-all;
+}
+
+.option-input {
+  width: calc(100% - 23px);
+  margin-left: 23px;
+  padding: 5px 8px;
+  font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  color: #f2f2f2;
+  color-scheme: dark;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: rgba(255, 215, 0, 0.6);
+  }
+}
+
+.option-format {
+  margin-left: 23px;
+  font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.2px;
+  color: rgba(255, 255, 255, 0.66);
+}
+
 /* 选项行（等级下拉 / 复选开关共用） */
 .option-row {
   display: flex;
@@ -581,6 +772,10 @@
   font-size: 14px;
   color: $text-on-dark;
   cursor: pointer;
+
+  &--indent {
+    margin-left: 23px;
+  }
 }
 
 .option-select {
@@ -605,6 +800,15 @@
 .option-hint {
   font-size: 12px;
   color: $text-on-dark-dim;
+
+  &--indent {
+    margin-left: 23px;
+    line-height: 1.5;
+  }
+
+  &--bad {
+    color: #ff8a80;
+  }
 }
 
 .option-checkbox {

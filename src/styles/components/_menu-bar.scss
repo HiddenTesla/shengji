@@ -116,6 +116,13 @@
     background: $color-menu-hover;
   }
 
+  /* 不可用（开始界面里需要已有牌局的项） */
+  &:disabled {
+    opacity: 0.38;
+    cursor: default;
+    background: transparent;
+  }
+
   /* 单选类条目（如游戏速度）：当前项加粗 */
   &--checked {
     font-weight: 700;

@@ -5,6 +5,7 @@
 
 @use 'base';
 @use 'components/app';
+@use 'components/start-screen';
 @use 'components/menu-bar';
 @use 'components/play-bar';
 @use 'components/player-mode-button';
@@ -18,5 +19,6 @@
 @use 'components/opponent-hand';
 @use 'components/trick-area';
 @use 'components/round-settlement';
+@use 'components/initial-hands-dialog';
 @use 'components/play-log-dialog';
 @use 'components/card-tracker-dialog';

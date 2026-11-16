@@ -9,9 +9,15 @@
 //      拖拉机 vs 同长度拖拉机；甩牌按「张数相同」比较
 //      （甩牌成立时同门跟牌一律压不过，只有毙牌才可能大过；
 //       被拦的甩牌已在 play.ts::applyPlay 里「自动出小」改出）
-//      **毙牌也要带够对子 / 拖拉机**：首出甩牌含 N 个对子时，
-//      全是主牌但不够 N 个对子（或拖拉机不够长）只能算垫牌，不算毙牌。
-//   5. 同大时先出者赢（使用严格大于比较）
+//      **毙牌也要「带够」对子 / 拖拉机**：首出甩牌含 N 个对子时，毙牌对子不能少于 N；
+//      首出含各长度的拖拉机时，毙牌的拖拉机结构必须能「覆盖」它
+//      （更长的拖可替代若干更短的拖，但数量不能少，见 hand.ts::tractorsCover），
+//      否则只能算垫牌。
+//   5. 甩牌被毙（盖毙）时，比较维度由**领出的结构**决定：
+//        领出无对子          → 比顶张（最大单张）
+//        领出有对子、无拖拉机 → 比顶对（最大的对子）
+//        领出有拖拉机         → 比最长拖拉机（长度优先，再比顶张）
+//   6. 同大时先出者赢（使用严格大于比较）
 // ============================================================
 
 import {
@@ -27,6 +33,9 @@ import {
   type HandShape,
   analyzeShape,
   slotOf,
+  handTractorRuns,
+  handTopPairSlot,
+  tractorsCover,
 } from './hand.ts';
 
 /**
@@ -52,8 +61,27 @@ function tierOf(
   // 主牌：首出也是主牌 → 同门；否则必须满足毙牌的牌型要求
   if (lead.door === 'trump') return 1;
   if (shape.pairs < lead.pairs) return 0;
-  if (shape.maxTractor < lead.maxTractor) return 0;
+  // 拖拉机结构必须「覆盖」领出：更长的拖可替代若干更短的拖，但数量不能少
+  if (!tractorsCover(shape.tractorRuns, lead.tractorRuns)) return 0;
   return 2;
+}
+
+/** 这手牌里「最长拖拉机」的强度（长度优先，其次顶张）；无拖拉机时返回 length 0 */
+function longestTractorOf(
+  cards: Card[],
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): { length: number; topSlot: number } {
+  let best = { length: 0, topSlot: -Infinity };
+  for (const run of handTractorRuns(cards, trumpSuit, levelRank)) {
+    if (
+      run.length > best.length
+      || (run.length === best.length && run.topSlot > best.topSlot)
+    ) {
+      best = run;
+    }
+  }
+  return best;
 }
 
 /** 同层内比较用的强度 = 该手牌中最大的「门内槽位」 */
@@ -121,8 +149,42 @@ export function beats(
   // 同为垫牌：谁也赢不了（先出者保持）
   if (ct === 0) return false;
 
+  // 甩牌：按领出的结构比较（无对 → 顶张；有对无拖 → 顶对；有拖 → 最长拖拉机）
+  if (lead.type === HT.Throw) {
+    return compareThrowStrength(candidate, best, lead, trumpSuit, levelRank) > 0;
+  }
+
   return strengthOf(candidate, trumpSuit, levelRank)
     > strengthOf(best, trumpSuit, levelRank);
+}
+
+/**
+ * 甩牌被两家以上毙时，比较两手有效毙牌的大小（> 0 表示 candidate 更大）。
+ * 比较维度取决于领出的结构：
+ *   - 领出含拖拉机 → 比「最长拖拉机」（长度优先，再比顶张）
+ *   - 领出含对子（无拖拉机）→ 比「顶对」
+ *   - 领出无对子 → 比「顶张」
+ * 平局（返回 0）由调用方按「先出者赢」处理（严格大于才盖过）。
+ */
+function compareThrowStrength(
+  candidate: Card[],
+  best: Card[],
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  if (lead.maxTractor >= 2) {
+    const a = longestTractorOf(candidate, trumpSuit, levelRank);
+    const b = longestTractorOf(best, trumpSuit, levelRank);
+    if (a.length !== b.length) return a.length - b.length;
+    return a.topSlot - b.topSlot;
+  }
+  if (lead.pairs > 0) {
+    return handTopPairSlot(candidate, trumpSuit, levelRank)
+      - handTopPairSlot(best, trumpSuit, levelRank);
+  }
+  return strengthOf(candidate, trumpSuit, levelRank)
+    - strengthOf(best, trumpSuit, levelRank);
 }
 
 /** 判定本墩赢家（按出牌顺序，同大时先出者赢） */

@@ -24,7 +24,8 @@ import {
 } from './core/types.ts';
 import { groupCardsForDisplay } from './core/card.ts';
 import { cssVars } from './utils/cssVars.ts';
-import { createDecks, shuffleCards, dealCards } from './core/deck.ts';
+import { enqueueSelection } from './utils/selection.ts';
+import { createDecks, shuffleCards, dealCards, randomSeed, parseSeed, type Seed } from './core/deck.ts';
 import {
   type Declaration,
   type BidState,
@@ -75,7 +76,9 @@ import {
   encodeCards,
   serializePlayLog,
   truncateRecord,
+  toJsonc,
 } from './core/playlog.ts';
+import { type ParsedGameState } from './core/state.ts';
 import PlayerHand from './components/PlayerHand.tsx';
 import OpponentHand from './components/OpponentHand.tsx';
 import PlayerModeButton from './components/PlayerModeButton.tsx';
@@ -87,14 +90,21 @@ import BottomReveal from './components/BottomReveal.tsx';
 import TrickArea from './components/TrickArea.tsx';
 import PlayBar from './components/PlayBar.tsx';
 import RoundSettlement from './components/RoundSettlement.tsx';
+import InitialHandsDialog from './components/InitialHandsDialog.tsx';
 import PlayLogDialog from './components/PlayLogDialog.tsx';
 import CardTrackerDialog from './components/CardTrackerDialog.tsx';
 import CardComponent from './components/CardComponent.tsx';
+import StateExportDialog from './components/StateExportDialog.tsx';
+import StateImportDialog from './components/StateImportDialog.tsx';
 
 type Hands = Record<PlayerPosition, Card[]>
 
 /** 发牌前的空手牌（记牌器用） */
 const EMPTY_HANDS: Hands = { E: [], S: [], W: [], N: [] };
+const CARD_ANIMATION_SPEED = 3;
+const CARD_ANIMATION_DURATION = Math.round(
+  700 * SPEED_MULTIPLIERS[CARD_ANIMATION_SPEED - 1],
+);
 
 /** 记牌器：本局已经出的每一手牌（已收的墩 + 当前墩已出的牌） */
 function playedPlaysOf(state: PlayState | null): PlayedCards[] {
@@ -127,6 +137,7 @@ function forcedFollowIndicesOf(
     pairs: trick.leadPairs,
     tractor: trick.leadTractor,
     maxTractor: trick.leadMaxTractor,
+    tractorRuns: trick.leadTractorRuns,
   };
   const forced = mandatoryFollowCards(hand, lead, trumpSuit, levelRank);
   if (forced.length === 0) return result;
@@ -244,9 +255,14 @@ function App() {
   const uiScaleStyle = useUiScale();
 
   // ---- 游戏状态 ----
+  /** 是否已开始游戏：载入页面时停在开始界面，点「开始游戏」才发牌 */
+  const [started, setStarted] = useState(false);
   const [hands, setHands] = useState<Hands | null>(null);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  const [animatingCardIds, setAnimatingCardIds] = useState<Set<string>>(new Set());
   const [gameSpeed, setGameSpeed] = useState(3);
+  /** 增强鼠标右键：开启后右键 = 点「出牌 / 埋底」（同时屏蔽浏览器右键菜单） */
+  const [rightClickConfirm, setRightClickConfirm] = useState(false);
   const [playerModes, setPlayerModes] = useState<Record<PlayerPosition, PlayerMode>>({
     E: PlayerMode.Auto,
     S: PlayerMode.Manual,
@@ -271,6 +287,10 @@ function App() {
   const bottomRef = useRef<Card[]>([]);
   /** 本次发牌的**原始**底牌（埋底后 bottomRef 会被覆盖，这里始终保留） */
   const originalBottomRef = useRef<Card[]>([]);
+  /** 本局洗牌种子（128 位，IPv6 式字符串；开局随机生成，导入局面时为 null） */
+  const [dealSeed, setDealSeed] = useState<Seed | null>(null);
+  /** 同上，供 dealRound / 日志同步读取（setState 是异步的） */
+  const seedRef = useRef<Seed | null>(null);
   const [revealed, setRevealed] = useState(0);
   /** 报主泡泡（发牌 / 叫主途中有人亮主、反主时在桌面中央短暂显示） */
   const [declareToast, setDeclareToast] = useState<DeclareToast | null>(null);
@@ -300,12 +320,20 @@ function App() {
   const [autoPaused, setAutoPaused] = useState(false);
   /** 「新的一局」确认框 */
   const [confirmNewGame, setConfirmNewGame] = useState(false);
-  /** 「原样发牌」确认框 */
+  /** 「重新发牌」确认框 */
   const [confirmRedeal, setConfirmRedeal] = useState(false);
+  /** 重新发牌：使用当前种子 / 指定种子（默认第一种） */
+  const [redealMode, setRedealMode] = useState<'current' | 'custom'>('current');
+  /** 重新发牌：「指定种子」的输入（字符串，便于编辑与校验） */
+  const [redealSeedInput, setRedealSeedInput] = useState('');
   /** 「自定义规则」信息框（只读，说明「新的一局」里的可选规则） */
   const [showRules, setShowRules] = useState(false);
   /** 记牌器（已出牌 / 剩余牌） */
   const [showTracker, setShowTracker] = useState(false);
+  /** 「查看种子」弹窗 */
+  const [showSeed, setShowSeed] = useState(false);
+  /** 「查看种子」里复制成功的短暂提示 */
+  const [seedCopied, setSeedCopied] = useState(false);
   /** 本局生效的可选规则 */
   const [rules, setRules] = useState<RuleOptions>(DEFAULT_RULE_OPTIONS);
   /** 「新的一局」对话框中待确认的规则 */
@@ -314,6 +342,12 @@ function App() {
   const [startLevel, setStartLevel] = useState<Rank>(Rank.Two);
   /** 「新的一局」对话框中待确认的起始级牌 */
   const [draftStartLevel, setDraftStartLevel] = useState<Rank>(Rank.Two);
+  /** 「新的一局」对话框中待确认的洗牌种子来源 */
+  const [draftSeedMode, setDraftSeedMode] = useState<'random' | 'current' | 'custom'>('random');
+  /** 「新的一局」对话框中「指定种子」的输入 */
+  const [draftSeedInput, setDraftSeedInput] = useState('');
+  /** 「新的一局」的庄家：'bid' = 抢庄（由亮主者决定），否则为指定庄家 */
+  const [draftBankerMode, setDraftBankerMode] = useState<'bid' | PlayerPosition>('bid');
 
   /** 两队各自的级牌（标准双升：本局打庄家队的级牌） */
   const [levels, setLevels] = useState<LevelBoard>(() => initialLevelBoard());
@@ -331,6 +365,170 @@ function App() {
   );
   const gameDelay = (baseMs: number) =>
     Math.round(baseMs * SPEED_MULTIPLIERS[gameSpeed - 1]);
+
+  function releaseAnimatingCards(cardIds: string[]) {
+    setAnimatingCardIds(prev => {
+      const next = new Set(prev);
+      cardIds.forEach(id => next.delete(id));
+      return next;
+    });
+  }
+
+  function runCardFlight(
+    cardSvg: SVGElement,
+    start: { left: number; top: number; width: number; height: number },
+    end: { left: number; top: number; width: number; height: number },
+    collect: boolean,
+  ): Promise<void> {
+    const clone = cardSvg.cloneNode(true) as SVGElement;
+    clone.classList.remove('card--selected');
+    Object.assign(clone.style, {
+      position: 'fixed',
+      left: `${start.left}px`,
+      top: `${start.top}px`,
+      width: `${start.width}px`,
+      height: `${start.height}px`,
+      margin: '0',
+      zIndex: '10000',
+      pointerEvents: 'none',
+      transformOrigin: 'top left',
+      filter: 'none',
+      transition: 'none',
+      willChange: 'transform, opacity',
+    });
+    document.body.appendChild(clone);
+    const dx = end.left - start.left;
+    const dy = end.top - start.top;
+    const scaleX = end.width / start.width;
+    const scaleY = end.height / start.height;
+    const animation = clone.animate([
+      { transform: 'translate(0, 0) scale(1, 1)', opacity: 1 },
+      {
+        transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`,
+        opacity: collect ? 0 : 1,
+      },
+    ], {
+      duration: CARD_ANIMATION_DURATION,
+      easing: 'cubic-bezier(0.2, 0.75, 0.25, 1)',
+      fill: 'forwards',
+    });
+
+    return new Promise(resolve => {
+      const cleanup = () => {
+        clone.remove();
+        resolve();
+      };
+      animation.addEventListener('finish', cleanup, { once: true });
+      animation.addEventListener('cancel', cleanup, { once: true });
+    });
+  }
+
+  function animatePlayedCards(player: PlayerPosition, cards: Card[]) {
+    const cardIds = cards.map(card => card.id);
+    const handRoot = document.querySelector<HTMLElement>(
+      `[data-player-hand="${player}"]`,
+    );
+    const sources = cards.map(card => {
+      const source = handRoot
+        ? Array.from(handRoot.querySelectorAll<SVGElement>('[data-card-id]'))
+          .find(element => element.dataset.cardId === card.id) ?? null
+        : null;
+      const sourceRect = source?.getBoundingClientRect();
+      const handRect = handRoot?.getBoundingClientRect();
+      const width = sourceRect?.width ?? 71;
+      const height = sourceRect?.height ?? 96;
+      return {
+        id: card.id,
+        source: source?.cloneNode(true) as SVGElement | null,
+        start: sourceRect
+          ? {
+              left: sourceRect.left,
+              top: sourceRect.top,
+              width: sourceRect.width,
+              height: sourceRect.height,
+            }
+          : {
+              left: (handRect?.left ?? 0) + ((handRect?.width ?? width) - width) / 2,
+              top: (handRect?.top ?? 0) + ((handRect?.height ?? height) - height) / 2,
+              width,
+              height,
+            },
+      };
+    });
+    setAnimatingCardIds(prev => new Set([...prev, ...cardIds]));
+
+    requestAnimationFrame(() => {
+      const flights = sources.flatMap(source => {
+        const target = Array.from(
+          document.querySelectorAll<HTMLElement>('.trick-area [data-play-card-id]'),
+        ).find(element => element.dataset.playCardId === source.id);
+        const targetSvg = target?.querySelector<SVGElement>('[data-card-id]');
+        if (!targetSvg) return [];
+        const targetRect = targetSvg.getBoundingClientRect();
+        const svg = source.source ?? targetSvg;
+        return [runCardFlight(
+          svg,
+          source.start,
+          {
+            left: targetRect.left,
+            top: targetRect.top,
+            width: targetRect.width,
+            height: targetRect.height,
+          },
+          false,
+        )];
+      });
+      void Promise.all(flights).then(() => releaseAnimatingCards(cardIds));
+    });
+  }
+
+  function animateTrickToWinner(cards: Card[], winner: PlayerPosition): Promise<void> {
+    const cardIds = cards.map(card => card.id);
+    const trickArea = document.querySelector<HTMLElement>('.trick-area');
+    const handRoot = document.querySelector<HTMLElement>(
+      `[data-player-hand="${winner}"]`,
+    );
+    const destination = handRoot?.getBoundingClientRect()
+      ?? trickArea?.getBoundingClientRect();
+    if (!destination) return Promise.resolve();
+
+    const sources = cards.flatMap(card => {
+      const element = Array.from(
+        document.querySelectorAll<HTMLElement>('.trick-area [data-play-card-id]'),
+      ).find(candidate => candidate.dataset.playCardId === card.id);
+      const svg = element?.querySelector<SVGElement>('[data-card-id]');
+      if (!svg) return [];
+      const rect = svg.getBoundingClientRect();
+      return [{
+        svg: svg.cloneNode(true) as SVGElement,
+        rect: {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+        },
+      }];
+    });
+    if (sources.length === 0) return Promise.resolve();
+    setAnimatingCardIds(prev => new Set([...prev, ...cardIds]));
+    const flights = sources.map(({ svg, rect }, index) => {
+      const width = Math.max(8, rect.width * 0.18);
+      const height = Math.max(11, rect.height * 0.18);
+      const spread = (index - (sources.length - 1) / 2) * 2;
+      return runCardFlight(
+        svg,
+        rect,
+        {
+          left: destination.left + destination.width / 2 - width / 2 + spread,
+          top: destination.top + destination.height / 2 - height / 2 + spread,
+          width,
+          height,
+        },
+        true,
+      );
+    });
+    return Promise.all(flights).then(() => releaseAnimatingCards(cardIds));
+  }
   // 用 ref 持有最新 bidState，避免闭包陷阱
   const bidStateRef = useRef(bidState);
   bidStateRef.current = bidState;
@@ -353,7 +551,7 @@ function App() {
   // 与 React 渲染时序无关，因此不可能出现「预设丢了 → 退化成东家」的情况。
   // null = 本局庄家由叫主（亮主者）决定（首局 / 新游戏 / 抢庄局）。
   const presetBankerRef = useRef<PlayerPosition | null>(null);
-  // 本局发牌开始时展示的庄家（「原样发牌」保留原庄家；抢庄局下仍可被亮主者取代）
+  // 本局发牌开始时展示的庄家（「重新发牌」保留原庄家；抢庄局下仍可被亮主者取代）
   const initialBankerRef = useRef<PlayerPosition | null>(null);
 
   /** 本局出牌记录（每局重建；下一局发牌时清空） */
@@ -365,6 +563,13 @@ function App() {
   /** 出牌记录弹窗 */
   const [playLogOpen, setPlayLogOpen] = useState(false);
   const [playLogMode, setPlayLogMode] = useState<'plays' | 'full'>('plays');
+  /** 结算里的「四家初始手牌」弹窗 */
+  const [initialHandsOpen, setInitialHandsOpen] = useState(false);
+  const [stateExportOpen, setStateExportOpen] = useState(false);
+  const [stateImportOpen, setStateImportOpen] = useState(false);
+  const [confirmStateImport, setConfirmStateImport] = useState(false);
+  const [pendingImportedState, setPendingImportedState] = useState<ParsedGameState | null>(null);
+  const importedStateRef = useRef<ParsedGameState | null>(null);
 
   /** 记录一次动作前的状态（玩家 / 托管的埋底、出牌都记录） */
   function pushSnapshot(
@@ -396,15 +601,22 @@ function App() {
   // ---- 重新发牌 ----
   // presetBanker 非空时以它为庄家（用于「下一局」：庄家由升级规则预定，叫主只定主花色）；
   // 为空时庄家仍由叫主（亮主者）决定（用于首局 / 新游戏 / 抢庄局）。
-  // keepDeal = true 时**不洗牌**，沿用上一次发好的手牌与底部（「原样发牌」）。
-  // initialBanker：发牌开始时已有的庄家（「原样发牌」沿用原庄家），默认等于 presetBanker。
+  // keepDeal = true 时**不洗牌**，沿用上一次发好的手牌与底部（「重新发牌 · 使用当前种子」）。
+  // initialBanker：发牌开始时已有的庄家（「重新发牌」沿用原庄家），默认等于 presetBanker。
+  // fixedSeed：指定了就用这个种子洗牌（「重新发牌 · 指定种子」），否则随机生成。
+  // levelOverride：只影响日志里的本局级牌（「新的一局」刚改过 levels，state 还是旧值）。
   function dealRound(
     presetBanker: PlayerPosition | null,
     keepDeal = false,
     initialBanker: PlayerPosition | null = presetBanker,
+    fixedSeed?: Seed,
+    levelOverride?: Rank,
   ) {
+    importedStateRef.current = null;
     presetBankerRef.current = presetBanker;
     initialBankerRef.current = initialBanker;
+    // 发牌 = 正式开局（从开始界面进入对局、「下一局」、重新发牌都走这里）
+    setStarted(true);
 
     let nextHands: Hands;
     let nextBottom: Card[];
@@ -412,8 +624,12 @@ function App() {
       nextHands = fullHandsRef.current;
       nextBottom = originalBottomRef.current;
     } else {
+      // 指定种子时用固定种子，否则每局随机生成；种子写进日志，「查看种子」可复制
+      const seed = fixedSeed ?? randomSeed();
+      seedRef.current = seed;
+      setDealSeed(seed);
       const deck = createDecks();
-      shuffleCards(deck);
+      shuffleCards(deck, seed);
       const result = dealCards(deck, BOTTOM_COUNT);
       nextHands = {
         E: result.hands.E,
@@ -433,10 +649,11 @@ function App() {
     cardIdMapRef.current = buildCardIdMap(nextHands, nextBottom);
     gameIdRef.current = `G-${Math.random().toString(36).slice(2, 10)}`;
     logRef.current = createRoundRecord({
-      level: levels[teamOf(initialBanker ?? PlayerPosition.South)],
+      level: levelOverride ?? levels[teamOf(initialBanker ?? PlayerPosition.South)],
       playerModes: { ...playerModes },
       deal: {
         mode: keepDeal ? 'sameDeal' : 'shuffle',
+        seed: seedRef.current ?? undefined,
         hands: {
           E: encodeCards(cardIdMapRef.current, nextHands.E),
           N: encodeCards(cardIdMapRef.current, nextHands.N),
@@ -468,18 +685,71 @@ function App() {
     setPhase(GamePhase.Dealing);
   }
 
-  // ---- 新游戏：等级回到起始级牌（默认 2），周目重新从 1 开始，庄家由叫主决定 ----
-  function startNewGame(level: Rank = startLevel) {
+  // ---- 新游戏：等级回到起始级牌（默认 2），周目重新从 1 开始 ----
+  // options.banker 省略 / null → 抢庄（庄家由亮主者决定）；指定则固定庄家（叫主只定主花色）。
+  // options.seed 省略 → 随机种子。
+  function startNewGame(
+    level: Rank = startLevel,
+    options?: { seed?: Seed; banker?: PlayerPosition | null },
+  ) {
+    const bankerOption = options?.banker ?? null;
     setLevels(initialLevelBoard(level));
     setLaps(initialLapBoard());
-    dealRound(null);
+    dealRound(bankerOption, false, bankerOption, options?.seed, level);
   }
 
-  // ---- 原样发牌：牌序不变（手牌 / 底牌与刚才完全一致），清除报主记录重新发牌 ----
+  // ---- 重新发牌：清除报主记录，按种子重新发牌 ----
+  // seed = null  → 使用当前种子（牌序不变：直接复用已发好的手牌与底牌）
+  // seed = 种子  → 用指定种子重新洗牌（四家手牌与底牌都会变）
   // 等级 / 周目 / 庄家 / 级牌全部不变；本局是否「抢庄局」也保持不变：
   // 抢庄局（首局）庄家仍由亮主者决定，非抢庄局庄家固定、叫主只定主花色。
-  function redealSameCards() {
-    dealRound(presetBankerRef.current, true, banker);
+  function redealRound(seed: Seed | null) {
+    if (importedStateRef.current && seed === null) {
+      applyImportedState(importedStateRef.current);
+      return;
+    }
+    if (seed === null) {
+      dealRound(presetBankerRef.current, true, banker);
+      return;
+    }
+    dealRound(presetBankerRef.current, false, banker, seed);
+  }
+
+  /** 「指定种子」的解析结果（非法 = null） */
+  const redealCustomSeed = parseSeed(redealSeedInput);
+  const redealSeedValid = redealCustomSeed !== null;
+
+  /** 「新的一局 · 指定种子」的解析结果（其他模式不需要校验） */
+  const draftNewGameSeed = parseSeed(draftSeedInput);
+  const draftNewGameSeedValid = draftSeedMode !== 'custom' || draftNewGameSeed !== null;
+
+  /** 打开「重新发牌」：默认「使用当前种子」（导入局面没有种子时改为「指定种子」） */
+  function openRedealDialog() {
+    setRedealMode(dealSeed === null ? 'custom' : 'current');
+    setRedealSeedInput(dealSeed === null ? '' : String(dealSeed));
+    setConfirmRedeal(true);
+  }
+
+  function confirmRedealRound() {
+    const useCurrent = redealMode === 'current' && seedRef.current !== null;
+    setConfirmRedeal(false);
+    redealRound(useCurrent ? null : redealCustomSeed);
+  }
+
+  /** 「新的一局」确认：按草稿的等级 / 规则 / 种子 / 庄家开新局 */
+  function startNewGameFromDialog() {
+    setConfirmNewGame(false);
+    setRules(draftRules);
+    setStartLevel(draftStartLevel);
+    const seed = draftSeedMode === 'custom'
+      ? draftNewGameSeed ?? undefined
+      : draftSeedMode === 'current'
+        ? seedRef.current ?? undefined
+        : undefined;
+    startNewGame(draftStartLevel, {
+      seed,
+      banker: draftBankerMode === 'bid' ? null : draftBankerMode,
+    });
   }
 
   // ---- 逐张发牌动画 ----
@@ -545,10 +815,12 @@ function App() {
       else {
         // 埋底阶段：最多选择与底牌等量的牌
         if (phase === GamePhase.Burying && next.size >= BOTTOM_COUNT) return prev;
-        // 出牌跟出阶段：最多选到首出张数
+        // 出牌跟出阶段：选满首出张数后继续点新牌 = 队列，挤掉最早选中的一张（必出牌不可挤）
         if (phase === GamePhase.Playing) {
           const ps = playStateRef.current;
-          if (ps && !isLeading(ps) && next.size >= ps.trick.leadCount) return prev;
+          if (ps && !isLeading(ps) && next.size >= ps.trick.leadCount) {
+            return enqueueSelection(next, index, ps.trick.leadCount, forced) ?? prev;
+          }
         }
         next.add(index);
       }
@@ -559,6 +831,9 @@ function App() {
   // ---- 切换玩家模式 ----
   function toggleMode(pos: PlayerPosition) {
     setAutoPaused(false);
+    if (playerModes[pos] === PlayerMode.Auto) {
+      setVisibility(prev => prev[pos] ? prev : { ...prev, [pos]: true });
+    }
     setPlayerModes(prev => ({
       ...prev,
       [pos]: prev[pos] === PlayerMode.Manual ? PlayerMode.Auto : PlayerMode.Manual,
@@ -711,7 +986,7 @@ function App() {
       setTrumpSuit(suit);
       setBottomTrump(true);
       setFlipping(false);
-      // 翻底定主：庄家仍取预定庄家（「下一局」）或发牌时已有的庄家（「原样发牌」），
+      // 翻底定主：庄家仍取预定庄家（「下一局」）或发牌时已有的庄家（「重新发牌」），
       // 都没有（真正的首局）才退回东家
       const flipBanker = presetBankerRef.current
         ?? initialBankerRef.current
@@ -831,7 +1106,7 @@ function App() {
     }, gameDelay(900));
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, banker, autoPaused]);
+  }, [phase, banker, autoPaused, playerModes]);
 
   // ---- 出牌阶段：进入后由庄家领出 ----
   useEffect(() => {
@@ -913,6 +1188,8 @@ function App() {
       pushSnapshot('play', false, hs, cur, GamePhase.Playing);
       const res = applyPlay(hs, cur, cur.turn, cards, trumpSuitRef.current, levelRank);
       recordAppliedPlay(cur, res.state);
+      const appliedPlay = res.state.trick.plays[res.state.trick.plays.length - 1];
+      if (appliedPlay) animatePlayedCards(cur.turn, appliedPlay.cards);
       setHands(res.hands);
       setPlayState(res.state);
     }, gameDelay(800));
@@ -925,7 +1202,9 @@ function App() {
     if (phase !== GamePhase.Playing) return;
     if (!playState?.trick.complete) return;
 
-    const t = setTimeout(() => {
+    let cancelled = false;
+    const collectCurrentTrick = () => {
+      if (cancelled) return;
       const cur = playStateRef.current;
       const hs = handsRef.current;
       if (!cur || !hs || !cur.trick.complete) return;
@@ -946,8 +1225,24 @@ function App() {
       setHands(res.hands);
       setPlayState(res.state);
       if (res.roundOver) setPhase(GamePhase.RoundEnd);
+    };
+
+    const t = setTimeout(() => {
+      const cur = playStateRef.current;
+      if (!cur || !cur.trick.complete) return;
+      const winner = cur.trick.winner;
+      if (winner) {
+        const cards = cur.trick.plays.flatMap(play => play.cards);
+        void animateTrickToWinner(cards, winner).then(collectCurrentTrick);
+      }
+      else {
+        collectCurrentTrick();
+      }
     }, gameDelay(1100));
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, playState]);
 
@@ -973,6 +1268,13 @@ function App() {
     pushSnapshot('play', true, hands, playState, phase);
     const res = applyPlay(hands, playState, playState.turn, cards, trumpSuit, levelRank);
     recordAppliedPlay(playState, res.state);
+    const appliedPlay = res.state.trick.plays[res.state.trick.plays.length - 1];
+    if (appliedPlay) animatePlayedCards(playState.turn, appliedPlay.cards);
+    if (playerModes[playState.turn] === PlayerMode.Manual) {
+      setVisibility(prev => prev[playState.turn]
+        ? prev
+        : { ...prev, [playState.turn]: true });
+    }
     setHands(res.hands);
     setPlayState(res.state);
     setSelectedIndices(new Set());
@@ -1090,21 +1392,108 @@ function App() {
   // 浏览器只显示自带的通用提示文案（无法自定义内容）；
   // 需同时 preventDefault 并设置 returnValue，旧版浏览器只看 returnValue。
   useEffect(() => {
+    // 还没开始游戏（开始界面）时不需要阻拦刷新：没有任何进度会丢
+    if (!started) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, []);
+  }, [started]);
 
-  // ---- 初始发牌 ----
-  useMemo(() => {
-    if (!hands) startNewGame();
-  }, []);
+  // ---- 「查看种子」：复制种子到剪贴板（非安全上下文回退 execCommand） ----
+  async function copySeed() {
+    if (dealSeed === null) return;
+    const text = String(dealSeed);
+    let done = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      done = true;
+    }
+    catch {
+      // 权限被拒 / 非安全上下文：走下面的回退
+    }
+    if (!done) {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      try {
+        document.execCommand('copy');
+      }
+      finally {
+        area.remove();
+      }
+    }
+    setSeedCopied(true);
+    window.setTimeout(() => setSeedCopied(false), 1600);
+  }
+
+  // ---- 顶部菜单栏（开始界面与对局中共用） ----
+  // 还没开局时（开始界面）菜单仍保留：可开新局 / 导入局面 / 看规则 / 调速度；
+  // 依赖「本局已发牌」的项（重新发牌 / 导出局面 / 出牌记录 / 记牌器）由 hasActiveRound 置灰。
+  const menuBar = (
+    <MenuBar
+      onNewGame={() => {
+        setDraftRules(rules);
+        setDraftStartLevel(startLevel);
+        setDraftSeedMode('random');
+        setDraftSeedInput(dealSeed ?? '');
+        setDraftBankerMode('bid');
+        setConfirmNewGame(true);
+      }}
+      onRedeal={openRedealDialog}
+      onViewRules={() => setShowRules(true)}
+      onViewPlayLog={() => openPlayLog('plays')}
+      onExportState={() => setStateExportOpen(true)}
+      onImportState={() => setStateImportOpen(true)}
+      onViewTracker={() => setShowTracker(true)}
+      onViewSeed={() => {
+        setSeedCopied(false);
+        setShowSeed(true);
+      }}
+      gameSpeed={gameSpeed}
+      onChangeSpeed={setGameSpeed}
+      rightClickConfirm={rightClickConfirm}
+      onChangeRightClick={setRightClickConfirm}
+      hasActiveRound={started}
+    />
+  );
+
+  // ---- 开始界面内容（载入页面后先不开始新游戏，等玩家点「开始游戏」） ----
+  // 注意：它渲染在主页面的 `.app` 里（菜单栏与各种弹窗始终可用）。
+  const startScreen = (
+    <div className="start-screen">
+      <div className="start-screen__title">
+        升级
+      </div>
+      <div className="start-screen__subtitle">
+        拖拉机 · 80 分 · 四人两副牌
+      </div>
+      <button
+        type="button"
+        className="start-screen__button"
+        onClick={() => startNewGame()}
+      >
+        开始游戏
+      </button>
+      <div className="start-screen__hint">
+        点击开始后由叫主定庄，双方从打 {RANK_NAME[startLevel]} 起打。
+      </div>
+      <div className="start-screen__hint start-screen__hint--dim">
+        起始等级可在开始后通过「游戏 → 新的一局」调整。
+      </div>
+    </div>
+  );
 
   // ---- 渲染 ----
-  if (!hands) return null;
+  if (started && !hands) return null;
+
+  /** 渲染期手牌：开始界面（未发牌）时按空手牌处理 */
+  const shownHands = hands ?? EMPTY_HANDS;
 
   const isBidding = phase === GamePhase.BiddingTrump;
   const isDealing = phase === GamePhase.Dealing;
@@ -1170,10 +1559,175 @@ function App() {
     setPlayLogOpen(true);
   }
 
+  function serializeState(format: 'json' | 'jsonc'): string {
+    const dealtHands = phase === GamePhase.Dealing
+      ? fullHandsRef.current
+      : hands ?? fullHandsRef.current;
+    const currentHands = dealtHands ?? EMPTY_HANDS;
+    const isTrumpUndecided = phase === GamePhase.Dealing
+      || phase === GamePhase.BiddingTrump;
+    const state = {
+      schemaVersion: 1,
+      phase,
+      levels: {
+        [TEAM_NAME_ZH[Team.NS]]: RANK_NAME[levels[Team.NS]],
+        [TEAM_NAME_ZH[Team.EW]]: RANK_NAME[levels[Team.EW]],
+      },
+      laps: {
+        [TEAM_NAME_ZH[Team.NS]]: laps[Team.NS],
+        [TEAM_NAME_ZH[Team.EW]]: laps[Team.EW],
+      },
+      banker: banker ? `${POSITION_NAME_ZH[banker]}家` : null,
+      trumpSuit: trumpSuit === null
+        ? (isTrumpUndecided ? '未定' : '无主')
+        : `${SUIT_SYMBOL[trumpSuit]}（${trumpSuit}）`,
+      score: {
+        defendingPoints: playState?.defendingPoints ?? 0,
+        bankerEscapePoints: playState?.bankerPoints ?? 0,
+      },
+      bottomCards: encodeCards(
+        cardIdMapRef.current,
+        buriedCards.length > 0 ? buriedCards : originalBottomRef.current,
+      ),
+      remainingHands: Object.fromEntries(ALL_POSITIONS.map(position => [
+        `${POSITION_NAME_ZH[position]}家`,
+        encodeCards(cardIdMapRef.current, currentHands[position]),
+      ])),
+      currentTrick: playState
+        ? {
+            leader: `${POSITION_NAME_ZH[playState.trick.leadPlayer]}家`,
+            played: playState.trick.plays.map(play => ({
+              player: `${POSITION_NAME_ZH[play.player]}家`,
+              cards: encodeCards(cardIdMapRef.current, play.cards),
+            })),
+            turn: playState.trick.complete
+              ? null
+              : `${POSITION_NAME_ZH[playState.turn]}家`,
+          }
+        : null,
+      cardIdFormat: '花色代码+牌面值#副本序号，例如 S5#0',
+    };
+    return format === 'jsonc'
+      ? toJsonc(state)
+      : `${JSON.stringify(state, null, 2)}\n`;
+  }
+
+  function applyImportedState(state: ParsedGameState) {
+    importedStateRef.current = state;
+    setStarted(true);
+    presetBankerRef.current = state.banker;
+    initialBankerRef.current = state.banker;
+    fullHandsRef.current = null;
+    bottomRef.current = state.bottomCards;
+    originalBottomRef.current = state.bottomCards;
+    cardIdMapRef.current = state.cardIdMap;
+    gameIdRef.current = `G-import-${Math.random().toString(36).slice(2, 8)}`;
+    // 导入局面只有牌面快照，没有种子
+    seedRef.current = null;
+    setDealSeed(null);
+
+    const levelRankForRound = state.levels[teamOf(state.banker)];
+    const record = createRoundRecord({
+      level: levelRankForRound,
+      playerModes: { ...playerModes },
+      deal: {
+        mode: 'shuffle',
+        hands: {
+          E: encodeCards(state.cardIdMap, state.hands.E),
+          N: encodeCards(state.cardIdMap, state.hands.N),
+          W: encodeCards(state.cardIdMap, state.hands.W),
+          S: encodeCards(state.cardIdMap, state.hands.S),
+        },
+        bottom: encodeCards(state.cardIdMap, state.bottomCards),
+      },
+    });
+    const firstPlay = state.playState.trick.plays[0];
+    if (firstPlay) {
+      state.playState.trick.plays.forEach((play, index) => {
+        appendPlay(
+          record,
+          play.player,
+          play.cards,
+          state.trumpSuit,
+          levelRankForRound,
+          index === 0,
+          [],
+          state.cardIdMap,
+        );
+      });
+    }
+    logRef.current = record;
+
+    setLevels(state.levels);
+    setLaps(state.laps);
+    setBanker(state.banker);
+    setTrumpSuit(state.trumpSuit);
+    setHands(state.hands);
+    setBuriedCards(state.bottomCards);
+    setPlayState(state.playState);
+    setPhase(GamePhase.Playing);
+    setSelectedIndices(new Set());
+    setHistory([]);
+    setAutoPaused(false);
+    setRevealed(0);
+    setDeclareToast(null);
+    setBottomTrump(false);
+    setBidSeconds(BID_WINDOW_SECONDS);
+    setFlipping(false);
+    setFlipCount(0);
+    setFlipLog([]);
+    setFlipTrumpCard(null);
+    setShowFlipLog(false);
+    setBidState(createBidState(0));
+    setPlayLogOpen(false);
+    setStateImportOpen(false);
+    setPendingImportedState(null);
+    setConfirmStateImport(false);
+  }
+
+  function exportState(format: 'json' | 'jsonc') {
+    const blob = new Blob([serializeState(format)], {
+      type: 'application/json;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${gameIdRef.current || 'shengji'}-state.${
+      format === 'jsonc' ? 'jsonc' : 'json'
+    }`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   // 南家报主栏：发牌/叫主阶段显示（仅南家为手动时），窗口内始终可操作
   const southManual = playerModes[PlayerPosition.South] === PlayerMode.Manual;
   const showBar = southManual && (isDealing || (isBidding && !flipping));
   const barCanAct = !flipping && (isDealing || isBidding);
+
+  /** 报主栏（每家在各自位置）：该家为手动、发牌/叫主阶段（翻底时不可报）才显示 */
+  function renderBiddingBar(position: PlayerPosition, vertical = false) {
+    if (playerModes[position] !== PlayerMode.Manual) return null;
+    if (isBurying || !(isDealing || (isBidding && !flipping))) return null;
+    return (
+      <BiddingBar
+        player={position}
+        hand={shownHands[position]}
+        levelRank={levelRank}
+        current={bidState.current}
+        canAct={barCanAct}
+        rules={rules}
+        vertical={vertical}
+        onBid={applyDeclare}
+        // 「不反主」是全局动作，只放在南家栏上（避免同时出现四个）
+        onPass={position === PlayerPosition.South
+          && isBidding && !flipping && bidState.current !== null
+          ? passBidding
+          : undefined}
+      />
+    );
+  }
 
   // 埋底：显示庄家手牌（南家为庄家时即南家手牌）
   const bankerIsAuto = banker !== null && playerModes[banker] === PlayerMode.Auto;
@@ -1192,10 +1746,9 @@ function App() {
   // 北家 / 南家的出牌栏都放在底部同一行（同一时刻只有一家轮到），并始终占位；
   // 西家 / 东家的出牌栏在各自侧栏里，不参与牌桌高度。
   const reservePlayBarRow = isPlaying;
-  const showBottomPlayBar = turnIsManual
-    && (playingTurn === PlayerPosition.South || playingTurn === PlayerPosition.North);
+  const showBottomPlayBar = turnIsManual && playingTurn === PlayerPosition.South;
 
-  const handForDisplay = hands.S;
+  const handForDisplay = shownHands.S;
 
   const canSelectHand = (
     (isBurying && banker === PlayerPosition.South && !bankerIsAuto)
@@ -1208,7 +1761,7 @@ function App() {
 
   const buryFlat = isBurying
     ? groupCardsForDisplay(
-      banker ? hands[banker] : [],
+      banker ? shownHands[banker] : [],
       trumpSuit,
       levelRank,
     ).flatMap(g => g.cards)
@@ -1220,21 +1773,21 @@ function App() {
   // 出牌：已选牌（含自动选中的必出牌）+ 合法性
   const playFlat = isPlaying
     ? groupCardsForDisplay(
-      playState && playingTurn ? hands[playingTurn] : [],
+      playState && playingTurn ? shownHands[playingTurn] : [],
       trumpSuit,
       levelRank,
     ).flatMap(g => g.cards)
     : [];
   const forcedPlayIndices = isPlaying && playState && turnIsManual
     && !playState.trick.complete
-    ? forcedFollowIndicesOf(hands[playState.turn], playState.trick, trumpSuit, levelRank)
+    ? forcedFollowIndicesOf(shownHands[playState.turn], playState.trick, trumpSuit, levelRank)
     : new Set<number>();
   const effectiveSelectedIndices = forcedPlayIndices.size === 0
     ? selectedIndices
     : new Set([...selectedIndices, ...forcedPlayIndices]);
   const selectedPlayCards = playFlat.filter((_, i) => effectiveSelectedIndices.has(i));
   const playValidation = isPlaying && playState
-    ? validatePlay(playState, hands[playState.turn], selectedPlayCards, trumpSuit, levelRank)
+    ? validatePlay(playState, shownHands[playState.turn], selectedPlayCards, trumpSuit, levelRank)
     : null;
   const selectedCanBeatCurrent = playValidation?.ok && playState
     ? canBeatCurrentPlay(playState, selectedPlayCards, trumpSuit, levelRank)
@@ -1274,59 +1827,87 @@ function App() {
     );
   }
 
-  return (
-    <div className="app" style={uiScaleStyle}>
-      {/* ---- 顶部菜单栏 ---- */}
-      <MenuBar onNewGame={() => {
-        setDraftRules(rules);
-        setDraftStartLevel(startLevel);
-        setConfirmNewGame(true);
-      }}
-        onRedealSameCards={() => setConfirmRedeal(true)}
-        onViewRules={() => setShowRules(true)}
-        onViewPlayLog={() => openPlayLog('plays')}
-        onViewTracker={() => setShowTracker(true)}
-        gameSpeed={gameSpeed}
-        onChangeSpeed={setGameSpeed}
-      />
+  // 各家报主栏（该家为手动且处于发牌/叫主阶段时才非 null）；东/西家竖排
+  const northBidBar = renderBiddingBar(PlayerPosition.North);
+  const westBidBar = renderBiddingBar(PlayerPosition.West, true);
+  const eastBidBar = renderBiddingBar(PlayerPosition.East, true);
+  // 北家出牌栏：放在北家手牌旁边（不再与南家共用底部那一行）；尺寸与南家一致
+  const northPlayBar = playingTurn === PlayerPosition.North
+    ? renderPlayBar()
+    : null;
 
+  /**
+   * 增强鼠标右键：右键 = 点「出牌 / 埋底」。
+   * 开关打开时屏蔽浏览器右键菜单（弹窗里也只屏蔽，不触发动作）；
+   * 只在「轮到自己 / 自己埋底」时生效，其余时候右键什么也不做。
+   */
+  function handleContextMenu(event: React.MouseEvent<HTMLDivElement>) {
+    if (!rightClickConfirm) return;
+    event.preventDefault();
+    const target = event.target;
+    if (target instanceof Element && target.closest('.dialog-overlay, .log-overlay')) {
+      return;
+    }
+    if (turnIsManual && playState && !playState.trick.complete) {
+      commitPlay();
+      return;
+    }
+    if (buryingManualBanker) confirmBury();
+  }
+
+  return (
+    <div
+      className="app"
+      style={uiScaleStyle}
+      onContextMenu={handleContextMenu}
+    >
+      {/* ---- 顶部菜单栏 ---- */}
+      {menuBar}
+
+      {/* ---- 未开局：开始界面（菜单栏保留在顶部） ---- */}
+      {!started && startScreen}
+
+      {/* ---- 对局界面：发牌后才渲染（开始界面不显示等级面板 / 牌桌） ---- */}
+      {started && (
+        <>
       {/* ---- 左上角：双方等级（打几 / 级牌） ---- */}
       <div className="level-panel">
-        <div className="level-panel__caption">
-          等级
-        </div>
-        {[Team.NS, Team.EW].map(team => {
-          const isCurrent = banker !== null && teamOf(banker) === team;
-          return (
-            <div
-              key={team}
-              className={isCurrent
-                ? 'level-panel__row level-panel__row--current'
-                : 'level-panel__row'}
-            >
-              <span className="level-panel__team">
-                {TEAM_NAME_ZH[team]}
-              </span>
-              <span className={isCurrent
-                ? 'level-panel__level level-panel__level--current'
-                : 'level-panel__level'}
+        <div className="level-panel__col">
+          <div className="level-panel__caption">
+            等级
+          </div>
+          {[Team.NS, Team.EW].map(team => {
+            const isCurrent = banker !== null && teamOf(banker) === team;
+            return (
+              <div
+                key={team}
+                className={isCurrent
+                  ? 'level-panel__row level-panel__row--current'
+                  : 'level-panel__row'}
               >
-                打 {RANK_NAME[levels[team]]}
-              </span>
-              <span
-                title={`第 ${laps[team]} 周目`}
-                className="level-panel__badge"
-              >
-                {formatLap(laps[team])}周目
-              </span>
-              {isCurrent && (
-                <span className="level-panel__badge level-panel__badge--current">
-                  本局
+                <span className="level-panel__team">
+                  {TEAM_NAME_ZH[team]}
                 </span>
-              )}
-            </div>
-          );
-        })}
+                <span className={isCurrent
+                  ? 'level-panel__level level-panel__level--current'
+                  : 'level-panel__level'}
+                >
+                  打 {RANK_NAME[levels[team]]}
+                </span>
+                <span
+                  title={`第 ${laps[team]} 周目`}
+                  className="level-panel__badge"
+                >
+                  {formatLap(laps[team])}周目
+                </span>
+                {isCurrent && (
+                  <span className="level-panel__badge level-panel__badge--current">
+                    本局
+                  </span>
+                )}
+              </div>
+            );
+          })}
         <div className="level-panel__row level-panel__row--section">
           <span className="level-panel__label">
             亮主
@@ -1338,7 +1919,9 @@ function App() {
                   {POSITION_NAME_ZH[bidState.current.player]}家
                 </b>
                 <b
-                  className="level-panel__trump-suit"
+                  className={bidState.current.suit === null
+                    ? 'level-panel__trump-suit level-panel__trump-suit--text'
+                    : 'level-panel__trump-suit'}
                   style={cssVars({ '--trump-color': trumpTextColor })}
                 >
                   {trumpOfDeclaration(bidState.current)}
@@ -1352,7 +1935,9 @@ function App() {
               ? (
                 <>
                   <b
-                    className="level-panel__trump-suit"
+                    className={trumpSuit === null
+                      ? 'level-panel__trump-suit level-panel__trump-suit--text'
+                      : 'level-panel__trump-suit'}
                     style={cssVars({ '--trump-color': trumpTextColor })}
                   >
                     {trumpOfBottomFlip(trumpSuit, flipTrumpCard)}
@@ -1385,66 +1970,77 @@ function App() {
             {banker ? `${POSITION_NAME_ZH[banker]}家` : '—'}
           </b>
         </div>
+        </div>
 
-        {/* 得分 / 逃分（出牌阶段起显示） */}
-        {playState && (
-          <div className="level-panel__scores">
-            {/* 庄家逃分（次要）/ 闲家得分（重点：字号大、颜色随分值渐变） */}
-            <div className="level-panel__score-line">
-              <span className="level-panel__score-label">庄家逃分</span>
-              <b className="level-panel__score-value">
-                {playState.bankerPoints}
-              </b>
-            </div>
-            <div className="level-panel__score-line">
-              <span className="level-panel__score-label">闲家得分</span>
-              <b
-                className="level-panel__score-value level-panel__score-value--defending"
-                style={cssVars({
-                  '--score-color': defendingScoreColor(playState.defendingPoints),
-                })}
-              >
-                {playState.defendingPoints}
-              </b>
-              <span className="level-panel__score-max">/80</span>
-            </div>
-          </div>
-        )}
-
-        {/* 断门：按出牌推断（算牌），任一家断门即列出 */}
-        {voids && (
-          <div className="level-panel__row level-panel__row--section">
-            <span className="level-panel__label">断门</span>
-            <div className="level-panel__voids">
-              {ALL_POSITIONS.filter(pos => voids[pos].length > 0).map(pos => (
-                <div key={pos} className="level-panel__void-row">
-                  <span className="level-panel__void-seat">
-                    {POSITION_NAME_ZH[pos]}家
-                  </span>
-                  {voids[pos].map(door => (
-                    <span
-                      key={door}
-                      className="level-panel__void-door"
-                      style={cssVars({ '--void-color': VOID_DOOR_COLOR[door] })}
-                    >
-                      {voidDoorLabel(door)}
-                    </span>
-                  ))}
-                </div>
-              ))}
-              {ALL_POSITIONS.every(pos => voids[pos].length === 0) && (
-                <span className="level-panel__void-none">暂无</span>
-              )}
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* ---- 右上角：比分 / 断门（放在北家手牌右侧的空白处，避免压住手牌） ---- */}
+      {playState && (
+        <div className="level-panel level-panel--right">
+          <div className="level-panel__col level-panel__col--stats">
+            {/* 得分 / 逃分（出牌阶段起显示） */}
+            <div className="level-panel__scores">
+              {/* 庄家逃分（次要）/ 闲家得分（重点：字号大、颜色随分值渐变） */}
+              <div className="level-panel__score-line">
+                <span className="level-panel__score-label">庄家逃分</span>
+                <b className="level-panel__score-value">
+                  {playState.bankerPoints}
+                </b>
+              </div>
+              <div className="level-panel__score-line">
+                <span className="level-panel__score-label">闲家得分</span>
+                <b
+                  className="level-panel__score-value level-panel__score-value--defending"
+                  style={cssVars({
+                    '--score-color': defendingScoreColor(playState.defendingPoints),
+                  })}
+                >
+                  {playState.defendingPoints}
+                </b>
+                <span className="level-panel__score-max">/80</span>
+              </div>
+            </div>
+
+            {/* 断门：按出牌推断（算牌），任一家断门即列出 */}
+            {voids && (
+              <div className="level-panel__row level-panel__row--section">
+                <span className="level-panel__label">断门</span>
+                <div className="level-panel__voids">
+                  {ALL_POSITIONS.filter(pos => voids[pos].length > 0).map(pos => (
+                    <div key={pos} className="level-panel__void-row">
+                      <span className="level-panel__void-seat">
+                        {POSITION_NAME_ZH[pos]}家
+                      </span>
+                      {voids[pos].map(door => (
+                        <span
+                          key={door}
+                          className="level-panel__void-door"
+                          style={cssVars({ '--void-color': VOID_DOOR_COLOR[door] })}
+                        >
+                          {voidDoorLabel(door)}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                  {ALL_POSITIONS.every(pos => voids[pos].length === 0) && (
+                    <span className="level-panel__void-none">暂无</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ---- 顶部：北家 ---- */}
       <div className="stage">
+        <div className={northBidBar
+          ? 'stage__line stage__line--with-bar'
+          : 'stage__line'}
+        >
         <OpponentHand
           position={PlayerPosition.North}
-          cards={hands.N}
+          cards={shownHands.N}
           levelRank={levelRank}
           trumpSuit={trumpSuit}
           faceUp={visibility.N}
@@ -1462,15 +2058,24 @@ function App() {
             ? toggleCard
             : undefined}
         />
+        {northBidBar}
+        </div>
+        {/* 北家出牌栏：放在北家手牌下方（手牌翻开后很宽，没法并排） */}
+        {northPlayBar && (
+          <div className="stage__under">
+            {northPlayBar}
+          </div>
+        )}
       </div>
 
       {/* ---- 中部：西家 + 牌桌 + 东家 ---- */}
       <div className="table">
         {/* 西家 */}
         <div className="table__west">
+          <div className="side-line">
           <OpponentHand
             position={PlayerPosition.West}
-            cards={hands.W}
+            cards={shownHands.W}
             levelRank={levelRank}
             trumpSuit={trumpSuit}
             faceUp={visibility.W}
@@ -1488,6 +2093,7 @@ function App() {
               ? toggleCard
               : undefined}
           />
+          {westBidBar}          </div>
           {playingTurn === PlayerPosition.West && (
             <div className="table__west-playbar">
               {renderPlayBar(true)}
@@ -1602,6 +2208,7 @@ function App() {
               state={playState}
               trumpSuit={trumpSuit}
               levelRank={levelRank}
+              animatingCardIds={animatingCardIds}
             />
           )}
 
@@ -1618,6 +2225,9 @@ function App() {
               laps={laps}
               levelSettlement={levelSettlement}
               onViewPlayLog={() => openPlayLog('full')}
+              onViewInitialHands={fullHandsRef.current
+                ? () => setInitialHandsOpen(true)
+                : undefined}
               onNextRound={startNextRound}
             />
           )}
@@ -1642,10 +2252,7 @@ function App() {
 
           {/* 撤销 / 继续托管 / 查看底牌（查看底牌的按钮固定在这一行） */}
           <div className="action-row">
-            <BottomReveal
-              cards={buriedCards}
-              canReveal={banker === PlayerPosition.South}
-            />
+            <BottomReveal cards={buriedCards} />
             <button
               className="undo-button"
               onClick={undo}
@@ -1669,9 +2276,10 @@ function App() {
 
         {/* 东家 */}
         <div className="table__east">
+          <div className="side-line side-line--east">
           <OpponentHand
             position={PlayerPosition.East}
-            cards={hands.E}
+            cards={shownHands.E}
             levelRank={levelRank}
             trumpSuit={trumpSuit}
             faceUp={visibility.E}
@@ -1689,6 +2297,8 @@ function App() {
               ? toggleCard
               : undefined}
           />
+          {eastBidBar}
+          </div>
           {playingTurn === PlayerPosition.East && (
             <div className="table__east-playbar">
               {renderPlayBar(true)}
@@ -1734,7 +2344,7 @@ function App() {
           </div>
         )}
 
-        {/* 出牌控制栏：北家 / 南家共用这一行，始终占位（牌桌高度不随轮次变化） */}
+        {/* 出牌控制栏（南家）：始终占位（牌桌高度不随轮次变化） */}
         {reservePlayBarRow && playState && (
           <div className="center-row center-row--spaced center-row--playbar">
             {showBottomPlayBar && renderPlayBar()}
@@ -1743,20 +2353,7 @@ function App() {
 
         {/* 南家报主栏（发牌/叫主阶段） */}
         <div className="center-row">
-          {!isBurying && showBar && (
-            <BiddingBar
-              player={PlayerPosition.South}
-              hand={hands.S}
-              levelRank={levelRank}
-              current={bidState.current}
-              canAct={barCanAct}
-              rules={rules}
-              onBid={applyDeclare}
-              onPass={isBidding && !flipping && bidState.current !== null
-                ? passBidding
-                : undefined}
-            />
-          )}
+          {!isBurying && showBar && renderBiddingBar(PlayerPosition.South)}
           {/* 南家非手动时不显示报主栏：给出原因（否则容易以为「报主框消失了」） */}
           {!isBurying && !showBar && !southManual && (isDealing || isBidding) && (
             <div className="bid-placeholder">
@@ -1765,7 +2362,7 @@ function App() {
           )}
         </div>
 
-        <div className="hand-row">
+        <div className="hand-row" data-player-hand={PlayerPosition.South}>
           {isBurying && bankerIsAuto ? (
             <div className="auto-bury">
               {autoPaused
@@ -1794,6 +2391,10 @@ function App() {
         </div>
       )}
 
+        </>
+      )}
+
+      {/* 以下弹窗 / 对话框两种界态都要渲染（开始界面也能「新的一局」「导入局面」等） */}
       {/* 出牌记录：菜单「查看」= 仅出牌；结算 = 完整日志 + 导出 */}
       <PlayLogDialog
         open={playLogOpen}
@@ -1802,6 +2403,52 @@ function App() {
         serialize={serializeLog}
         onExport={exportLog}
         onClose={() => setPlayLogOpen(false)}
+      />
+
+      <StateExportDialog
+        open={stateExportOpen}
+        serialize={serializeState}
+        onExport={exportState}
+        onClose={() => setStateExportOpen(false)}
+      />
+
+      <StateImportDialog
+        open={stateImportOpen}
+        onImportReady={state => {
+          setPendingImportedState(state);
+          setStateImportOpen(false);
+          setConfirmStateImport(true);
+        }}
+        onClose={() => setStateImportOpen(false)}
+      />
+
+      {/* 四家初始手牌（结算里点「🃏 初始手牌」打开）：可切换埋底前 / 埋底后 */}
+      <InitialHandsDialog
+        open={initialHandsOpen}
+        hands={fullHandsRef.current}
+        bottomCards={originalBottomRef.current}
+        buriedCards={buriedCards}
+        banker={banker}
+        trumpSuit={trumpSuit}
+        levelRank={levelRank}
+        onClose={() => setInitialHandsOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmStateImport}
+        title="导入局面？"
+        description="导入会终止当前对局并替换为粘贴的局面。当前进度无法恢复，确定继续吗？"
+        confirmLabel="导入局面"
+        cancelLabel="取消"
+        danger={true}
+        onConfirm={() => {
+          if (pendingImportedState) applyImportedState(pendingImportedState);
+          else setConfirmStateImport(false);
+        }}
+        onCancel={() => {
+          setConfirmStateImport(false);
+          setPendingImportedState(null);
+        }}
       />
 
       {/* 记牌器：按门统计已出 / 剩余（按视角排除本家手牌） */}
@@ -1852,35 +2499,122 @@ function App() {
         </div>
       </ConfirmDialog>
 
-      {/* 原样发牌确认框 */}
+      {/* 本局洗牌种子（只读）：每局随机生成；重新发牌时可指定 */}
+      <ConfirmDialog
+        open={showSeed}
+        title="本局种子"
+        description={dealSeed === null
+          ? '当前局面是导入的，没有种子记录。'
+          : '128 位洗牌种子（IPv6 式 8 组十六进制）。\n种子固定时，四家手牌与 8 张底牌完全相同。'}
+        width={480}
+        confirmLabel="知道了"
+        hideCancel={true}
+        onConfirm={() => setShowSeed(false)}
+        onCancel={() => setShowSeed(false)}
+      >
+        {dealSeed !== null && (
+          <div className="seed-dialog">
+            <span className="seed-dialog__value">
+              {dealSeed}
+            </span>
+            <button
+              type="button"
+              className="seed-dialog__copy"
+              onClick={copySeed}
+            >
+              {seedCopied ? '✅ 已复制' : '📋 复制'}
+            </button>
+          </div>
+        )}
+      </ConfirmDialog>
+
+      {/* 重新发牌确认框：使用当前种子 / 指定种子 */}
       <ConfirmDialog
         open={confirmRedeal}
-        title="原样发牌？"
-        description={'牌序不变：四家手牌与 8 张底牌和刚才完全一致，\n会清除报主记录并重新发牌；庄家与级牌都不变。\n（抢庄局仍为抢庄局：庄家由亮主者决定。）'}
-        confirmLabel="原样发牌"
+        title="重新发牌？"
+        description={'会清除报主记录并重新发牌；庄家与级牌都不变。\n（抢庄局仍为抢庄局：庄家由亮主者决定。）'}
+        width={460}
+        confirmLabel="重新发牌"
         cancelLabel="取消"
         danger={true}
-        onConfirm={() => {
-          setConfirmRedeal(false);
-          redealSameCards();
-        }}
+        confirmDisabled={redealMode === 'custom' && !redealSeedValid}
+        onConfirm={confirmRedealRound}
         onCancel={() => setConfirmRedeal(false)}
-      />
+      >
+        <div className="rules-dialog__caption">
+          洗牌种子
+        </div>
+        <div className="rules-dialog__list rules-dialog__list--options">
+          <label className={dealSeed === null ? 'option-radio option-radio--disabled' : 'option-radio'}>
+            <input
+              type="radio"
+              name="redeal-seed-mode"
+              className="option-radio__control"
+              checked={redealMode === 'current'}
+              disabled={dealSeed === null}
+              onChange={() => setRedealMode('current')}
+            />
+            <span className="option-radio__text">
+              使用当前种子
+              <span className="option-radio__value">
+                {dealSeed === null ? '（导入局面，无种子）' : dealSeed}
+              </span>
+            </span>
+          </label>
 
-      {/* 新的一局确认框 */}
+          <label className="option-radio">
+            <input
+              type="radio"
+              name="redeal-seed-mode"
+              className="option-radio__control"
+              checked={redealMode === 'custom'}
+              onChange={() => setRedealMode('custom')}
+            />
+            <span className="option-radio__text">
+              指定种子
+            </span>
+          </label>
+
+          <input
+            type="text"
+            inputMode="text"
+            maxLength={39}
+            spellCheck={false}
+            className="option-input"
+            value={redealSeedInput}
+            placeholder="9f86:d0e4:6a2e:7b12:4c1f:88aa:0b3d:5e71"
+            disabled={redealMode !== 'custom'}
+            onChange={event => setRedealSeedInput(
+              event.target.value.toLowerCase().replace(/[^0-9a-f:]/g, '').slice(0, 39),
+            )}
+          />
+
+          <div className="option-format">
+            128 位 · IPv6 式 8 组十六进制（每组 1~4 位，可用 :: 压缩）
+          </div>
+
+          <div className={redealMode === 'custom' && !redealSeedValid
+            ? 'option-hint option-hint--bad option-hint--indent'
+            : 'option-hint option-hint--indent'}
+          >
+            {redealMode === 'custom' && !redealSeedValid
+              ? '种子格式不正确：需 128 位（8 组十六进制，或 0 ~ 2^128-1 的十进制整数）'
+              : '同一种子每次发到的牌完全相同；当前种子可在「查看 → 查看种子」里看到。'}
+          </div>
+        </div>
+      </ConfirmDialog>
+
+      {/* 新的一局确认框：起始等级 / 规则 / 种子 / 庄家 */}
       <ConfirmDialog
         open={confirmNewGame}
         title="开始新的一局？"
         description={`当前这局的进度将全部清空：手牌、分数、等级都会重置，\n双方从打 ${RANK_NAME[draftStartLevel]} 重新开始。`}
+        width={460}
         confirmLabel="开始新的一局"
         cancelLabel="取消"
         danger={true}
-        onConfirm={() => {
-          setConfirmNewGame(false);
-          setRules(draftRules);
-          setStartLevel(draftStartLevel);
-          startNewGame(draftStartLevel);
-        }}
+        confirmDisabled={!draftNewGameSeedValid}
+        onConfirm={startNewGameFromDialog}
         onCancel={() => setConfirmNewGame(false)}
       >
         <div className="rules-dialog__caption">
@@ -1914,6 +2648,133 @@ function App() {
               }))}
             />
             允许反自己亮的主
+          </label>
+        </div>
+
+        <div className="rules-dialog__caption rules-dialog__caption--spaced">
+          洗牌种子
+        </div>
+        <div className="rules-dialog__list rules-dialog__list--options">
+          <label className="option-radio">
+            <input
+              type="radio"
+              name="new-game-seed-mode"
+              className="option-radio__control"
+              checked={draftSeedMode === 'random'}
+              onChange={() => setDraftSeedMode('random')}
+            />
+            <span className="option-radio__text">
+              随机种子
+            </span>
+          </label>
+
+          <label className={dealSeed === null
+            ? 'option-radio option-radio--disabled'
+            : 'option-radio'}
+          >
+            <input
+              type="radio"
+              name="new-game-seed-mode"
+              className="option-radio__control"
+              checked={draftSeedMode === 'current'}
+              disabled={dealSeed === null}
+              onChange={() => setDraftSeedMode('current')}
+            />
+            <span className="option-radio__text">
+              使用当前种子
+              <span className="option-radio__value">
+                {dealSeed === null ? '（导入局面，无种子）' : dealSeed}
+              </span>
+            </span>
+          </label>
+
+          <label className="option-radio">
+            <input
+              type="radio"
+              name="new-game-seed-mode"
+              className="option-radio__control"
+              checked={draftSeedMode === 'custom'}
+              onChange={() => setDraftSeedMode('custom')}
+            />
+            <span className="option-radio__text">
+              指定种子
+            </span>
+          </label>
+
+          <input
+            type="text"
+            inputMode="text"
+            maxLength={39}
+            spellCheck={false}
+            className="option-input"
+            value={draftSeedInput}
+            placeholder="9f86:d0e4:6a2e:7b12:4c1f:88aa:0b3d:5e71"
+            disabled={draftSeedMode !== 'custom'}
+            onChange={event => setDraftSeedInput(
+              event.target.value.toLowerCase().replace(/[^0-9a-f:]/g, '').slice(0, 39),
+            )}
+          />
+
+          <div className="option-format">
+            128 位 · IPv6 式 8 组十六进制（每组 1~4 位，可用 :: 压缩）
+          </div>
+
+          <div className={draftSeedMode === 'custom' && !draftNewGameSeedValid
+            ? 'option-hint option-hint--bad option-hint--indent'
+            : 'option-hint option-hint--indent'}
+          >
+            {draftSeedMode === 'custom' && !draftNewGameSeedValid
+              ? '种子格式不正确：需 128 位（8 组十六进制，或 0 ~ 2^128-1 的十进制整数）'
+              : '同一种子每次发到的牌完全相同；「指定种子」可复现某一局。'}
+          </div>
+        </div>
+
+        <div className="rules-dialog__caption rules-dialog__caption--spaced">
+          庄家
+        </div>
+        <div className="rules-dialog__list rules-dialog__list--options">
+          <label className="option-radio">
+            <input
+              type="radio"
+              name="new-game-banker"
+              className="option-radio__control"
+              checked={draftBankerMode === 'bid'}
+              onChange={() => setDraftBankerMode('bid')}
+            />
+            <span className="option-radio__text">
+              抢庄（庄家由亮主者决定）
+            </span>
+          </label>
+
+          <label className="option-radio">
+            <input
+              type="radio"
+              name="new-game-banker"
+              className="option-radio__control"
+              checked={draftBankerMode !== 'bid'}
+              onChange={() => setDraftBankerMode(PlayerPosition.East)}
+            />
+            <span className="option-radio__text">
+              指定庄家
+            </span>
+          </label>
+
+          <label className="option-row option-row--indent">
+            <select
+              className="option-select"
+              value={draftBankerMode === 'bid' ? PlayerPosition.East : draftBankerMode}
+              disabled={draftBankerMode === 'bid'}
+              onChange={event => setDraftBankerMode(event.target.value as PlayerPosition)}
+            >
+              {ALL_POSITIONS.map(position => (
+                <option key={position} value={position} className="option-item">
+                  {POSITION_NAME_ZH[position]}家
+                </option>
+              ))}
+            </select>
+            <span className="option-hint">
+              {draftBankerMode === 'bid' ? '默认：亮主者坐庄' : '叫主只定主花色，不改庄家'}
+            </span>
           </label>
         </div>
       </ConfirmDialog>
