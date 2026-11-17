@@ -600,6 +600,101 @@ describe('AI 领出：副牌 A 的评级', () => {
   });
 });
 
+describe('AI 领出：副牌对子「敢弃」', () => {
+  it('以小对子钓对手的一对 A → 领出这对小对子', () => {
+    // ♥88 必然被南家的一对 ♥A 压掉（0 分、本就要丢的一墩），
+    // 换来对手的控制对子被换走；这种「钓大对子」值得打。
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Eight), c(Suit.Heart, R.Eight), c(Suit.Club, R.Three),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Five), c(Suit.Diamond, R.Six),
+      ],
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.Ace), c(Suit.Club, R.Seven),
+        c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight),
+      ],
+      [
+        c(Suit.Heart, R.Four), c(Suit.Heart, R.Five), c(Suit.Club, R.Nine),
+        c(Suit.Diamond, R.Nine), c(Suit.Club, R.Ten), c(Suit.Diamond, R.Ten),
+      ],
+      [
+        c(Suit.Heart, R.Three), c(Suit.Heart, R.Six), c(Suit.Club, R.Jack),
+        c(Suit.Diamond, R.Jack), c(Suit.Club, R.Three), c(Suit.Diamond, R.Three),
+      ],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H8', 'H8'], '东家领出');
+  });
+
+  it('对手接牌后没有强势副牌（无 AKK / 拖拉机）→ 愿意先送小对子', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Eight), c(Suit.Heart, R.Eight), c(Suit.Club, R.Three),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Five), c(Suit.Diamond, R.Six),
+      ],
+      [
+        c(Suit.Heart, R.Queen), c(Suit.Heart, R.Queen), c(Suit.Club, R.Seven),
+        c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight),
+      ],
+      [
+        c(Suit.Heart, R.Four), c(Suit.Heart, R.Five), c(Suit.Club, R.Nine),
+        c(Suit.Diamond, R.Nine), c(Suit.Club, R.Ten), c(Suit.Diamond, R.Ten),
+      ],
+      [
+        c(Suit.Heart, R.Three), c(Suit.Heart, R.Six), c(Suit.Club, R.Jack),
+        c(Suit.Diamond, R.Jack), c(Suit.Club, R.Three), c(Suit.Diamond, R.Three),
+      ],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H8', 'H8'], '东家领出');
+  });
+
+  it('对手有 AKK 之类的强势副牌 → 不轻易送小对子', () => {
+    // 北家手里 ♣A ♣K ♣K（A + 对子）是强势副牌，送出去的一墩会被它换成分
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Eight), c(Suit.Heart, R.Eight), c(Suit.Club, R.Three),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Five), c(Suit.Diamond, R.Six),
+      ],
+      [
+        c(Suit.Heart, R.Queen), c(Suit.Heart, R.Queen), c(Suit.Club, R.Seven),
+        c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight),
+      ],
+      [
+        c(Suit.Heart, R.Four), c(Suit.Heart, R.Five), c(Suit.Club, R.Nine),
+        c(Suit.Diamond, R.Nine), c(Suit.Club, R.Ten), c(Suit.Diamond, R.Ten),
+      ],
+      [
+        c(Suit.Club, R.Ace), c(Suit.Club, R.King), c(Suit.Club, R.King),
+        c(Suit.Club, R.Jack), c(Suit.Diamond, R.Jack), c(Suit.Diamond, R.Three),
+      ],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['D4'], '东家领出');
+  });
+
+  it('881010 对 QQ：先出无分的 88，把有分的 1010 留成该门最大', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Eight), c(Suit.Heart, R.Eight),
+        c(Suit.Heart, R.Ten), c(Suit.Heart, R.Ten),
+        c(Suit.Club, R.Three), c(Suit.Diamond, R.Four),
+      ],
+      [
+        c(Suit.Heart, R.Queen), c(Suit.Heart, R.Queen), c(Suit.Club, R.Seven),
+        c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight),
+      ],
+      [
+        c(Suit.Heart, R.Four), c(Suit.Heart, R.Five), c(Suit.Club, R.Ten),
+        c(Suit.Diamond, R.Ten), c(Suit.Club, R.Jack), c(Suit.Diamond, R.Jack),
+      ],
+      [
+        c(Suit.Heart, R.Three), c(Suit.Heart, R.Six), c(Suit.Club, R.Nine),
+        c(Suit.Diamond, R.Nine), c(Suit.Club, R.Queen), c(Suit.Diamond, R.Queen),
+      ],
+    );
+    // 不是先打 1010：那样这一墩要白送 20 分（降权），88 才是该先送的对子
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H8', 'H8'], '东家领出');
+  });
+});
+
 describe('AI 多张跟牌：不白送大分', () => {
   it('南领主 10 对、东压主 K 对，北有对小王 → 用对小王把墩抢下来', () => {
     // 出对 5 的话，这一墩 40 分（10 对 + K 对）加自己的 10 分全判给对手

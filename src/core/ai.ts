@@ -5,7 +5,7 @@
 import {
   type Card,
   type PlayerPosition,
-  type Suit,
+  Suit,
   HandType,
   ALL_POSITIONS,
   Rank,
@@ -196,6 +196,127 @@ function aceLeadBonus(
     }
   }
   return 0;
+}
+
+/**
+ * 「敢不敢领出会被对手大出的副牌对子」的评级加成（用户规则，2026-11）。
+ *
+ * 单墩搜索只看眼前：领一对副牌被对手压掉就是白送一墩（相对 −2000），
+ * 所以 AI 一向不敢这样打。但实战里下面三种「弃对子」是有价值的：
+ *   ① **以小对子钓对手的大对子**（尤其是一对 A）：换掉对手的控制牌，
+ *      以后己方的牌才能收分；
+ *   ② **对手接过牌权后没有强势副牌可打**（没有 AKK 之类的「A + 对子」组合、
+ *      也没有拖拉机；单张 A、一对 A 不算强势）：送出去的这一墩换不到代价；
+ *   ③ **手里有两对以上**：先送掉一对无分的，逼出对手唯一更大的对子，
+ *      另一对有分的对子就变成该门最大（例：881010 对 QQ 先出 88）。
+ * 只对副牌生效（主牌对子是吊主，另有规则）。
+ * 「此墩将失分至少 20 分」（送出去的是 10 对 / K 对）要降权。
+ */
+const PAIR_LURE_ACE_BONUS = 1500;
+const PAIR_LURE_KING_BONUS = 900;
+const PAIR_WEAK_OPPONENT_BONUS = 1200;
+const PAIR_KEEP_POINT_PAIR_BONUS = 900;
+const PAIR_SACRIFICE_POINT_PENALTY = 800;
+/** 上述加成合计上限：不超过两个赢墩的价值 */
+const PAIR_SACRIFICE_MAX_BONUS = 2 * TRICK_WIN_VALUE;
+
+const SIDE_SUITS: readonly Suit[] = [Suit.Spade, Suit.Heart, Suit.Club, Suit.Diamond];
+
+/**
+ * 某门里有没有「强势副牌」：A + 对子（AKK 之类）或拖拉机。
+ * 单张 A、一对 A（AA 本身）都不算强势。
+ */
+function hasStrongSidePlay(
+  hand: Card[],
+  door: Suit,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  const inDoor = hand.filter(
+    card => doorOf(card, trumpSuit, levelRank) === door,
+  );
+  const units = leadPairUnits(inDoor, trumpSuit, levelRank);
+  // 拖拉机（两连对及以上）
+  if (hasConsecutivePairRun(units, 2)) return true;
+  // A + 一对（AKK 之类）；A 自己成对（AA）不算
+  if (!inDoor.some(card => card.rank === Rank.Ace)) return false;
+  const pairedIds = new Set(units.flatMap(unit => unit.cards.map(c => c.id)));
+  const bareAce = inDoor.some(
+    card => card.rank === Rank.Ace && !pairedIds.has(card.id),
+  );
+  const pairNotAce = units.some(unit => unit.cards[0].rank !== Rank.Ace);
+  return bareAce && pairNotAce;
+}
+
+/** 两名对手都没有强势副牌可打（接牌后也打不出 AKK / 拖拉机） */
+function opponentsLackStrongSidePlays(
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  return ALL_POSITIONS
+    .filter(pos => pos !== player && teamOf(pos) !== teamOf(player))
+    .every(pos => SIDE_SUITS
+      .filter(suit => suit !== trumpSuit)
+      .every(suit => !hasStrongSidePlay(hands[pos], suit, trumpSuit, levelRank)));
+}
+
+/**
+ * 领出副牌对子的「弃对子」加成。
+ * 只有「对手能用更大的同门对子接走」时才算（被毙的交给钓主评分）。
+ */
+function sacrificePairLeadBonus(
+  cards: Card[],
+  lead: HandShape,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  if (lead.door === null || lead.door === 'trump') return 0;
+  if (lead.type !== HandType.Pair || cards.length !== 2) return 0;
+
+  const door = lead.door;
+  const ourSlot = slotOf(cards[0], trumpSuit, levelRank);
+  const higher = ALL_POSITIONS
+    .filter(pos => pos !== player && teamOf(pos) !== teamOf(player))
+    .flatMap(pos => leadPairUnits(
+      hands[pos].filter(card => doorOf(card, trumpSuit, levelRank) === door),
+      trumpSuit, levelRank,
+    ).filter(unit => unit.slot > ourSlot));
+  if (higher.length === 0) return 0;
+
+  let bonus = 0;
+
+  // ① 钓出对手的大对子（对手会用最小的一对压，越大越值钱）
+  const cheapest = higher.reduce((a, b) => (b.slot < a.slot ? b : a));
+  if (cheapest.cards[0].rank === Rank.Ace) bonus += PAIR_LURE_ACE_BONUS;
+  else if (cheapest.cards[0].rank === Rank.King) bonus += PAIR_LURE_KING_BONUS;
+
+  // ② 对手接过牌权也没有强势副牌可打
+  if (opponentsLackStrongSidePlays(hands, player, trumpSuit, levelRank)) {
+    bonus += PAIR_WEAK_OPPONENT_BONUS;
+  }
+
+  // ③ 手里另有一对有分的对子：送掉这一对后它能变成该门最大
+  if (trickPoints(cards) === 0) {
+    const inDoor = hands[player].filter(
+      card => doorOf(card, trumpSuit, levelRank) === door,
+    );
+    const ownUnits = leadPairUnits(inDoor, trumpSuit, levelRank)
+      .filter(unit => !unit.cards.some(c => c.id === cards[0].id));
+    const protects = ownUnits.some(unit =>
+      trickPoints(unit.cards) > 0
+      && higher.length === 1
+      && higher[0].slot > unit.slot);
+    if (protects) bonus += PAIR_KEEP_POINT_PAIR_BONUS;
+  }
+
+  // 这一墩要白送 ≥ 20 分（自己扔的是 10 对 / K 对）→ 降权
+  if (trickPoints(cards) >= 20) bonus -= PAIR_SACRIFICE_POINT_PENALTY;
+
+  return Math.min(bonus, PAIR_SACRIFICE_MAX_BONUS);
 }
 
 /**
@@ -2068,11 +2189,15 @@ export function aiChoosePlay(
         const aceBonus = ruffBaitScore !== null
           ? 0
           : aceLeadBonus(cards, lead, hands, player, trumpSuit, levelRank);
+        // 副牌对子「敢弃」的加成（钓大对子 / 对手无强势副牌 / 保住有分的对子）
+        const sacrificeBonus = ruffBaitScore !== null
+          ? 0
+          : sacrificePairLeadBonus(cards, lead, hands, player, trumpSuit, levelRank);
         const score = (ruffBaitScore !== null
           ? ruffBaitScore
           : (scoreWinningMultiLead(cards, lead, hands, player, trumpSuit, levelRank)
             ?? scoreMultiLead(cards, lead, hands, player, trumpSuit, levelRank))
-            - holdPenalty) + aceBonus;
+            - holdPenalty) + aceBonus + sacrificeBonus;
         if (score > bestScore) {
           bestScore = score;
           bestCards = cards;
