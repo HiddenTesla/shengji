@@ -453,7 +453,7 @@ describe('AI 领出：大对子（AA / KK）不轻易拆', () => {
     expectEqual(leadOf(hands, PlayerPosition.East), ['HK', 'HK'], '东家领出');
   });
 
-  it('♥AKK：外面没有 ♥A → 领 ♥KK，不拆成单张 K', () => {
+  it('♥AKK：外面没有 ♥A → A + KK 一起用（不拆成单张 K）', () => {
     const hands = handsOf(
       [
         c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.King),
@@ -465,7 +465,8 @@ describe('AI 领出：大对子（AA / KK）不轻易拆', () => {
         c(Suit.Diamond, R.Jack), c(Suit.Club, R.Jack), c(Suit.Diamond, R.Queen)],
       SIDE6(),
     );
-    expectEqual(leadOf(hands, PlayerPosition.East), ['HK', 'HK'], '东家领出');
+    // A 与 KK 在该门都最大：合在一起甩，有这门的对手只能跟、毙不了
+    expectEqual(leadOf(hands, PlayerPosition.East), ['HA', 'HK', 'HK'], '东家领出');
   });
 
   // ---- 一对 A：能抓住对手的对 K / 对 10 才打 ----
@@ -530,6 +531,72 @@ describe('AI 领出：大对子（AA / KK）不轻易拆', () => {
       ['HA'],
       '东家领出',
     );
+  });
+});
+
+describe('AI 领出：副牌 A 的评级', () => {
+  it('该门只剩这张 A → 领 ♥A（而不是更便宜的门霸 ♦8）', () => {
+    // ♥ 只剩 A：往后这门的任何一墩都会把 A 带出去，现在领出就稳收一墩。
+    // ♦8 是 ♦ 门霸（对手只有 ♦3 / ♦4 / ♦5），单张搜索本来更愿意出便宜的它。
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Diamond, R.Eight), c(Suit.Club, R.Three)],
+      [c(Suit.Diamond, R.Three), c(Suit.Club, R.Eight), c(Suit.Club, R.Nine)],
+      [c(Suit.Diamond, R.Four), c(Suit.Club, R.Ten), c(Suit.Club, R.Jack)],
+      [c(Suit.Diamond, R.Five), c(Suit.Club, R.Queen), c(Suit.Club, R.King)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['HA'], '东家领出');
+  });
+
+  it('对手断 ♥ 且带主（可用小主牌毙）→ 不加成，仍领 ♦8', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Diamond, R.Eight), c(Suit.Club, R.Three)],
+      [c(Suit.Spade, R.Three), c(Suit.Club, R.Eight), c(Suit.Club, R.Nine)],
+      [c(Suit.Diamond, R.Four), c(Suit.Club, R.Ten), c(Suit.Club, R.Jack)],
+      [c(Suit.Diamond, R.Five), c(Suit.Club, R.Queen), c(Suit.Club, R.King)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['D8'], '东家领出');
+  });
+
+  it('只剩 ♥A + 一张小牌、别人有 ♥ 对子 → 领 ♥A（不打就被对子带走）', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.Five), c(Suit.Diamond, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Three), c(Suit.Diamond, R.Three)],
+      [c(Suit.Diamond, R.Five), c(Suit.Diamond, R.Six), c(Suit.Club, R.Seven)],
+      [c(Suit.Club, R.Nine), c(Suit.Club, R.Ten), c(Suit.Diamond, R.Four)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['HA'], '东家领出');
+  });
+
+  it('没人有该门对子 → A 不会被带走，照旧领便宜的 ♥5', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.Five), c(Suit.Diamond, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Diamond, R.Three), c(Suit.Club, R.Six)],
+      [c(Suit.Diamond, R.Five), c(Suit.Diamond, R.Six), c(Suit.Club, R.Seven)],
+      [c(Suit.Club, R.Nine), c(Suit.Club, R.Ten), c(Suit.Diamond, R.Four)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H5'], '东家领出');
+  });
+
+  it('该门有三张（A + 两张小牌）→ 对子领出时 A 不会被带走，照旧领 ♥5', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.Five), c(Suit.Heart, R.Six),
+        c(Suit.Diamond, R.Eight),
+      ],
+      [
+        c(Suit.Heart, R.Three), c(Suit.Heart, R.Three),
+        c(Suit.Diamond, R.Three), c(Suit.Club, R.Six),
+      ],
+      [
+        c(Suit.Diamond, R.Five), c(Suit.Diamond, R.Six),
+        c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven),
+      ],
+      [
+        c(Suit.Club, R.Nine), c(Suit.Club, R.Ten),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Eight),
+      ],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H5'], '东家领出');
   });
 });
 

@@ -119,6 +119,86 @@ function singleLeadIsSafe(
 }
 
 /**
+ * 领出副牌 A 的评级加成（用户规则，2026-11）。
+ *
+ * 副牌 A 是该门最大的单张，但它真正的价值在「收一墩」：
+ *   ① **该门只剩这张 A**：这门往后任何一墩都会把 A 带出去（别人一领就得跟），
+ *      现在领出就能稳收一墩；只有对手断门带主、能用小主牌毙掉时不加。
+ *   ② **A + 一对大牌（通常是 A KK）一起甩**：A 与对子在该门都最大，
+ *      合起来甩时「有这门的对手必须跟这门、不能毙」，拆成 A 和 XX 两张两张打，
+ *      反而多给了一次被毙的机会。
+ *   ③ **只剩 A + 一张小牌，而别人手里有该门的对子**：对子一领，
+ *      这门的牌不够跟就只能整门出完 —— A 必然被一起带走，不打就浪费了。
+ */
+const ACE_LAST_CARD_BONUS = 80;
+const ACE_PAIR_THROW_BONUS = 100;
+const ACE_DOOMED_BONUS = 70;
+
+/** 别人（对手 + 对家）手里有没有这门的对子 */
+function othersHavePairInDoor(
+  hands: Hands,
+  player: PlayerPosition,
+  door: Suit,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  return ALL_POSITIONS.some(pos =>
+    pos !== player
+    && leadPairUnits(
+      hands[pos].filter(card => doorOf(card, trumpSuit, levelRank) === door),
+      trumpSuit, levelRank,
+    ).length > 0);
+}
+
+function aceLeadBonus(
+  cards: Card[],
+  lead: HandShape,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  // 只对副牌（主牌 A 是吊主牌，另有规则）
+  if (lead.door === null || lead.door === 'trump') return 0;
+  const door = lead.door;
+  const aces = cards.filter(card => card.rank === Rank.Ace);
+  if (aces.length === 0) return 0;
+
+  const hand = hands[player];
+  const inDoor = hand.filter(
+    card => doorOf(card, trumpSuit, levelRank) === door,
+  );
+
+  // ① / ③ 单张 A
+  if (lead.type === HandType.Single) {
+    // 该门只剩这一张 A → 现在领出就稳收一墩
+    if (inDoor.length === 1) {
+      return singleLeadIsSafe(aces[0], hands, player, trumpSuit, levelRank)
+        ? ACE_LAST_CARD_BONUS
+        : 0;
+    }
+    // 只剩 A + 一张小牌：别人一领这门的对子，A 就会被一起带走
+    if (inDoor.length === 2
+      && leadPairUnits(inDoor, trumpSuit, levelRank).length === 0
+      && othersHavePairInDoor(hands, player, door, trumpSuit, levelRank)) {
+      return ACE_DOOMED_BONUS;
+    }
+    return 0;
+  }
+
+  // ② A + 一对大牌 一起甩（对子不够大时甩牌本身就会被拦，这里只认成立的甩牌）
+  if (lead.type === HandType.Throw && aces.length === 1 && lead.pairs >= 1) {
+    const others = ALL_POSITIONS
+      .filter(pos => pos !== player)
+      .map(pos => hands[pos]);
+    if (throwFallback(cards, others, trumpSuit, levelRank) === null) {
+      return ACE_PAIR_THROW_BONUS;
+    }
+  }
+  return 0;
+}
+
+/**
  * 拆大对子（AA / KK）的惩罚。
  *
  * 领单张时，如果这张牌属于手里的大对子，而它本身并不能保证大出
@@ -1899,7 +1979,8 @@ export function aiChoosePlay(
         ...hands,
         [player]: hand.filter(candidate => candidate.id !== card.id),
       };
-      const leadBonus = safePointLeadBonus(card, hands, player, trumpSuit, levelRank);
+      const leadBonus = safePointLeadBonus(card, hands, player, trumpSuit, levelRank)
+        + aceLeadBonus([card], lead, hands, player, trumpSuit, levelRank);
       const splitBonus = splitKingLeadBonus(card, hands, player, trumpSuit, levelRank);
       const strategicBonus = splitBonus
         - leadJokerPenalty(card, trumpSuit, levelRank)
@@ -1983,11 +2064,15 @@ export function aiChoosePlay(
         const holdPenalty = cards.reduce(
           (sum, card) => sum + leadJokerPenalty(card, trumpSuit, levelRank), 0,
         ) + acePairLeadPenalty(cards, lead, hands, player, trumpSuit, levelRank);
-        const score = ruffBaitScore !== null
+        // A + 一对大牌 一起甩（副牌 A 的评级加成）；钓主本来就是送牌出去挨毙，不加
+        const aceBonus = ruffBaitScore !== null
+          ? 0
+          : aceLeadBonus(cards, lead, hands, player, trumpSuit, levelRank);
+        const score = (ruffBaitScore !== null
           ? ruffBaitScore
           : (scoreWinningMultiLead(cards, lead, hands, player, trumpSuit, levelRank)
             ?? scoreMultiLead(cards, lead, hands, player, trumpSuit, levelRank))
-            - holdPenalty;
+            - holdPenalty) + aceBonus;
         if (score > bestScore) {
           bestScore = score;
           bestCards = cards;
