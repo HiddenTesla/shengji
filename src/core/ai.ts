@@ -11,6 +11,7 @@ import {
   Rank,
   isPointCard,
   nextPlayer,
+  pointValue,
   teamOf,
 } from './types.ts';
 import {
@@ -1839,6 +1840,128 @@ function scoreMultiLead(
 }
 
 /**
+ * 「最省盖毙」补牌成本（越小越先拿出来；只用于盖毙时挑主牌）。
+ *
+ * - 基础：门内次序越小越便宜（最便宜的主牌补齐）；王本来就很贵；
+ * - **非级牌的分牌优先打掉**：这墩赢了分还是自己的，拿它垫不会丢分；
+ * - **级牌是控制牌**，默认排在普通主牌之后；
+ *   级牌本身是 10 / K（10 分）时可以让一点，是 5（只 5 分）时更该留着。
+ */
+const LEVEL_TRUMP_HOLD_COST = 8;
+const LEVEL_TRUMP_POINT_RELIEF = 4;
+
+function overRuffFillCost(
+  card: Card,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  const slot = slotOf(card, trumpSuit, levelRank);
+  if (card.rank === levelRank) {
+    const levelCost = slot + LEVEL_TRUMP_HOLD_COST;
+    if (levelRank === Rank.Ten || levelRank === Rank.King) {
+      return levelCost - LEVEL_TRUMP_POINT_RELIEF;
+    }
+    if (levelRank === Rank.Five) return levelCost + LEVEL_TRUMP_POINT_RELIEF;
+    return levelCost;
+  }
+  return slot - pointValue(card.rank);
+}
+
+/**
+ * 「最省盖毙」候选：自己断门、对手已经用主牌毙了这墩时，
+ * 用「刚好够牌型、又最便宜」的主牌盖过去。
+ *
+ * `followOptionsFor` 只给「最便宜的 N 张主」和「最高的 N 张主」两种粗糙组合：
+ * 前者常常凑不出领出要求的对子 / 拖拉机（只能算垫主牌），
+ * 后者会把大王 / 小王 / 级牌拿出来顶替 —— 明明一个小对子就能盖住
+ * （甩牌盖毙比的是**顶对**，不是顶张）。这里按下面的顺序重新挑：
+ *   1. 领出无对子（比顶张）→ 挑「刚好压过」的那张 + 其余最便宜；
+ *   2. 领出含对子 / 拖拉机（比顶对、顶拖）→ 枚举主牌对子子集，
+ *      筛出 `pairs >= lead.pairs` 且拖拉机结构能覆盖的，其余用最便宜的主牌补齐；
+ * 最后只保留真能 `beats` 当前最大的，取牌力总和最小的一个（牌力见 `overRuffFillCost`）。
+ */
+function cheapestOverRuffFollow(
+  state: PlayState,
+  hands: Hands,
+  player: PlayerPosition,
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[] | null {
+  if (lead.door === null || lead.door === 'trump') return null;
+  const hand = hands[player];
+  // 该门还有牌就必须跟这一门（混门只能垫牌，毙不了）
+  if (hand.some(card => doorOf(card, trumpSuit, levelRank) === lead.door)) {
+    return null;
+  }
+  // 队友已经最大 → 不需要盖
+  const tableBest = bestPlayOf(state.trick.plays, lead, trumpSuit, levelRank);
+  if (!tableBest || teamOf(tableBest.player) === teamOf(player)) return null;
+
+  const fillCost = (card: Card) => overRuffFillCost(card, trumpSuit, levelRank);
+  const byFill = (a: Card, b: Card) =>
+    fillCost(a) - fillCost(b)
+    || slotOf(a, trumpSuit, levelRank) - slotOf(b, trumpSuit, levelRank);
+  const trumps = hand
+    .filter(card => doorOf(card, trumpSuit, levelRank) === 'trump')
+    .sort(byFill);
+  if (trumps.length < lead.count) return null;
+
+  const accept = (play: Card[]) =>
+    validateFollow(hand, lead, play, trumpSuit, levelRank).ok
+      && beats(play, tableBest.cards, lead, trumpSuit, levelRank)
+      ? play
+      : null;
+
+  // 领出没有对子 → 盖毙比顶张：挑「刚好压过」的那张，其余用最便宜的补齐
+  if (lead.pairs === 0) {
+    const bestTop = Math.max(
+      ...tableBest.cards.map(card => slotOf(card, trumpSuit, levelRank)),
+    );
+    const enough = trumps
+      .filter(card => slotOf(card, trumpSuit, levelRank) > bestTop)
+      .sort(byFill)[0];
+    if (!enough) return null;
+    const fill = trumps
+      .filter(card => card.id !== enough.id)
+      .slice(0, lead.count - 1);
+    if (fill.length < lead.count - 1) return null;
+    return accept([...fill, enough]);
+  }
+
+  // 领出含对子 / 拖拉机：结构必须「带够」，再拿最便宜的主牌补齐
+  const units = leadPairUnits(trumps, trumpSuit, levelRank);
+  if (units.length > RUFF_SELECTION_MAX_UNITS) return null;
+
+  let best: Card[] | null = null;
+  let bestCost = Infinity;
+  for (let mask = 0; mask < (1 << units.length); mask++) {
+    const chosen: LeadPairUnit[] = [];
+    for (let i = 0; i < units.length; i++) {
+      if ((mask & (1 << i)) !== 0) chosen.push(units[i]);
+    }
+    if (chosen.length < lead.pairs) continue;
+    if (chosen.length * 2 > lead.count) continue;
+    if (!tractorsCover(unitRunLengths(chosen), lead.tractorRuns)) continue;
+
+    const picked = chosen.flatMap(unit => unit.cards);
+    const pickedIds = new Set(picked.map(card => card.id));
+    const need = lead.count - picked.length;
+    const fill = trumps.filter(card => !pickedIds.has(card.id)).slice(0, need);
+    if (fill.length < need) continue;
+
+    const play = accept([...picked, ...fill]);
+    if (!play) continue;
+    const cost = play.reduce((sum, card) => sum + fillCost(card), 0);
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = play;
+    }
+  }
+  return best;
+}
+
+/**
  * 「跟一对」时的垫分候选：把该门里最值得送给对家的一对拿出来。
  *
  * `hand.ts::pickForGroup` 在「有对必对」那一步固定按 `discardKey` 选对子，
@@ -1898,6 +2021,12 @@ function chooseScoredFollow(
   candidates.push(keepDoorBossInFollow(
     fallback, hand, lead, hands, player, trumpSuit, levelRank,
   ));
+
+  // 盖毙：对手已经毙了这墩、自己断门 → 补一个「最省盖毙」候选（不拿大王顶替）
+  const overRuff = cheapestOverRuffFollow(
+    state, hands, player, lead, trumpSuit, levelRank,
+  );
+  if (overRuff) candidates.push(overRuff);
 
   if (partnerLikelyWins(state, hands, player, lead, trumpSuit, levelRank)) {
     candidates.push(chooseFollow(

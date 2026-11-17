@@ -734,6 +734,109 @@ describe('AI 领出：副牌对子「敢弃」', () => {
   });
 });
 
+describe('AI 盖毙：用最省的主牌盖过对手', () => {
+  /** 北家领出 leadCards → 西家用 westCards 跟/毙 → 返回轮到南家时的 (hands, state) */
+  const afterNorthWest = (hands: Hands, northCards: Card[], westCards: Card[]) => {
+    const first = applyPlay(
+      hands, createPlayState(PlayerPosition.North), PlayerPosition.North,
+      northCards, TRUMP, LEVEL,
+    );
+    return applyPlay(first.hands, first.state, PlayerPosition.West, westCards, TRUMP, LEVEL);
+  };
+
+  it('甩牌含一对：只需顶对更大的小对子，不必动用大王', () => {
+    // 领出 ♥A ♥K ♥Q ♥Q（甩牌、含 1 对）；西家断 ♥ 用 ♠3♠3♠5♠6 毙（顶对 3）。
+    // 南家只需顶对 8 的 ♠88 + 两张便宜主牌即可盖过（盖毙比的是**顶对**，不是顶张）。
+    const hands = handsOf(
+      [
+        c(Suit.Club, R.Jack), c(Suit.Club, R.Nine),
+      ],
+      [
+        c(Suit.Spade, R.Three), c(Suit.Spade, R.Four), c(Suit.Spade, R.Five),
+        c(Suit.Spade, R.Six), c(Suit.Spade, R.Eight), c(Suit.Spade, R.Eight),
+        c(Suit.Joker, R.BigJoker),
+      ],
+      [
+        c(Suit.Spade, R.Three), c(Suit.Spade, R.Three), c(Suit.Spade, R.Five),
+        c(Suit.Spade, R.Six), c(Suit.Club, R.Queen), c(Suit.Club, R.Ten),
+      ],
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.Queen),
+        c(Suit.Heart, R.Queen), c(Suit.Club, R.Three), c(Suit.Club, R.Four),
+      ],
+    );
+    const northCards = hands[PlayerPosition.North].slice(0, 4);
+    const westCards = hands[PlayerPosition.West].slice(0, 4);
+    const next = afterNorthWest(hands, northCards, westCards);
+    expectEqual(
+      aiChoosePlay(next.state, next.hands, TRUMP, LEVEL)
+        .map(card => `${card.suit}${RANK_NAME[card.rank]}`).sort(),
+      ['S3', 'S5', 'S8', 'S8'],
+      '南家跟牌',
+    );
+  });
+
+  it('手里有级牌和主牌点时：级牌/主牌点留着，用便宜的主牌补', () => {
+    // 南家有 ♦2（级牌）、小王 —— 都不该拿来盖；北家（对家）已断 ♥ 无所谓，只看南家。
+    const hands = handsOf(
+      [
+        c(Suit.Club, R.Jack), c(Suit.Club, R.Nine),
+      ],
+      [
+        c(Suit.Diamond, R.Two), c(Suit.Spade, R.Four), c(Suit.Spade, R.Five),
+        c(Suit.Spade, R.Seven), c(Suit.Spade, R.Eight), c(Suit.Spade, R.Eight),
+        c(Suit.Joker, R.SmallJoker),
+      ],
+      [
+        c(Suit.Spade, R.Three), c(Suit.Spade, R.Three), c(Suit.Spade, R.Five),
+        c(Suit.Spade, R.Six), c(Suit.Club, R.Queen), c(Suit.Club, R.Ten),
+      ],
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.Queen),
+        c(Suit.Heart, R.Queen), c(Suit.Club, R.Three), c(Suit.Club, R.Four),
+      ],
+    );
+    const northCards = hands[PlayerPosition.North].slice(0, 4);
+    const westCards = hands[PlayerPosition.West].slice(0, 4);
+    const next = afterNorthWest(hands, northCards, westCards);
+    expectEqual(
+      aiChoosePlay(next.state, next.hands, TRUMP, LEVEL)
+        .map(card => `${card.suit}${RANK_NAME[card.rank]}`).sort(),
+      ['S4', 'S5', 'S8', 'S8'],
+      '南家跟牌',
+    );
+  });
+
+  it('领出无对子（比顶张）：只拿「刚好压过」的一张 + 最便宜的补齐', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Club, R.Jack), c(Suit.Club, R.Nine),
+      ],
+      [
+        c(Suit.Spade, R.Four), c(Suit.Spade, R.Six), c(Suit.Spade, R.Seven),
+        c(Suit.Spade, R.Eight), c(Suit.Spade, R.Ten), c(Suit.Spade, R.Ace),
+      ],
+      [
+        c(Suit.Spade, R.Three), c(Suit.Spade, R.Five), c(Suit.Spade, R.Nine),
+        c(Suit.Club, R.Queen), c(Suit.Club, R.Ten),
+      ],
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.Ten),
+        c(Suit.Club, R.Three), c(Suit.Club, R.Four),
+      ],
+    );
+    const northCards = hands[PlayerPosition.North].slice(0, 3);
+    const westCards = hands[PlayerPosition.West].slice(0, 3);
+    const next = afterNorthWest(hands, northCards, westCards);
+    expectEqual(
+      aiChoosePlay(next.state, next.hands, TRUMP, LEVEL)
+        .map(card => `${card.suit}${RANK_NAME[card.rank]}`).sort(),
+      ['S10', 'S4', 'S6'],
+      '南家跟牌',
+    );
+  });
+});
+
 describe('AI 多张跟牌：不白送大分', () => {
   it('南领主 10 对、东压主 K 对，北有对小王 → 用对小王把墩抢下来', () => {
     // 出对 5 的话，这一墩 40 分（10 对 + K 对）加自己的 10 分全判给对手
