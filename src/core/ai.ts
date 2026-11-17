@@ -22,6 +22,7 @@ import {
   slotOf,
   sortForDiscard,
   throwFallback,
+  tractorsCover,
   validateFollow,
 } from './hand.ts';
 import { beats, judgePlays } from './trick.ts';
@@ -1716,6 +1717,152 @@ function chooseScoredFollow(
   return best;
 }
 
+// ------------------------------------------------------------
+// 领出捷径：整手牌一把打出
+// ------------------------------------------------------------
+
+/** 一组对子单元里的连续对子段长度（含长度 1；`tractorsCover` 只用到 ≥2 的段） */
+function unitRunLengths(units: LeadPairUnit[]): number[] {
+  const slots = [...new Set(units.map(unit => unit.slot))].sort((a, b) => a - b);
+  if (slots.length === 0) return [];
+
+  const runs: number[] = [];
+  let length = 1;
+  for (let i = 1; i < slots.length; i++) {
+    if (slots[i] === slots[i - 1] + 1) {
+      length += 1;
+    }
+    else {
+      runs.push(length);
+      length = 1;
+    }
+  }
+  runs.push(length);
+  return runs;
+}
+
+/** 枚举对子子集的上限（超过则保守地按「能毙」处理，不冒 2^n 的险） */
+const RUFF_SELECTION_MAX_UNITS = 12;
+
+/**
+ * 手上的主牌里能否挑出 `count` 张来合法毙掉这手牌（与 `trick.ts::tierOf` 一致）：
+ * 对子数不少于领出的对子数，且拖拉机结构能覆盖领出的拖拉机结构。
+ * 毙牌不比大小 —— 结构够的话，任何毙牌都大过副牌领出。
+ */
+function canRuffWholeHand(
+  trumps: Card[],
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  if (trumps.length < lead.count) return false;
+
+  const units = leadPairUnits(trumps, trumpSuit, levelRank);
+  // 对子极多时几乎必定能毙；直接按「能毙」处理（保守，不抢这一手）
+  if (units.length > RUFF_SELECTION_MAX_UNITS) return true;
+
+  for (let mask = 0; mask < (1 << units.length); mask++) {
+    const chosen: LeadPairUnit[] = [];
+    for (let i = 0; i < units.length; i++) {
+      if ((mask & (1 << i)) !== 0) chosen.push(units[i]);
+    }
+    if (chosen.length < lead.pairs) continue;
+    if (chosen.length * 2 > lead.count) continue;
+    if (tractorsCover(unitRunLengths(chosen), lead.tractorRuns)) return true;
+  }
+  return false;
+}
+
+/**
+ * 整手牌领出后，有没有对手能压过它（同门更大，或断门用主牌毙）。
+ * 只看对手 —— 对家就算压过，这一墩仍然归己方，不影响「己方能大出」。
+ */
+function anyOpponentBeatsLead(
+  lead: HandShape,
+  hand: Card[],
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  let topSlot = -Infinity;
+  for (const card of hand) {
+    topSlot = Math.max(topSlot, slotOf(card, trumpSuit, levelRank));
+  }
+
+  for (const pos of ALL_POSITIONS) {
+    if (pos === player || teamOf(pos) === teamOf(player)) continue;
+    const oppHand = hands[pos];
+    const inDoor = lead.door === null
+      ? []
+      : oppHand.filter(card => doorOf(card, trumpSuit, levelRank) === lead.door);
+
+    if (inDoor.length > 0) {
+      // 该门不够跟满 → 必须先出完该门再垫牌（混门），压不过
+      if (inDoor.length < lead.count) continue;
+
+      if (lead.type === HandType.Single) {
+        if (inDoor.some(card => slotOf(card, trumpSuit, levelRank) > topSlot)) {
+          return true;
+        }
+      }
+      else if (lead.type === HandType.Pair) {
+        if (leadPairUnits(inDoor, trumpSuit, levelRank)
+          .some(unit => unit.slot > topSlot)) {
+          return true;
+        }
+      }
+      else if (lead.type === HandType.Tractor) {
+        const runs = pairRunsOfLength(
+          leadPairUnits(inDoor, trumpSuit, levelRank), lead.tractor,
+        );
+        if (runs.some(run => run[run.length - 1].slot > topSlot)) return true;
+      }
+      // 甩牌：成立后同门跟牌一律压不过（见 trick.ts::beats）
+      continue;
+    }
+
+    // 断门：只有全主牌（毙牌）才可能压过
+    const trumps = oppHand.filter(
+      card => doorOf(card, trumpSuit, levelRank) === 'trump',
+    );
+    if (canRuffWholeHand(trumps, lead, trumpSuit, levelRank)) return true;
+  }
+  return false;
+}
+
+/**
+ * 领出捷径：整手牌同属一门、能一把打出（单张 / 对子 / 拖拉机 / 甩牌），
+ * 且对手都压不过 → 直接全部打出。
+ *
+ * 甩牌还要求「其余三家要不上」（否则引擎会按「自动出小」只出其中一组，
+ * 就不是一把打出了）。混门手牌不能一手领出，返回 null 走原来的评分流程。
+ */
+function wholeHandLead(
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[] | null {
+  const hand = hands[player];
+  if (hand.length === 0) return null;
+
+  const lead = analyzeShape(hand, trumpSuit, levelRank);
+  if (lead.door === null) return null;
+
+  if (lead.type === HandType.Throw) {
+    const others = ALL_POSITIONS
+      .filter(pos => pos !== player)
+      .map(pos => hands[pos]);
+    if (throwFallback(hand, others, trumpSuit, levelRank) !== null) return null;
+  }
+
+  if (anyOpponentBeatsLead(lead, hand, hands, player, trumpSuit, levelRank)) {
+    return null;
+  }
+  return [...hand];
+}
+
 /**
  * 选择着法。
  *
@@ -1733,6 +1880,10 @@ export function aiChoosePlay(
   const hand = hands[player];
 
   if (!state.trick.leadDoor && state.trick.plays.length === 0) {
+    // 整手牌可以一把打出、且对手都压不过 → 直接全部打出
+    const whole = wholeHandLead(hands, player, trumpSuit, levelRank);
+    if (whole) return whole;
+
     let bestCards: Card[] | null = null;
     let bestScore = -Infinity;
     const rootTeam = teamOf(player);

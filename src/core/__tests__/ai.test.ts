@@ -9,7 +9,7 @@
 import { type Card, PlayerPosition, RANK_NAME, Rank, Suit } from '../types.ts';
 import { aiChoosePlay } from '../ai.ts';
 import { type Hands, applyPlay, createPlayState } from '../play.ts';
-import { describe, expectEqual, it } from './harness.ts';
+import { describe, expectEqual, expectTrue, it } from './harness.ts';
 
 const TRUMP: Suit | null = Suit.Spade;
 const LEVEL = Rank.Two;
@@ -568,5 +568,118 @@ describe('AI 多张跟牌：不白送大分', () => {
       ['J小王', 'J小王'],
       '北家跟牌',
     );
+  });
+});
+
+describe('AI 领出：整手牌能一把打出且对手压不过 → 全部打出', () => {
+  it('整手是一对 5 → 领出整对', () => {
+    // 对手各两张 ♥ 但都不成对 → 压不过对子
+    const hands = handsOf(
+      [c(Suit.Heart, R.Five), c(Suit.Heart, R.Five)],
+      [c(Suit.Heart, R.Four), c(Suit.Heart, R.Seven)],
+      [c(Suit.Heart, R.Eight), c(Suit.Club, R.Seven)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Six)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H5', 'H5'], '东家领出');
+  });
+
+  it('整手是一副拖拉机 → 领出整副拖拉机', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Five), c(Suit.Heart, R.Five),
+        c(Suit.Heart, R.Six), c(Suit.Heart, R.Six),
+      ],
+      [
+        c(Suit.Heart, R.Four), c(Suit.Heart, R.Eight),
+        c(Suit.Heart, R.Ten), c(Suit.Heart, R.Queen),
+      ],
+      [
+        c(Suit.Heart, R.Three), c(Suit.Heart, R.Seven),
+        c(Suit.Heart, R.Nine), c(Suit.Club, R.Seven),
+      ],
+      [
+        c(Suit.Heart, R.Six), c(Suit.Heart, R.Nine),
+        c(Suit.Heart, R.Jack), c(Suit.Club, R.Eight),
+      ],
+    );
+    expectEqual(
+      leadOf(hands, PlayerPosition.East),
+      ['H5', 'H5', 'H6', 'H6'],
+      '东家领出',
+    );
+  });
+
+  it('整手是一手甩牌（对手该门都要不上）→ 全部甩出', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.Nine)],
+      [c(Suit.Heart, R.Six), c(Suit.Heart, R.Seven), c(Suit.Heart, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Four), c(Suit.Club, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Five), c(Suit.Club, R.Seven)],
+    );
+    expectEqual(
+      leadOf(hands, PlayerPosition.East).sort(),
+      ['H9', 'HA', 'HK'],
+      '东家领出',
+    );
+  });
+
+  it('整手全是主牌（对子）→ 吊主一把打出', () => {
+    const hands = handsOf(
+      [c(Suit.Spade, R.Four), c(Suit.Spade, R.Four)],
+      [c(Suit.Spade, R.Five), c(Suit.Spade, R.Six)],
+      [c(Suit.Spade, R.Three), c(Suit.Club, R.Seven)],
+      [c(Suit.Spade, R.Three), c(Suit.Spade, R.Six)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['S4', 'S4'], '东家领出');
+  });
+
+  it('甩牌会被拦住（对手有更大的同门牌）→ 不一把打出', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.Nine)],
+      [c(Suit.Heart, R.Ten), c(Suit.Heart, R.Seven), c(Suit.Heart, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Four), c(Suit.Club, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Five), c(Suit.Club, R.Seven)],
+    );
+    expectTrue(
+      leadOf(hands, PlayerPosition.East).length === 1,
+      '甩牌被拦时不应一手出完',
+    );
+  });
+
+  it('对手断门带一对主、可以毙掉这一手 → 不一把打出', () => {
+    // 南家断 ♥ 且有一对 ♠3：♥A + ♥5 这手甩牌该门要不上，却会被毙，
+    // 所以不走「一把打出」的捷径，只领一张。
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.Five)],
+      [c(Suit.Spade, R.Three), c(Suit.Spade, R.Three)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Four)],
+      [c(Suit.Club, R.Nine), c(Suit.Diamond, R.Nine)],
+    );
+    expectTrue(
+      leadOf(hands, PlayerPosition.East).length === 1,
+      '会被毙时不应一手出完',
+    );
+  });
+
+  it('断门但主牌不成对，毙不掉整对 → 仍然一把打出', () => {
+    // 南家断 ♥、只有 ♠3 ♠4（不成对）：对子必须用同型主牌才毙得掉
+    const hands = handsOf(
+      [c(Suit.Heart, R.Five), c(Suit.Heart, R.Five)],
+      [c(Suit.Spade, R.Three), c(Suit.Spade, R.Four)],
+      [c(Suit.Heart, R.Eight), c(Suit.Club, R.Seven)],
+      [c(Suit.Club, R.Nine), c(Suit.Diamond, R.Nine)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H5', 'H5'], '东家领出');
+  });
+
+  it('对家（同队）能压过不算「对手压过」→ 仍然一把打出', () => {
+    // 西家（对家）有更大的 ♥ 牌，但这一墩仍归东/西这一队
+    const hands = handsOf(
+      [c(Suit.Heart, R.Five), c(Suit.Heart, R.Five)],
+      [c(Suit.Heart, R.Four), c(Suit.Heart, R.Seven)],
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.Ace)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Six)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H5', 'H5'], '东家领出');
   });
 });
