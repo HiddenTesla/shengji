@@ -406,6 +406,45 @@ describe('AI 多张跟牌：对家基本大出时垫分', () => {
   });
 });
 
+describe('AI 跟对子：对家确定大出时把有分的对子送给对家', () => {
+  it('对家 ♦4♦4 已大出，手上 ♦55 ♦88 → 跟 ♦55（10 分）而不是 ♦88', () => {
+    // 例：.examples/55.jsonc（西家只有 ♦9 ♦Q，凑不出对子也毙不了）
+    const hands = handsOf(
+      [
+        c(Suit.Diamond, R.Three), c(Suit.Diamond, R.Three),
+        c(Suit.Club, R.Nine), c(Suit.Club, R.Ten),
+      ],
+      [
+        c(Suit.Diamond, R.Four), c(Suit.Diamond, R.Four),
+        c(Suit.Club, R.Jack), c(Suit.Club, R.Queen),
+      ],
+      [
+        c(Suit.Diamond, R.Nine), c(Suit.Diamond, R.Queen),
+        c(Suit.Club, R.Three), c(Suit.Club, R.Four),
+      ],
+      [
+        c(Suit.Diamond, R.Five), c(Suit.Diamond, R.Five),
+        c(Suit.Diamond, R.Eight), c(Suit.Diamond, R.Eight),
+      ],
+    );
+    const southLead = hands[PlayerPosition.South].slice(0, 2);
+    const eastFollow = hands[PlayerPosition.East].slice(0, 2);
+    const first = applyPlay(
+      hands, createPlayState(PlayerPosition.South), PlayerPosition.South,
+      southLead, TRUMP, LEVEL,
+    );
+    const second = applyPlay(
+      first.hands, first.state, PlayerPosition.East, eastFollow, TRUMP, LEVEL,
+    );
+    expectEqual(
+      aiChoosePlay(second.state, second.hands, TRUMP, LEVEL)
+        .map(card => `${card.suit}${RANK_NAME[card.rank]}`).sort(),
+      ['D5', 'D5'],
+      '北家跟牌',
+    );
+  });
+});
+
 describe('AI 领出：大对子（AA / KK）不轻易拆', () => {
   const SIDE6 = () => [
     c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight),

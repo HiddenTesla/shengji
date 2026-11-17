@@ -1839,6 +1839,40 @@ function scoreMultiLead(
 }
 
 /**
+ * 「跟一对」时的垫分候选：把该门里最值得送给对家的一对拿出来。
+ *
+ * `hand.ts::pickForGroup` 在「有对必对」那一步固定按 `discardKey` 选对子，
+ * **不看**传入的 `FollowOrder`，所以 `chooseFollow(..., makeFeedPointsOrder)` 永远
+ * 只会挑最便宜的那对（0 分小牌优先），5 / 10 / K 的对子根本进不了候选。
+ * 对家已经确定大出时，这里单独补上这个候选（优先送分多的对子，同分先送小的）。
+ * 合法性仍交给 `validateFollow` 兜底；只有「首出正好是一对」时生成。
+ */
+function feedPointsPairFollow(
+  hand: Card[],
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[] | null {
+  if (lead.door === null || lead.count !== 2 || lead.pairs !== 1) return null;
+
+  const inDoor = hand.filter(
+    card => doorOf(card, trumpSuit, levelRank) === lead.door,
+  );
+  if (inDoor.length < 2) return null;
+
+  const units = leadPairUnits(inDoor, trumpSuit, levelRank);
+  // 只有一对 → 没有选择余地，默认候选已经是它
+  if (units.length < 2) return null;
+
+  const best = [...units].sort((a, b) =>
+    trickPoints(b.cards) - trickPoints(a.cards) || a.slot - b.slot)[0];
+
+  return validateFollow(hand, lead, best.cards, trumpSuit, levelRank).ok
+    ? [...best.cards]
+    : null;
+}
+
+/**
  * 多张跟牌的选择：把几种典型跟法都算一遍再选。
  *
  * 之前多张跟牌只走 `chooseFollow` 的「合法最小」策略，会白送分：
@@ -1870,6 +1904,9 @@ function chooseScoredFollow(
       hand, lead, trumpSuit, levelRank,
       makeFeedPointsOrder(hands, player, trumpSuit, levelRank),
     ));
+    // 选对子不看 FollowOrder → 单独补一个「垫分对子」候选（对家赢墩时把分送出去）
+    const feedPair = feedPointsPairFollow(hand, lead, trumpSuit, levelRank);
+    if (feedPair) candidates.push(feedPair);
   }
 
   const rootTeam = teamOf(player);
