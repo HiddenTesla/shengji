@@ -17,6 +17,11 @@ interface CardComponentProps {
     color: string;
     /** 竖排（东/西家）只露出牌顶，标记需要放到右上角 */
     position?: 'bottom-left' | 'top-right';
+    /**
+     * 标记角标的放大倍数（默认 1）。牌本身通过 scale 缩得很小时用它把
+     * 「对 / 拖」保持在可读尺寸（如初始手牌回顾里的 0.52 倍小牌）。
+     */
+    size?: number;
   };
   /** 额外缩放（1 = 不缩放）；配合 small 可渲染更小的牌（如出牌区） */
   scale?: number;
@@ -355,8 +360,14 @@ export default function CardComponent({
   const h = CARD_HEIGHT * s;
   // 标记位置：默认左下角；竖排时用右上角（底部会被下一张牌遮住）
   const markAtTop = mark?.position === 'top-right';
-  const markX = markAtTop ? 49 : 3;
-  const markY = markAtTop ? (badge ? 21 : 3) : (badge ? 61 : 78);
+  const markScale = mark?.size ?? 1;
+  const markW = 19 * markScale;
+  const markH = 15 * markScale;
+  const markX = markAtTop ? CARD_WIDTH - 3 - markW : 3;
+  // size = 1 时保持原位置（内置「底」角标在下 / 左，标记向上让位），放大时同样贴底
+  const markY = markAtTop
+    ? (badge ? 21 : 3)
+    : (badge ? 61 : 78) - (markH - 15);
   const className = [
     'card',
     onClick && 'card--clickable',
@@ -410,17 +421,17 @@ export default function CardComponent({
           <rect
             x={markX}
             y={markY}
-            width={19}
-            height={15}
-            rx={4}
+            width={markW}
+            height={markH}
+            rx={4 * markScale}
             fill={mark.color}
             stroke="#fff"
             strokeWidth={0.75}
           />
           <text
-            x={markX + 9.5}
-            y={markY + 7.5}
-            fontSize={10}
+            x={markX + markW / 2}
+            y={markY + markH / 2}
+            fontSize={10 * markScale}
             fill="#fff"
             textAnchor="middle"
             dominantBaseline="central"

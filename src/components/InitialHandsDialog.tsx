@@ -9,6 +9,7 @@
 
 import { useMemo, useState } from 'react';
 import { groupCardsForDisplay } from '../core/card.ts';
+import { handMarks } from '../core/hand.ts';
 import { type Hands } from '../core/play.ts';
 import {
   ALL_POSITIONS,
@@ -136,6 +137,8 @@ export default function InitialHandsDialog({
             ? beforeCards.filter(card => !buriedIds.has(card.id))
             : base;
           const cards = beforeBury ? beforeCards : afterCards;
+          // 对子 / 拖拉机标记（与正常手牌一致；牌只有 0.52 倍 → 角标放大保持可读）
+          const marks = handMarks(cards, trumpSuit, levelRank);
           return (
             <div
               key={position}
@@ -179,6 +182,7 @@ export default function InitialHandsDialog({
                       {group.cards.map(card => {
                         // 从底牌拿到的牌（两种视图都标：埋底后剩下的底牌同样高亮）
                         const fromBottom = isBanker && bottomIds.has(card.id);
+                        const mark = marks.get(card.id);
                         return (
                           <div
                             key={card.id}
@@ -192,6 +196,13 @@ export default function InitialHandsDialog({
                               small={true}
                               scale={0.52}
                               badge={fromBottom ? '底' : undefined}
+                              mark={mark
+                                ? {
+                                    text: mark.kind === 'tractor' ? '拖' : '对',
+                                    color: mark.kind === 'tractor' ? '#ef6c00' : '#2e7d32',
+                                    size: 1.6,
+                                  }
+                                : undefined}
                             />
                           </div>
                         );
