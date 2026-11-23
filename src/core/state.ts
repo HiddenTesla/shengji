@@ -3,9 +3,11 @@ import {
   type PlayerPosition,
   type PlayedCards,
   type Suit,
+  ALL_POSITIONS,
   GamePhase,
   HandType,
   PlayerPosition as Position,
+  RANK_NAME,
   Rank,
   Suit as CardSuit,
   Team,
@@ -14,6 +16,7 @@ import {
 } from './types.ts';
 import { type LapBoard, type LevelBoard } from './rank.ts';
 import { analyzeShape } from './hand.ts';
+import { encodeCards } from './playlog.ts';
 import {
   type Hands,
   type PlayState,
@@ -108,7 +111,11 @@ function rankValue(value: unknown, path: string): Rank {
 
 function suitValue(value: unknown): Suit | null {
   const text = stringValue(value, 'trumpSuit').trim();
-  if (text === '无主') return null;
+  // 新导出格式：“none” = 无主，“undecided” = 尚未叫主
+  if (text === '无主' || text.toLowerCase() === 'none') return null;
+  if (text.toLowerCase() === 'undecided') {
+    throw new Error('trumpSuit 未定，请先在叫主完成后导出 / 导入局面');
+  }
   const suits: Record<string, Suit> = {
     S: CardSuit.Spade,
     H: CardSuit.Heart,
@@ -234,8 +241,16 @@ export function parseGameState(text: string): ParsedGameState {
   const levels = {} as LevelBoard;
   const laps = {} as LapBoard;
   for (const [team, name] of TEAMS) {
-    levels[team] = rankValue(levelObject[name], `levels.${name}`);
-    laps[team] = integerValue(lapObject[name], `laps.${name}`, 1);
+    // 新格式的键是队伍代码（NS / EW），旧格式是中文（南北 / 东西）
+    levels[team] = rankValue(
+      levelObject[team] ?? levelObject[name],
+      `levels.${team}`,
+    );
+    laps[team] = integerValue(
+      lapObject[team] ?? lapObject[name],
+      `laps.${team}`,
+      1,
+    );
   }
 
   const banker = positionValue(root.banker, 'banker');
@@ -249,9 +264,10 @@ export function parseGameState(text: string): ParsedGameState {
   const handsObject = objectValue(root.remainingHands, 'remainingHands');
   const hands = {} as Hands;
   for (const position of POSITIONS) {
+    // 新格式用方位代码（E / S / W / N），旧格式用中文（东家 / 南家 / ...）
     hands[position] = cardsValue(
-      handsObject[`${positionName(position)}家`],
-      `remainingHands.${positionName(position)}家`,
+      handsObject[position] ?? handsObject[`${positionName(position)}家`],
+      `remainingHands.${position}`,
     );
   }
 
@@ -346,5 +362,85 @@ export function parseGameState(text: string): ParsedGameState {
       bankerPoints,
       bottom: null,
     },
+  };
+}
+
+// ------------------------------------------------------------
+// 导出局面（纯 ASCII）
+// ------------------------------------------------------------
+
+/** 导出快照里的当前墩 */
+export interface ExportTrick {
+  leader: PlayerPosition;
+  plays: { player: PlayerPosition; cards: Card[] }[];
+  turn: PlayerPosition | null;
+}
+
+export interface ExportStateInput {
+  phase: GamePhase;
+  levels: LevelBoard;
+  laps: LapBoard;
+  banker: PlayerPosition | null;
+  trumpSuit: Suit | null;
+  /** 主牌是否已确定（发牌 / 叫主阶段为 false → 导出 "undecided"） */
+  trumpDecided: boolean;
+  defendingPoints: number;
+  bankerEscapePoints: number;
+  /** 底牌（埋底后为已埋的 8 张，否则为原始底牌） */
+  bottomCards: Card[];
+  hands: Hands;
+  currentTrick: ExportTrick | null;
+  /** 稳定卡牌 ID 映射（见 playlog.ts::encodeCards） */
+  cardIdMap: Map<string, string>;
+}
+
+/**
+ * 生成可导出的局面快照，**所有键与值都是 ASCII**（不含中文 / 花色符号）：
+ * - `levels` / `laps` 的键是队伍代码 `NS` / `EW`；
+ * - 方位是 `E` / `S` / `W` / `N`；
+ * - `trumpSuit` 是 `S` / `H` / `C` / `D`、`none`（无主）或 `undecided`（未定）；
+ * - 卡牌 ID 形如 `S5#0`。
+ *
+ * 导入端 `parseGameState` 同时兼容这种格式和旧的中文键格式。
+ */
+export function buildStateSnapshot(
+  input: ExportStateInput,
+): Record<string, unknown> {
+  const trumpSuit = input.trumpSuit !== null
+    ? input.trumpSuit
+    : input.trumpDecided ? 'none' : 'undecided';
+  return {
+    schemaVersion: 1,
+    phase: input.phase,
+    levels: {
+      NS: RANK_NAME[input.levels[Team.NS]],
+      EW: RANK_NAME[input.levels[Team.EW]],
+    },
+    laps: {
+      NS: input.laps[Team.NS],
+      EW: input.laps[Team.EW],
+    },
+    banker: input.banker,
+    trumpSuit,
+    score: {
+      defendingPoints: input.defendingPoints,
+      bankerEscapePoints: input.bankerEscapePoints,
+    },
+    bottomCards: encodeCards(input.cardIdMap, input.bottomCards),
+    remainingHands: Object.fromEntries(ALL_POSITIONS.map(position => [
+      position,
+      encodeCards(input.cardIdMap, input.hands[position]),
+    ])),
+    currentTrick: input.currentTrick
+      ? {
+          leader: input.currentTrick.leader,
+          played: input.currentTrick.plays.map(play => ({
+            player: play.player,
+            cards: encodeCards(input.cardIdMap, play.cards),
+          })),
+          turn: input.currentTrick.turn,
+        }
+      : null,
+    cardIdFormat: 'suit code + rank#copy, e.g. S5#0',
   };
 }

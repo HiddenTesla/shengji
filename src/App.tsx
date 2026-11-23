@@ -78,7 +78,7 @@ import {
   truncateRecord,
   toJsonc,
 } from './core/playlog.ts';
-import { type ParsedGameState } from './core/state.ts';
+import { type ParsedGameState, buildStateSnapshot } from './core/state.ts';
 import PlayerHand from './components/PlayerHand.tsx';
 import OpponentHand from './components/OpponentHand.tsx';
 import PlayerModeButton from './components/PlayerModeButton.tsx';
@@ -1566,47 +1566,30 @@ function App() {
     const currentHands = dealtHands ?? EMPTY_HANDS;
     const isTrumpUndecided = phase === GamePhase.Dealing
       || phase === GamePhase.BiddingTrump;
-    const state = {
-      schemaVersion: 1,
+    // 导出全部使用 ASCII 键 / 值（方位代码、队伍代码、花色代码），导入端同时兼容旧中文格式
+    const state = buildStateSnapshot({
       phase,
-      levels: {
-        [TEAM_NAME_ZH[Team.NS]]: RANK_NAME[levels[Team.NS]],
-        [TEAM_NAME_ZH[Team.EW]]: RANK_NAME[levels[Team.EW]],
-      },
-      laps: {
-        [TEAM_NAME_ZH[Team.NS]]: laps[Team.NS],
-        [TEAM_NAME_ZH[Team.EW]]: laps[Team.EW],
-      },
-      banker: banker ? `${POSITION_NAME_ZH[banker]}家` : null,
-      trumpSuit: trumpSuit === null
-        ? (isTrumpUndecided ? '未定' : '无主')
-        : `${SUIT_SYMBOL[trumpSuit]}（${trumpSuit}）`,
-      score: {
-        defendingPoints: playState?.defendingPoints ?? 0,
-        bankerEscapePoints: playState?.bankerPoints ?? 0,
-      },
-      bottomCards: encodeCards(
-        cardIdMapRef.current,
-        buriedCards.length > 0 ? buriedCards : originalBottomRef.current,
-      ),
-      remainingHands: Object.fromEntries(ALL_POSITIONS.map(position => [
-        `${POSITION_NAME_ZH[position]}家`,
-        encodeCards(cardIdMapRef.current, currentHands[position]),
-      ])),
+      levels,
+      laps,
+      banker,
+      trumpSuit,
+      trumpDecided: !isTrumpUndecided,
+      defendingPoints: playState?.defendingPoints ?? 0,
+      bankerEscapePoints: playState?.bankerPoints ?? 0,
+      bottomCards: buriedCards.length > 0 ? buriedCards : originalBottomRef.current,
+      hands: currentHands,
       currentTrick: playState
         ? {
-            leader: `${POSITION_NAME_ZH[playState.trick.leadPlayer]}家`,
-            played: playState.trick.plays.map(play => ({
-              player: `${POSITION_NAME_ZH[play.player]}家`,
-              cards: encodeCards(cardIdMapRef.current, play.cards),
+            leader: playState.trick.leadPlayer,
+            plays: playState.trick.plays.map(play => ({
+              player: play.player,
+              cards: play.cards,
             })),
-            turn: playState.trick.complete
-              ? null
-              : `${POSITION_NAME_ZH[playState.turn]}家`,
+            turn: playState.trick.complete ? null : playState.turn,
           }
         : null,
-      cardIdFormat: '花色代码+牌面值#副本序号，例如 S5#0',
-    };
+      cardIdMap: cardIdMapRef.current,
+    });
     return format === 'jsonc'
       ? toJsonc(state)
       : `${JSON.stringify(state, null, 2)}\n`;
