@@ -322,8 +322,8 @@ function App() {
   const [confirmNewGame, setConfirmNewGame] = useState(false);
   /** 「重新发牌」确认框 */
   const [confirmRedeal, setConfirmRedeal] = useState(false);
-  /** 重新发牌：使用当前种子 / 指定种子（默认第一种） */
-  const [redealMode, setRedealMode] = useState<'current' | 'custom'>('current');
+  /** 重新发牌：随机种子 / 使用当前种子 / 指定种子 */
+  const [redealMode, setRedealMode] = useState<'random' | 'current' | 'custom'>('current');
   /** 重新发牌：「指定种子」的输入（字符串，便于编辑与校验） */
   const [redealSeedInput, setRedealSeedInput] = useState('');
   /** 「自定义规则」信息框（只读，说明「新的一局」里的可选规则） */
@@ -731,8 +731,12 @@ function App() {
   }
 
   function confirmRedealRound() {
-    const useCurrent = redealMode === 'current' && seedRef.current !== null;
     setConfirmRedeal(false);
+    if (redealMode === 'random') {
+      redealRound(randomSeed());
+      return;
+    }
+    const useCurrent = redealMode === 'current' && seedRef.current !== null;
     redealRound(useCurrent ? null : redealCustomSeed);
   }
 
@@ -2521,7 +2525,7 @@ function App() {
         )}
       </ConfirmDialog>
 
-      {/* 重新发牌确认框：使用当前种子 / 指定种子 */}
+      {/* 重新发牌确认框：随机种子 / 使用当前种子 / 指定种子 */}
       <ConfirmDialog
         open={confirmRedeal}
         title="重新发牌？"
@@ -2538,6 +2542,19 @@ function App() {
           洗牌种子
         </div>
         <div className="rules-dialog__list rules-dialog__list--options">
+          <label className="option-radio">
+            <input
+              type="radio"
+              name="redeal-seed-mode"
+              className="option-radio__control"
+              checked={redealMode === 'random'}
+              onChange={() => setRedealMode('random')}
+            />
+            <span className="option-radio__text">
+              随机种子
+            </span>
+          </label>
+
           <label className={dealSeed === null ? 'option-radio option-radio--disabled' : 'option-radio'}>
             <input
               type="radio"
