@@ -5,12 +5,13 @@
 import {
   type Card,
   type PlayerPosition,
-  type Suit,
+  Suit,
   HandType,
   ALL_POSITIONS,
   Rank,
   isPointCard,
   nextPlayer,
+  pointValue,
   teamOf,
 } from './types.ts';
 import {
@@ -22,6 +23,7 @@ import {
   slotOf,
   sortForDiscard,
   throwFallback,
+  tractorsCover,
   validateFollow,
 } from './hand.ts';
 import { beats, judgePlays } from './trick.ts';
@@ -115,6 +117,207 @@ function singleLeadIsSafe(
       const canRuff = hand.some(c => doorOf(c, trumpSuit, levelRank) === 'trump');
       return hasDoor || !canRuff;
     });
+}
+
+/**
+ * 领出副牌 A 的评级加成（用户规则，2026-11）。
+ *
+ * 副牌 A 是该门最大的单张，但它真正的价值在「收一墩」：
+ *   ① **该门只剩这张 A**：这门往后任何一墩都会把 A 带出去（别人一领就得跟），
+ *      现在领出就能稳收一墩；只有对手断门带主、能用小主牌毙掉时不加。
+ *   ② **A + 一对大牌（通常是 A KK）一起甩**：A 与对子在该门都最大，
+ *      合起来甩时「有这门的对手必须跟这门、不能毙」，拆成 A 和 XX 两张两张打，
+ *      反而多给了一次被毙的机会。
+ *   ③ **只剩 A + 一张小牌，而别人手里有该门的对子**：对子一领，
+ *      这门的牌不够跟就只能整门出完 —— A 必然被一起带走，不打就浪费了。
+ */
+const ACE_LAST_CARD_BONUS = 80;
+const ACE_PAIR_THROW_BONUS = 100;
+const ACE_DOOMED_BONUS = 70;
+
+/** 别人（对手 + 对家）手里有没有这门的对子 */
+function othersHavePairInDoor(
+  hands: Hands,
+  player: PlayerPosition,
+  door: Suit,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  return ALL_POSITIONS.some(pos =>
+    pos !== player
+    && leadPairUnits(
+      hands[pos].filter(card => doorOf(card, trumpSuit, levelRank) === door),
+      trumpSuit, levelRank,
+    ).length > 0);
+}
+
+function aceLeadBonus(
+  cards: Card[],
+  lead: HandShape,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  // 只对副牌（主牌 A 是吊主牌，另有规则）
+  if (lead.door === null || lead.door === 'trump') return 0;
+  const door = lead.door;
+  const aces = cards.filter(card => card.rank === Rank.Ace);
+  if (aces.length === 0) return 0;
+
+  const hand = hands[player];
+  const inDoor = hand.filter(
+    card => doorOf(card, trumpSuit, levelRank) === door,
+  );
+
+  // ① / ③ 单张 A
+  if (lead.type === HandType.Single) {
+    // 该门只剩这一张 A → 现在领出就稳收一墩
+    if (inDoor.length === 1) {
+      return singleLeadIsSafe(aces[0], hands, player, trumpSuit, levelRank)
+        ? ACE_LAST_CARD_BONUS
+        : 0;
+    }
+    // 只剩 A + 一张小牌：别人一领这门的对子，A 就会被一起带走
+    if (inDoor.length === 2
+      && leadPairUnits(inDoor, trumpSuit, levelRank).length === 0
+      && othersHavePairInDoor(hands, player, door, trumpSuit, levelRank)) {
+      return ACE_DOOMED_BONUS;
+    }
+    return 0;
+  }
+
+  // ② A + 一对大牌 一起甩（对子不够大时甩牌本身就会被拦，这里只认成立的甩牌）
+  if (lead.type === HandType.Throw && aces.length === 1 && lead.pairs >= 1) {
+    const others = ALL_POSITIONS
+      .filter(pos => pos !== player)
+      .map(pos => hands[pos]);
+    if (throwFallback(cards, others, trumpSuit, levelRank) === null) {
+      return ACE_PAIR_THROW_BONUS;
+    }
+  }
+  return 0;
+}
+
+/**
+ * 「敢不敢领出会被对手大出的副牌对子」的评级加成（用户规则，2026-11）。
+ *
+ * 单墩搜索只看眼前：领一对副牌被对手压掉就是白送一墩（相对 −2000），
+ * 所以 AI 一向不敢这样打。但实战里下面三种「弃对子」是有价值的：
+ *   ① **以小对子钓对手的大对子**（尤其是一对 A）：换掉对手的控制牌，
+ *      以后己方的牌才能收分；
+ *   ② **对手接过牌权后没有强势副牌可打**（没有 AKK 之类的「A + 对子」组合、
+ *      也没有拖拉机；单张 A、一对 A 不算强势）：送出去的这一墩换不到代价；
+ *   ③ **手里有两对以上**：先送掉一对无分的，逼出对手唯一更大的对子，
+ *      另一对有分的对子就变成该门最大（例：881010 对 QQ 先出 88）。
+ * 只对副牌生效（主牌对子是吊主，另有规则）。
+ * 「此墩将失分至少 20 分」（送出去的是 10 对 / K 对）要降权。
+ */
+const PAIR_LURE_ACE_BONUS = 1500;
+const PAIR_LURE_KING_BONUS = 900;
+const PAIR_WEAK_OPPONENT_BONUS = 1200;
+const PAIR_KEEP_POINT_PAIR_BONUS = 900;
+const PAIR_SACRIFICE_POINT_PENALTY = 800;
+/** 上述加成合计上限：不超过两个赢墩的价值 */
+const PAIR_SACRIFICE_MAX_BONUS = 2 * TRICK_WIN_VALUE;
+
+const SIDE_SUITS: readonly Suit[] = [Suit.Spade, Suit.Heart, Suit.Club, Suit.Diamond];
+
+/**
+ * 某门里有没有「强势副牌」：A + 对子（AKK 之类）或拖拉机。
+ * 单张 A、一对 A（AA 本身）都不算强势。
+ */
+function hasStrongSidePlay(
+  hand: Card[],
+  door: Suit,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  const inDoor = hand.filter(
+    card => doorOf(card, trumpSuit, levelRank) === door,
+  );
+  const units = leadPairUnits(inDoor, trumpSuit, levelRank);
+  // 拖拉机（两连对及以上）
+  if (hasConsecutivePairRun(units, 2)) return true;
+  // A + 一对（AKK 之类）；A 自己成对（AA）不算
+  if (!inDoor.some(card => card.rank === Rank.Ace)) return false;
+  const pairedIds = new Set(units.flatMap(unit => unit.cards.map(c => c.id)));
+  const bareAce = inDoor.some(
+    card => card.rank === Rank.Ace && !pairedIds.has(card.id),
+  );
+  const pairNotAce = units.some(unit => unit.cards[0].rank !== Rank.Ace);
+  return bareAce && pairNotAce;
+}
+
+/** 两名对手都没有强势副牌可打（接牌后也打不出 AKK / 拖拉机） */
+function opponentsLackStrongSidePlays(
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  return ALL_POSITIONS
+    .filter(pos => pos !== player && teamOf(pos) !== teamOf(player))
+    .every(pos => SIDE_SUITS
+      .filter(suit => suit !== trumpSuit)
+      .every(suit => !hasStrongSidePlay(hands[pos], suit, trumpSuit, levelRank)));
+}
+
+/**
+ * 领出副牌对子的「弃对子」加成。
+ * 只有「对手能用更大的同门对子接走」时才算（被毙的交给钓主评分）。
+ */
+function sacrificePairLeadBonus(
+  cards: Card[],
+  lead: HandShape,
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  if (lead.door === null || lead.door === 'trump') return 0;
+  if (lead.type !== HandType.Pair || cards.length !== 2) return 0;
+
+  const door = lead.door;
+  const ourSlot = slotOf(cards[0], trumpSuit, levelRank);
+  const higher = ALL_POSITIONS
+    .filter(pos => pos !== player && teamOf(pos) !== teamOf(player))
+    .flatMap(pos => leadPairUnits(
+      hands[pos].filter(card => doorOf(card, trumpSuit, levelRank) === door),
+      trumpSuit, levelRank,
+    ).filter(unit => unit.slot > ourSlot));
+  if (higher.length === 0) return 0;
+
+  let bonus = 0;
+
+  // ① 钓出对手的大对子（对手会用最小的一对压，越大越值钱）
+  const cheapest = higher.reduce((a, b) => (b.slot < a.slot ? b : a));
+  if (cheapest.cards[0].rank === Rank.Ace) bonus += PAIR_LURE_ACE_BONUS;
+  else if (cheapest.cards[0].rank === Rank.King) bonus += PAIR_LURE_KING_BONUS;
+
+  // ② 对手接过牌权也没有强势副牌可打
+  if (opponentsLackStrongSidePlays(hands, player, trumpSuit, levelRank)) {
+    bonus += PAIR_WEAK_OPPONENT_BONUS;
+  }
+
+  // ③ 手里另有一对有分的对子：送掉这一对后它能变成该门最大
+  if (trickPoints(cards) === 0) {
+    const inDoor = hands[player].filter(
+      card => doorOf(card, trumpSuit, levelRank) === door,
+    );
+    const ownUnits = leadPairUnits(inDoor, trumpSuit, levelRank)
+      .filter(unit => !unit.cards.some(c => c.id === cards[0].id));
+    const protects = ownUnits.some(unit =>
+      trickPoints(unit.cards) > 0
+      && higher.length === 1
+      && higher[0].slot > unit.slot);
+    if (protects) bonus += PAIR_KEEP_POINT_PAIR_BONUS;
+  }
+
+  // 这一墩要白送 ≥ 20 分（自己扔的是 10 对 / K 对）→ 降权
+  if (trickPoints(cards) >= 20) bonus -= PAIR_SACRIFICE_POINT_PENALTY;
+
+  return Math.min(bonus, PAIR_SACRIFICE_MAX_BONUS);
 }
 
 /**
@@ -1637,6 +1840,162 @@ function scoreMultiLead(
 }
 
 /**
+ * 「最省盖毙」补牌成本（越小越先拿出来；只用于盖毙时挑主牌）。
+ *
+ * - 基础：门内次序越小越便宜（最便宜的主牌补齐）；王本来就很贵；
+ * - **非级牌的分牌优先打掉**：这墩赢了分还是自己的，拿它垫不会丢分；
+ * - **级牌是控制牌**，默认排在普通主牌之后；
+ *   级牌本身是 10 / K（10 分）时可以让一点，是 5（只 5 分）时更该留着。
+ */
+const LEVEL_TRUMP_HOLD_COST = 8;
+const LEVEL_TRUMP_POINT_RELIEF = 4;
+
+function overRuffFillCost(
+  card: Card,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): number {
+  const slot = slotOf(card, trumpSuit, levelRank);
+  if (card.rank === levelRank) {
+    const levelCost = slot + LEVEL_TRUMP_HOLD_COST;
+    if (levelRank === Rank.Ten || levelRank === Rank.King) {
+      return levelCost - LEVEL_TRUMP_POINT_RELIEF;
+    }
+    if (levelRank === Rank.Five) return levelCost + LEVEL_TRUMP_POINT_RELIEF;
+    return levelCost;
+  }
+  return slot - pointValue(card.rank);
+}
+
+/**
+ * 「最省盖毙」候选：自己断门、对手已经用主牌毙了这墩时，
+ * 用「刚好够牌型、又最便宜」的主牌盖过去。
+ *
+ * `followOptionsFor` 只给「最便宜的 N 张主」和「最高的 N 张主」两种粗糙组合：
+ * 前者常常凑不出领出要求的对子 / 拖拉机（只能算垫主牌），
+ * 后者会把大王 / 小王 / 级牌拿出来顶替 —— 明明一个小对子就能盖住
+ * （甩牌盖毙比的是**顶对**，不是顶张）。这里按下面的顺序重新挑：
+ *   1. 领出无对子（比顶张）→ 挑「刚好压过」的那张 + 其余最便宜；
+ *   2. 领出含对子 / 拖拉机（比顶对、顶拖）→ 枚举主牌对子子集，
+ *      筛出 `pairs >= lead.pairs` 且拖拉机结构能覆盖的，其余用最便宜的主牌补齐；
+ * 最后只保留真能 `beats` 当前最大的，取牌力总和最小的一个（牌力见 `overRuffFillCost`）。
+ */
+function cheapestOverRuffFollow(
+  state: PlayState,
+  hands: Hands,
+  player: PlayerPosition,
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[] | null {
+  if (lead.door === null || lead.door === 'trump') return null;
+  const hand = hands[player];
+  // 该门还有牌就必须跟这一门（混门只能垫牌，毙不了）
+  if (hand.some(card => doorOf(card, trumpSuit, levelRank) === lead.door)) {
+    return null;
+  }
+  // 队友已经最大 → 不需要盖
+  const tableBest = bestPlayOf(state.trick.plays, lead, trumpSuit, levelRank);
+  if (!tableBest || teamOf(tableBest.player) === teamOf(player)) return null;
+
+  const fillCost = (card: Card) => overRuffFillCost(card, trumpSuit, levelRank);
+  const byFill = (a: Card, b: Card) =>
+    fillCost(a) - fillCost(b)
+    || slotOf(a, trumpSuit, levelRank) - slotOf(b, trumpSuit, levelRank);
+  const trumps = hand
+    .filter(card => doorOf(card, trumpSuit, levelRank) === 'trump')
+    .sort(byFill);
+  if (trumps.length < lead.count) return null;
+
+  const accept = (play: Card[]) =>
+    validateFollow(hand, lead, play, trumpSuit, levelRank).ok
+      && beats(play, tableBest.cards, lead, trumpSuit, levelRank)
+      ? play
+      : null;
+
+  // 领出没有对子 → 盖毙比顶张：挑「刚好压过」的那张，其余用最便宜的补齐
+  if (lead.pairs === 0) {
+    const bestTop = Math.max(
+      ...tableBest.cards.map(card => slotOf(card, trumpSuit, levelRank)),
+    );
+    const enough = trumps
+      .filter(card => slotOf(card, trumpSuit, levelRank) > bestTop)
+      .sort(byFill)[0];
+    if (!enough) return null;
+    const fill = trumps
+      .filter(card => card.id !== enough.id)
+      .slice(0, lead.count - 1);
+    if (fill.length < lead.count - 1) return null;
+    return accept([...fill, enough]);
+  }
+
+  // 领出含对子 / 拖拉机：结构必须「带够」，再拿最便宜的主牌补齐
+  const units = leadPairUnits(trumps, trumpSuit, levelRank);
+  if (units.length > RUFF_SELECTION_MAX_UNITS) return null;
+
+  let best: Card[] | null = null;
+  let bestCost = Infinity;
+  for (let mask = 0; mask < (1 << units.length); mask++) {
+    const chosen: LeadPairUnit[] = [];
+    for (let i = 0; i < units.length; i++) {
+      if ((mask & (1 << i)) !== 0) chosen.push(units[i]);
+    }
+    if (chosen.length < lead.pairs) continue;
+    if (chosen.length * 2 > lead.count) continue;
+    if (!tractorsCover(unitRunLengths(chosen), lead.tractorRuns)) continue;
+
+    const picked = chosen.flatMap(unit => unit.cards);
+    const pickedIds = new Set(picked.map(card => card.id));
+    const need = lead.count - picked.length;
+    const fill = trumps.filter(card => !pickedIds.has(card.id)).slice(0, need);
+    if (fill.length < need) continue;
+
+    const play = accept([...picked, ...fill]);
+    if (!play) continue;
+    const cost = play.reduce((sum, card) => sum + fillCost(card), 0);
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = play;
+    }
+  }
+  return best;
+}
+
+/**
+ * 「跟一对」时的垫分候选：把该门里最值得送给对家的一对拿出来。
+ *
+ * `hand.ts::pickForGroup` 在「有对必对」那一步固定按 `discardKey` 选对子，
+ * **不看**传入的 `FollowOrder`，所以 `chooseFollow(..., makeFeedPointsOrder)` 永远
+ * 只会挑最便宜的那对（0 分小牌优先），5 / 10 / K 的对子根本进不了候选。
+ * 对家已经确定大出时，这里单独补上这个候选（优先送分多的对子，同分先送小的）。
+ * 合法性仍交给 `validateFollow` 兜底；只有「首出正好是一对」时生成。
+ */
+function feedPointsPairFollow(
+  hand: Card[],
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[] | null {
+  if (lead.door === null || lead.count !== 2 || lead.pairs !== 1) return null;
+
+  const inDoor = hand.filter(
+    card => doorOf(card, trumpSuit, levelRank) === lead.door,
+  );
+  if (inDoor.length < 2) return null;
+
+  const units = leadPairUnits(inDoor, trumpSuit, levelRank);
+  // 只有一对 → 没有选择余地，默认候选已经是它
+  if (units.length < 2) return null;
+
+  const best = [...units].sort((a, b) =>
+    trickPoints(b.cards) - trickPoints(a.cards) || a.slot - b.slot)[0];
+
+  return validateFollow(hand, lead, best.cards, trumpSuit, levelRank).ok
+    ? [...best.cards]
+    : null;
+}
+
+/**
  * 多张跟牌的选择：把几种典型跟法都算一遍再选。
  *
  * 之前多张跟牌只走 `chooseFollow` 的「合法最小」策略，会白送分：
@@ -1663,11 +2022,20 @@ function chooseScoredFollow(
     fallback, hand, lead, hands, player, trumpSuit, levelRank,
   ));
 
+  // 盖毙：对手已经毙了这墩、自己断门 → 补一个「最省盖毙」候选（不拿大王顶替）
+  const overRuff = cheapestOverRuffFollow(
+    state, hands, player, lead, trumpSuit, levelRank,
+  );
+  if (overRuff) candidates.push(overRuff);
+
   if (partnerLikelyWins(state, hands, player, lead, trumpSuit, levelRank)) {
     candidates.push(chooseFollow(
       hand, lead, trumpSuit, levelRank,
       makeFeedPointsOrder(hands, player, trumpSuit, levelRank),
     ));
+    // 选对子不看 FollowOrder → 单独补一个「垫分对子」候选（对家赢墩时把分送出去）
+    const feedPair = feedPointsPairFollow(hand, lead, trumpSuit, levelRank);
+    if (feedPair) candidates.push(feedPair);
   }
 
   const rootTeam = teamOf(player);
@@ -1716,6 +2084,152 @@ function chooseScoredFollow(
   return best;
 }
 
+// ------------------------------------------------------------
+// 领出捷径：整手牌一把打出
+// ------------------------------------------------------------
+
+/** 一组对子单元里的连续对子段长度（含长度 1；`tractorsCover` 只用到 ≥2 的段） */
+function unitRunLengths(units: LeadPairUnit[]): number[] {
+  const slots = [...new Set(units.map(unit => unit.slot))].sort((a, b) => a - b);
+  if (slots.length === 0) return [];
+
+  const runs: number[] = [];
+  let length = 1;
+  for (let i = 1; i < slots.length; i++) {
+    if (slots[i] === slots[i - 1] + 1) {
+      length += 1;
+    }
+    else {
+      runs.push(length);
+      length = 1;
+    }
+  }
+  runs.push(length);
+  return runs;
+}
+
+/** 枚举对子子集的上限（超过则保守地按「能毙」处理，不冒 2^n 的险） */
+const RUFF_SELECTION_MAX_UNITS = 12;
+
+/**
+ * 手上的主牌里能否挑出 `count` 张来合法毙掉这手牌（与 `trick.ts::tierOf` 一致）：
+ * 对子数不少于领出的对子数，且拖拉机结构能覆盖领出的拖拉机结构。
+ * 毙牌不比大小 —— 结构够的话，任何毙牌都大过副牌领出。
+ */
+function canRuffWholeHand(
+  trumps: Card[],
+  lead: HandShape,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  if (trumps.length < lead.count) return false;
+
+  const units = leadPairUnits(trumps, trumpSuit, levelRank);
+  // 对子极多时几乎必定能毙；直接按「能毙」处理（保守，不抢这一手）
+  if (units.length > RUFF_SELECTION_MAX_UNITS) return true;
+
+  for (let mask = 0; mask < (1 << units.length); mask++) {
+    const chosen: LeadPairUnit[] = [];
+    for (let i = 0; i < units.length; i++) {
+      if ((mask & (1 << i)) !== 0) chosen.push(units[i]);
+    }
+    if (chosen.length < lead.pairs) continue;
+    if (chosen.length * 2 > lead.count) continue;
+    if (tractorsCover(unitRunLengths(chosen), lead.tractorRuns)) return true;
+  }
+  return false;
+}
+
+/**
+ * 整手牌领出后，有没有对手能压过它（同门更大，或断门用主牌毙）。
+ * 只看对手 —— 对家就算压过，这一墩仍然归己方，不影响「己方能大出」。
+ */
+function anyOpponentBeatsLead(
+  lead: HandShape,
+  hand: Card[],
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): boolean {
+  let topSlot = -Infinity;
+  for (const card of hand) {
+    topSlot = Math.max(topSlot, slotOf(card, trumpSuit, levelRank));
+  }
+
+  for (const pos of ALL_POSITIONS) {
+    if (pos === player || teamOf(pos) === teamOf(player)) continue;
+    const oppHand = hands[pos];
+    const inDoor = lead.door === null
+      ? []
+      : oppHand.filter(card => doorOf(card, trumpSuit, levelRank) === lead.door);
+
+    if (inDoor.length > 0) {
+      // 该门不够跟满 → 必须先出完该门再垫牌（混门），压不过
+      if (inDoor.length < lead.count) continue;
+
+      if (lead.type === HandType.Single) {
+        if (inDoor.some(card => slotOf(card, trumpSuit, levelRank) > topSlot)) {
+          return true;
+        }
+      }
+      else if (lead.type === HandType.Pair) {
+        if (leadPairUnits(inDoor, trumpSuit, levelRank)
+          .some(unit => unit.slot > topSlot)) {
+          return true;
+        }
+      }
+      else if (lead.type === HandType.Tractor) {
+        const runs = pairRunsOfLength(
+          leadPairUnits(inDoor, trumpSuit, levelRank), lead.tractor,
+        );
+        if (runs.some(run => run[run.length - 1].slot > topSlot)) return true;
+      }
+      // 甩牌：成立后同门跟牌一律压不过（见 trick.ts::beats）
+      continue;
+    }
+
+    // 断门：只有全主牌（毙牌）才可能压过
+    const trumps = oppHand.filter(
+      card => doorOf(card, trumpSuit, levelRank) === 'trump',
+    );
+    if (canRuffWholeHand(trumps, lead, trumpSuit, levelRank)) return true;
+  }
+  return false;
+}
+
+/**
+ * 领出捷径：整手牌同属一门、能一把打出（单张 / 对子 / 拖拉机 / 甩牌），
+ * 且对手都压不过 → 直接全部打出。
+ *
+ * 甩牌还要求「其余三家要不上」（否则引擎会按「自动出小」只出其中一组，
+ * 就不是一把打出了）。混门手牌不能一手领出，返回 null 走原来的评分流程。
+ */
+function wholeHandLead(
+  hands: Hands,
+  player: PlayerPosition,
+  trumpSuit: Suit | null,
+  levelRank: Rank,
+): Card[] | null {
+  const hand = hands[player];
+  if (hand.length === 0) return null;
+
+  const lead = analyzeShape(hand, trumpSuit, levelRank);
+  if (lead.door === null) return null;
+
+  if (lead.type === HandType.Throw) {
+    const others = ALL_POSITIONS
+      .filter(pos => pos !== player)
+      .map(pos => hands[pos]);
+    if (throwFallback(hand, others, trumpSuit, levelRank) !== null) return null;
+  }
+
+  if (anyOpponentBeatsLead(lead, hand, hands, player, trumpSuit, levelRank)) {
+    return null;
+  }
+  return [...hand];
+}
+
 /**
  * 选择着法。
  *
@@ -1733,6 +2247,10 @@ export function aiChoosePlay(
   const hand = hands[player];
 
   if (!state.trick.leadDoor && state.trick.plays.length === 0) {
+    // 整手牌可以一把打出、且对手都压不过 → 直接全部打出
+    const whole = wholeHandLead(hands, player, trumpSuit, levelRank);
+    if (whole) return whole;
+
     let bestCards: Card[] | null = null;
     let bestScore = -Infinity;
     const rootTeam = teamOf(player);
@@ -1748,7 +2266,8 @@ export function aiChoosePlay(
         ...hands,
         [player]: hand.filter(candidate => candidate.id !== card.id),
       };
-      const leadBonus = safePointLeadBonus(card, hands, player, trumpSuit, levelRank);
+      const leadBonus = safePointLeadBonus(card, hands, player, trumpSuit, levelRank)
+        + aceLeadBonus([card], lead, hands, player, trumpSuit, levelRank);
       const splitBonus = splitKingLeadBonus(card, hands, player, trumpSuit, levelRank);
       const strategicBonus = splitBonus
         - leadJokerPenalty(card, trumpSuit, levelRank)
@@ -1832,11 +2351,19 @@ export function aiChoosePlay(
         const holdPenalty = cards.reduce(
           (sum, card) => sum + leadJokerPenalty(card, trumpSuit, levelRank), 0,
         ) + acePairLeadPenalty(cards, lead, hands, player, trumpSuit, levelRank);
-        const score = ruffBaitScore !== null
+        // A + 一对大牌 一起甩（副牌 A 的评级加成）；钓主本来就是送牌出去挨毙，不加
+        const aceBonus = ruffBaitScore !== null
+          ? 0
+          : aceLeadBonus(cards, lead, hands, player, trumpSuit, levelRank);
+        // 副牌对子「敢弃」的加成（钓大对子 / 对手无强势副牌 / 保住有分的对子）
+        const sacrificeBonus = ruffBaitScore !== null
+          ? 0
+          : sacrificePairLeadBonus(cards, lead, hands, player, trumpSuit, levelRank);
+        const score = (ruffBaitScore !== null
           ? ruffBaitScore
           : (scoreWinningMultiLead(cards, lead, hands, player, trumpSuit, levelRank)
             ?? scoreMultiLead(cards, lead, hands, player, trumpSuit, levelRank))
-            - holdPenalty;
+            - holdPenalty) + aceBonus + sacrificeBonus;
         if (score > bestScore) {
           bestScore = score;
           bestCards = cards;

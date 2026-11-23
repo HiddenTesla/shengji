@@ -9,7 +9,7 @@
 import { type Card, PlayerPosition, RANK_NAME, Rank, Suit } from '../types.ts';
 import { aiChoosePlay } from '../ai.ts';
 import { type Hands, applyPlay, createPlayState } from '../play.ts';
-import { describe, expectEqual, it } from './harness.ts';
+import { describe, expectEqual, expectTrue, it } from './harness.ts';
 
 const TRUMP: Suit | null = Suit.Spade;
 const LEVEL = Rank.Two;
@@ -406,6 +406,45 @@ describe('AI 多张跟牌：对家基本大出时垫分', () => {
   });
 });
 
+describe('AI 跟对子：对家确定大出时把有分的对子送给对家', () => {
+  it('对家 ♦4♦4 已大出，手上 ♦55 ♦88 → 跟 ♦55（10 分）而不是 ♦88', () => {
+    // 例：.examples/55.jsonc（西家只有 ♦9 ♦Q，凑不出对子也毙不了）
+    const hands = handsOf(
+      [
+        c(Suit.Diamond, R.Three), c(Suit.Diamond, R.Three),
+        c(Suit.Club, R.Nine), c(Suit.Club, R.Ten),
+      ],
+      [
+        c(Suit.Diamond, R.Four), c(Suit.Diamond, R.Four),
+        c(Suit.Club, R.Jack), c(Suit.Club, R.Queen),
+      ],
+      [
+        c(Suit.Diamond, R.Nine), c(Suit.Diamond, R.Queen),
+        c(Suit.Club, R.Three), c(Suit.Club, R.Four),
+      ],
+      [
+        c(Suit.Diamond, R.Five), c(Suit.Diamond, R.Five),
+        c(Suit.Diamond, R.Eight), c(Suit.Diamond, R.Eight),
+      ],
+    );
+    const southLead = hands[PlayerPosition.South].slice(0, 2);
+    const eastFollow = hands[PlayerPosition.East].slice(0, 2);
+    const first = applyPlay(
+      hands, createPlayState(PlayerPosition.South), PlayerPosition.South,
+      southLead, TRUMP, LEVEL,
+    );
+    const second = applyPlay(
+      first.hands, first.state, PlayerPosition.East, eastFollow, TRUMP, LEVEL,
+    );
+    expectEqual(
+      aiChoosePlay(second.state, second.hands, TRUMP, LEVEL)
+        .map(card => `${card.suit}${RANK_NAME[card.rank]}`).sort(),
+      ['D5', 'D5'],
+      '北家跟牌',
+    );
+  });
+});
+
 describe('AI 领出：大对子（AA / KK）不轻易拆', () => {
   const SIDE6 = () => [
     c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight),
@@ -453,7 +492,7 @@ describe('AI 领出：大对子（AA / KK）不轻易拆', () => {
     expectEqual(leadOf(hands, PlayerPosition.East), ['HK', 'HK'], '东家领出');
   });
 
-  it('♥AKK：外面没有 ♥A → 领 ♥KK，不拆成单张 K', () => {
+  it('♥AKK：外面没有 ♥A → A + KK 一起用（不拆成单张 K）', () => {
     const hands = handsOf(
       [
         c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.King),
@@ -465,7 +504,8 @@ describe('AI 领出：大对子（AA / KK）不轻易拆', () => {
         c(Suit.Diamond, R.Jack), c(Suit.Club, R.Jack), c(Suit.Diamond, R.Queen)],
       SIDE6(),
     );
-    expectEqual(leadOf(hands, PlayerPosition.East), ['HK', 'HK'], '东家领出');
+    // A 与 KK 在该门都最大：合在一起甩，有这门的对手只能跟、毙不了
+    expectEqual(leadOf(hands, PlayerPosition.East), ['HA', 'HK', 'HK'], '东家领出');
   });
 
   // ---- 一对 A：能抓住对手的对 K / 对 10 才打 ----
@@ -533,6 +573,270 @@ describe('AI 领出：大对子（AA / KK）不轻易拆', () => {
   });
 });
 
+describe('AI 领出：副牌 A 的评级', () => {
+  it('该门只剩这张 A → 领 ♥A（而不是更便宜的门霸 ♦8）', () => {
+    // ♥ 只剩 A：往后这门的任何一墩都会把 A 带出去，现在领出就稳收一墩。
+    // ♦8 是 ♦ 门霸（对手只有 ♦3 / ♦4 / ♦5），单张搜索本来更愿意出便宜的它。
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Diamond, R.Eight), c(Suit.Club, R.Three)],
+      [c(Suit.Diamond, R.Three), c(Suit.Club, R.Eight), c(Suit.Club, R.Nine)],
+      [c(Suit.Diamond, R.Four), c(Suit.Club, R.Ten), c(Suit.Club, R.Jack)],
+      [c(Suit.Diamond, R.Five), c(Suit.Club, R.Queen), c(Suit.Club, R.King)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['HA'], '东家领出');
+  });
+
+  it('对手断 ♥ 且带主（可用小主牌毙）→ 不加成，仍领 ♦8', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Diamond, R.Eight), c(Suit.Club, R.Three)],
+      [c(Suit.Spade, R.Three), c(Suit.Club, R.Eight), c(Suit.Club, R.Nine)],
+      [c(Suit.Diamond, R.Four), c(Suit.Club, R.Ten), c(Suit.Club, R.Jack)],
+      [c(Suit.Diamond, R.Five), c(Suit.Club, R.Queen), c(Suit.Club, R.King)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['D8'], '东家领出');
+  });
+
+  it('只剩 ♥A + 一张小牌、别人有 ♥ 对子 → 领 ♥A（不打就被对子带走）', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.Five), c(Suit.Diamond, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Three), c(Suit.Diamond, R.Three)],
+      [c(Suit.Diamond, R.Five), c(Suit.Diamond, R.Six), c(Suit.Club, R.Seven)],
+      [c(Suit.Club, R.Nine), c(Suit.Club, R.Ten), c(Suit.Diamond, R.Four)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['HA'], '东家领出');
+  });
+
+  it('没人有该门对子 → A 不会被带走，照旧领便宜的 ♥5', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.Five), c(Suit.Diamond, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Diamond, R.Three), c(Suit.Club, R.Six)],
+      [c(Suit.Diamond, R.Five), c(Suit.Diamond, R.Six), c(Suit.Club, R.Seven)],
+      [c(Suit.Club, R.Nine), c(Suit.Club, R.Ten), c(Suit.Diamond, R.Four)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H5'], '东家领出');
+  });
+
+  it('该门有三张（A + 两张小牌）→ 对子领出时 A 不会被带走，照旧领 ♥5', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.Five), c(Suit.Heart, R.Six),
+        c(Suit.Diamond, R.Eight),
+      ],
+      [
+        c(Suit.Heart, R.Three), c(Suit.Heart, R.Three),
+        c(Suit.Diamond, R.Three), c(Suit.Club, R.Six),
+      ],
+      [
+        c(Suit.Diamond, R.Five), c(Suit.Diamond, R.Six),
+        c(Suit.Club, R.Seven), c(Suit.Diamond, R.Seven),
+      ],
+      [
+        c(Suit.Club, R.Nine), c(Suit.Club, R.Ten),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Eight),
+      ],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H5'], '东家领出');
+  });
+});
+
+describe('AI 领出：副牌对子「敢弃」', () => {
+  it('以小对子钓对手的一对 A → 领出这对小对子', () => {
+    // ♥88 必然被南家的一对 ♥A 压掉（0 分、本就要丢的一墩），
+    // 换来对手的控制对子被换走；这种「钓大对子」值得打。
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Eight), c(Suit.Heart, R.Eight), c(Suit.Club, R.Three),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Five), c(Suit.Diamond, R.Six),
+      ],
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.Ace), c(Suit.Club, R.Seven),
+        c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight),
+      ],
+      [
+        c(Suit.Heart, R.Four), c(Suit.Heart, R.Five), c(Suit.Club, R.Nine),
+        c(Suit.Diamond, R.Nine), c(Suit.Club, R.Ten), c(Suit.Diamond, R.Ten),
+      ],
+      [
+        c(Suit.Heart, R.Three), c(Suit.Heart, R.Six), c(Suit.Club, R.Jack),
+        c(Suit.Diamond, R.Jack), c(Suit.Club, R.Three), c(Suit.Diamond, R.Three),
+      ],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H8', 'H8'], '东家领出');
+  });
+
+  it('对手接牌后没有强势副牌（无 AKK / 拖拉机）→ 愿意先送小对子', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Eight), c(Suit.Heart, R.Eight), c(Suit.Club, R.Three),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Five), c(Suit.Diamond, R.Six),
+      ],
+      [
+        c(Suit.Heart, R.Queen), c(Suit.Heart, R.Queen), c(Suit.Club, R.Seven),
+        c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight),
+      ],
+      [
+        c(Suit.Heart, R.Four), c(Suit.Heart, R.Five), c(Suit.Club, R.Nine),
+        c(Suit.Diamond, R.Nine), c(Suit.Club, R.Ten), c(Suit.Diamond, R.Ten),
+      ],
+      [
+        c(Suit.Heart, R.Three), c(Suit.Heart, R.Six), c(Suit.Club, R.Jack),
+        c(Suit.Diamond, R.Jack), c(Suit.Club, R.Three), c(Suit.Diamond, R.Three),
+      ],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H8', 'H8'], '东家领出');
+  });
+
+  it('对手有 AKK 之类的强势副牌 → 不轻易送小对子', () => {
+    // 北家手里 ♣A ♣K ♣K（A + 对子）是强势副牌，送出去的一墩会被它换成分
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Eight), c(Suit.Heart, R.Eight), c(Suit.Club, R.Three),
+        c(Suit.Diamond, R.Four), c(Suit.Club, R.Five), c(Suit.Diamond, R.Six),
+      ],
+      [
+        c(Suit.Heart, R.Queen), c(Suit.Heart, R.Queen), c(Suit.Club, R.Seven),
+        c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight),
+      ],
+      [
+        c(Suit.Heart, R.Four), c(Suit.Heart, R.Five), c(Suit.Club, R.Nine),
+        c(Suit.Diamond, R.Nine), c(Suit.Club, R.Ten), c(Suit.Diamond, R.Ten),
+      ],
+      [
+        c(Suit.Club, R.Ace), c(Suit.Club, R.King), c(Suit.Club, R.King),
+        c(Suit.Club, R.Jack), c(Suit.Diamond, R.Jack), c(Suit.Diamond, R.Three),
+      ],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['D4'], '东家领出');
+  });
+
+  it('881010 对 QQ：先出无分的 88，把有分的 1010 留成该门最大', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Eight), c(Suit.Heart, R.Eight),
+        c(Suit.Heart, R.Ten), c(Suit.Heart, R.Ten),
+        c(Suit.Club, R.Three), c(Suit.Diamond, R.Four),
+      ],
+      [
+        c(Suit.Heart, R.Queen), c(Suit.Heart, R.Queen), c(Suit.Club, R.Seven),
+        c(Suit.Diamond, R.Seven), c(Suit.Club, R.Eight), c(Suit.Diamond, R.Eight),
+      ],
+      [
+        c(Suit.Heart, R.Four), c(Suit.Heart, R.Five), c(Suit.Club, R.Ten),
+        c(Suit.Diamond, R.Ten), c(Suit.Club, R.Jack), c(Suit.Diamond, R.Jack),
+      ],
+      [
+        c(Suit.Heart, R.Three), c(Suit.Heart, R.Six), c(Suit.Club, R.Nine),
+        c(Suit.Diamond, R.Nine), c(Suit.Club, R.Queen), c(Suit.Diamond, R.Queen),
+      ],
+    );
+    // 不是先打 1010：那样这一墩要白送 20 分（降权），88 才是该先送的对子
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H8', 'H8'], '东家领出');
+  });
+});
+
+describe('AI 盖毙：用最省的主牌盖过对手', () => {
+  /** 北家领出 leadCards → 西家用 westCards 跟/毙 → 返回轮到南家时的 (hands, state) */
+  const afterNorthWest = (hands: Hands, northCards: Card[], westCards: Card[]) => {
+    const first = applyPlay(
+      hands, createPlayState(PlayerPosition.North), PlayerPosition.North,
+      northCards, TRUMP, LEVEL,
+    );
+    return applyPlay(first.hands, first.state, PlayerPosition.West, westCards, TRUMP, LEVEL);
+  };
+
+  it('甩牌含一对：只需顶对更大的小对子，不必动用大王', () => {
+    // 领出 ♥A ♥K ♥Q ♥Q（甩牌、含 1 对）；西家断 ♥ 用 ♠3♠3♠5♠6 毙（顶对 3）。
+    // 南家只需顶对 8 的 ♠88 + 两张便宜主牌即可盖过（盖毙比的是**顶对**，不是顶张）。
+    const hands = handsOf(
+      [
+        c(Suit.Club, R.Jack), c(Suit.Club, R.Nine),
+      ],
+      [
+        c(Suit.Spade, R.Three), c(Suit.Spade, R.Four), c(Suit.Spade, R.Five),
+        c(Suit.Spade, R.Six), c(Suit.Spade, R.Eight), c(Suit.Spade, R.Eight),
+        c(Suit.Joker, R.BigJoker),
+      ],
+      [
+        c(Suit.Spade, R.Three), c(Suit.Spade, R.Three), c(Suit.Spade, R.Five),
+        c(Suit.Spade, R.Six), c(Suit.Club, R.Queen), c(Suit.Club, R.Ten),
+      ],
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.Queen),
+        c(Suit.Heart, R.Queen), c(Suit.Club, R.Three), c(Suit.Club, R.Four),
+      ],
+    );
+    const northCards = hands[PlayerPosition.North].slice(0, 4);
+    const westCards = hands[PlayerPosition.West].slice(0, 4);
+    const next = afterNorthWest(hands, northCards, westCards);
+    expectEqual(
+      aiChoosePlay(next.state, next.hands, TRUMP, LEVEL)
+        .map(card => `${card.suit}${RANK_NAME[card.rank]}`).sort(),
+      ['S3', 'S5', 'S8', 'S8'],
+      '南家跟牌',
+    );
+  });
+
+  it('手里有级牌和主牌点时：级牌/主牌点留着，用便宜的主牌补', () => {
+    // 南家有 ♦2（级牌）、小王 —— 都不该拿来盖；北家（对家）已断 ♥ 无所谓，只看南家。
+    const hands = handsOf(
+      [
+        c(Suit.Club, R.Jack), c(Suit.Club, R.Nine),
+      ],
+      [
+        c(Suit.Diamond, R.Two), c(Suit.Spade, R.Four), c(Suit.Spade, R.Five),
+        c(Suit.Spade, R.Seven), c(Suit.Spade, R.Eight), c(Suit.Spade, R.Eight),
+        c(Suit.Joker, R.SmallJoker),
+      ],
+      [
+        c(Suit.Spade, R.Three), c(Suit.Spade, R.Three), c(Suit.Spade, R.Five),
+        c(Suit.Spade, R.Six), c(Suit.Club, R.Queen), c(Suit.Club, R.Ten),
+      ],
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.Queen),
+        c(Suit.Heart, R.Queen), c(Suit.Club, R.Three), c(Suit.Club, R.Four),
+      ],
+    );
+    const northCards = hands[PlayerPosition.North].slice(0, 4);
+    const westCards = hands[PlayerPosition.West].slice(0, 4);
+    const next = afterNorthWest(hands, northCards, westCards);
+    expectEqual(
+      aiChoosePlay(next.state, next.hands, TRUMP, LEVEL)
+        .map(card => `${card.suit}${RANK_NAME[card.rank]}`).sort(),
+      ['S4', 'S5', 'S8', 'S8'],
+      '南家跟牌',
+    );
+  });
+
+  it('领出无对子（比顶张）：只拿「刚好压过」的一张 + 最便宜的补齐', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Club, R.Jack), c(Suit.Club, R.Nine),
+      ],
+      [
+        c(Suit.Spade, R.Four), c(Suit.Spade, R.Six), c(Suit.Spade, R.Seven),
+        c(Suit.Spade, R.Eight), c(Suit.Spade, R.Ten), c(Suit.Spade, R.Ace),
+      ],
+      [
+        c(Suit.Spade, R.Three), c(Suit.Spade, R.Five), c(Suit.Spade, R.Nine),
+        c(Suit.Club, R.Queen), c(Suit.Club, R.Ten),
+      ],
+      [
+        c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.Ten),
+        c(Suit.Club, R.Three), c(Suit.Club, R.Four),
+      ],
+    );
+    const northCards = hands[PlayerPosition.North].slice(0, 3);
+    const westCards = hands[PlayerPosition.West].slice(0, 3);
+    const next = afterNorthWest(hands, northCards, westCards);
+    expectEqual(
+      aiChoosePlay(next.state, next.hands, TRUMP, LEVEL)
+        .map(card => `${card.suit}${RANK_NAME[card.rank]}`).sort(),
+      ['S10', 'S4', 'S6'],
+      '南家跟牌',
+    );
+  });
+});
+
 describe('AI 多张跟牌：不白送大分', () => {
   it('南领主 10 对、东压主 K 对，北有对小王 → 用对小王把墩抢下来', () => {
     // 出对 5 的话，这一墩 40 分（10 对 + K 对）加自己的 10 分全判给对手
@@ -568,5 +872,118 @@ describe('AI 多张跟牌：不白送大分', () => {
       ['J小王', 'J小王'],
       '北家跟牌',
     );
+  });
+});
+
+describe('AI 领出：整手牌能一把打出且对手压不过 → 全部打出', () => {
+  it('整手是一对 5 → 领出整对', () => {
+    // 对手各两张 ♥ 但都不成对 → 压不过对子
+    const hands = handsOf(
+      [c(Suit.Heart, R.Five), c(Suit.Heart, R.Five)],
+      [c(Suit.Heart, R.Four), c(Suit.Heart, R.Seven)],
+      [c(Suit.Heart, R.Eight), c(Suit.Club, R.Seven)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Six)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H5', 'H5'], '东家领出');
+  });
+
+  it('整手是一副拖拉机 → 领出整副拖拉机', () => {
+    const hands = handsOf(
+      [
+        c(Suit.Heart, R.Five), c(Suit.Heart, R.Five),
+        c(Suit.Heart, R.Six), c(Suit.Heart, R.Six),
+      ],
+      [
+        c(Suit.Heart, R.Four), c(Suit.Heart, R.Eight),
+        c(Suit.Heart, R.Ten), c(Suit.Heart, R.Queen),
+      ],
+      [
+        c(Suit.Heart, R.Three), c(Suit.Heart, R.Seven),
+        c(Suit.Heart, R.Nine), c(Suit.Club, R.Seven),
+      ],
+      [
+        c(Suit.Heart, R.Six), c(Suit.Heart, R.Nine),
+        c(Suit.Heart, R.Jack), c(Suit.Club, R.Eight),
+      ],
+    );
+    expectEqual(
+      leadOf(hands, PlayerPosition.East),
+      ['H5', 'H5', 'H6', 'H6'],
+      '东家领出',
+    );
+  });
+
+  it('整手是一手甩牌（对手该门都要不上）→ 全部甩出', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.Nine)],
+      [c(Suit.Heart, R.Six), c(Suit.Heart, R.Seven), c(Suit.Heart, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Four), c(Suit.Club, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Five), c(Suit.Club, R.Seven)],
+    );
+    expectEqual(
+      leadOf(hands, PlayerPosition.East).sort(),
+      ['H9', 'HA', 'HK'],
+      '东家领出',
+    );
+  });
+
+  it('整手全是主牌（对子）→ 吊主一把打出', () => {
+    const hands = handsOf(
+      [c(Suit.Spade, R.Four), c(Suit.Spade, R.Four)],
+      [c(Suit.Spade, R.Five), c(Suit.Spade, R.Six)],
+      [c(Suit.Spade, R.Three), c(Suit.Club, R.Seven)],
+      [c(Suit.Spade, R.Three), c(Suit.Spade, R.Six)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['S4', 'S4'], '东家领出');
+  });
+
+  it('甩牌会被拦住（对手有更大的同门牌）→ 不一把打出', () => {
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.King), c(Suit.Heart, R.Nine)],
+      [c(Suit.Heart, R.Ten), c(Suit.Heart, R.Seven), c(Suit.Heart, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Four), c(Suit.Club, R.Eight)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Five), c(Suit.Club, R.Seven)],
+    );
+    expectTrue(
+      leadOf(hands, PlayerPosition.East).length === 1,
+      '甩牌被拦时不应一手出完',
+    );
+  });
+
+  it('对手断门带一对主、可以毙掉这一手 → 不一把打出', () => {
+    // 南家断 ♥ 且有一对 ♠3：♥A + ♥5 这手甩牌该门要不上，却会被毙，
+    // 所以不走「一把打出」的捷径，只领一张。
+    const hands = handsOf(
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.Five)],
+      [c(Suit.Spade, R.Three), c(Suit.Spade, R.Three)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Four)],
+      [c(Suit.Club, R.Nine), c(Suit.Diamond, R.Nine)],
+    );
+    expectTrue(
+      leadOf(hands, PlayerPosition.East).length === 1,
+      '会被毙时不应一手出完',
+    );
+  });
+
+  it('断门但主牌不成对，毙不掉整对 → 仍然一把打出', () => {
+    // 南家断 ♥、只有 ♠3 ♠4（不成对）：对子必须用同型主牌才毙得掉
+    const hands = handsOf(
+      [c(Suit.Heart, R.Five), c(Suit.Heart, R.Five)],
+      [c(Suit.Spade, R.Three), c(Suit.Spade, R.Four)],
+      [c(Suit.Heart, R.Eight), c(Suit.Club, R.Seven)],
+      [c(Suit.Club, R.Nine), c(Suit.Diamond, R.Nine)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H5', 'H5'], '东家领出');
+  });
+
+  it('对家（同队）能压过不算「对手压过」→ 仍然一把打出', () => {
+    // 西家（对家）有更大的 ♥ 牌，但这一墩仍归东/西这一队
+    const hands = handsOf(
+      [c(Suit.Heart, R.Five), c(Suit.Heart, R.Five)],
+      [c(Suit.Heart, R.Four), c(Suit.Heart, R.Seven)],
+      [c(Suit.Heart, R.Ace), c(Suit.Heart, R.Ace)],
+      [c(Suit.Heart, R.Three), c(Suit.Heart, R.Six)],
+    );
+    expectEqual(leadOf(hands, PlayerPosition.East), ['H5', 'H5'], '东家领出');
   });
 });
