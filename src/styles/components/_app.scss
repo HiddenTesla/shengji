@@ -252,16 +252,11 @@
   padding-top: 12px;
 }
 
-/* 北家手牌 + 报主栏（并排：加高 stage 会把牌桌压矮，东西家手牌会被裁） */
+/* 北家手牌（行高恒定：报主栏 / 出牌栏都以浮层形式贴在手牌下方） */
 .stage__line {
   display: flex;
   align-items: center;
   gap: 10px;
-
-  /* 有报主栏时整行会变宽，右侧留给左上角等级面板，避免手牌从面板下面穿过 */
-  &--with-bar {
-    padding-left: 212px;
-  }
 }
 
 /* 北家出牌栏（浮层）：绝对定位、不占布局 —— 出现/消失时牌桌与中心元素完全不动。
@@ -280,14 +275,19 @@
   transform: translateX(-50%);
 }
 
-/* 东 / 西家：手牌 + 竖排报主栏（并排，栏靠向桌面中央） */
+/* 东 / 西家：手牌 + 竖排报主栏（并排）。
+   报主栏固定在外侧：西家在行首、东家在行尾（行尾贴在牌桌右沿），
+   这样手牌变宽/变窄只会向内长，报主栏不会跟着移动。 */
 .side-line {
   display: flex;
   align-items: flex-start;
   gap: 8px;
 
-  &--east {
-    flex-direction: row-reverse;
+  /* 北家报主栏浮在他手牌下方（盖住牌桌顶部 97px）：东西家手牌整体下移避让。
+     下移量 = min(97px, 牌桌可用高度 - 手牌高度)；用 --app-height 估算：
+     牌桌高 ≈ app-height - 511（菜单 44 + stage 210 + 底部 257），手牌高 ≈ 411。 */
+  &--below-bid {
+    margin-top: clamp(0px, calc(var(--app-height, 900px) - 922px), 97px);
   }
 }
 

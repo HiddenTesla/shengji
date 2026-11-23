@@ -47,6 +47,9 @@ const OVERLAP_V = 22; // 垂直（东/西）
 const CARD_W = 71 * 0.95;
 const CARD_H = 96 * 0.95;
 
+/** 横排牌背最多展示的张数（多出来的显示 +N） */
+const BACK_MAX_SHOW = 12;
+
 /** 东/西家翻开时：同一门内竖排的步长（保证点数与花色可见） */
 const SIDE_STEP_Y = 42;
 /**
@@ -81,7 +84,7 @@ export default function OpponentHand({
   const label = POSITION_NAME_ZH[position];
   const isSide = position === 'E' || position === 'W';
   const cardCount = cards.length;
-  const maxShow = Math.min(cardCount, 12);
+  const maxShow = Math.min(cardCount, BACK_MAX_SHOW);
   const groups = groupCardsForDisplay(cards, trumpSuit, levelRank);
   const isSelectable = onToggleCard !== undefined;
   const showCardsFaceUp = faceUp || isSelectable;
@@ -90,7 +93,6 @@ export default function OpponentHand({
     () => handMarks(cards, trumpSuit, levelRank),
     [cards, trumpSuit, levelRank],
   );
-
   if (cardCount === 0) {
     return (
       <div className="opponent-hand" data-player-hand={position}>

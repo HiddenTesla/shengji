@@ -2034,10 +2034,7 @@ function App() {
 
       {/* ---- 顶部：北家 ---- */}
       <div className="stage">
-        <div className={northBidBar
-          ? 'stage__line stage__line--with-bar'
-          : 'stage__line'}
-        >
+        <div className="stage__line">
         <OpponentHand
           position={PlayerPosition.North}
           cards={shownHands.N}
@@ -2058,8 +2055,13 @@ function App() {
             ? toggleCard
             : undefined}
         />
-        {northBidBar}
         </div>
+        {/* 北家报主栏：放在手牌下方（浮层，不占布局，与手牌张数无关） */}
+        {northBidBar && (
+          <div className="stage__under">
+            {northBidBar}
+          </div>
+        )}
         {/* 北家出牌栏：放在北家手牌下方（手牌翻开后很宽，没法并排） */}
         {northPlayBar && (
           <div className="stage__under">
@@ -2072,7 +2074,12 @@ function App() {
       <div className="table">
         {/* 西家 */}
         <div className="table__west">
-          <div className="side-line">
+          <div className={northBidBar && visibility.W
+            ? 'side-line side-line--below-bid'
+            : 'side-line'}
+          >
+          {/* 报主栏放在最外侧（牌桌左沿）：位置不随手牌宽窄变化 */}
+          {westBidBar}
           <OpponentHand
             position={PlayerPosition.West}
             cards={shownHands.W}
@@ -2093,7 +2100,7 @@ function App() {
               ? toggleCard
               : undefined}
           />
-          {westBidBar}          </div>
+          </div>
           {playingTurn === PlayerPosition.West && (
             <div className="table__west-playbar">
               {renderPlayBar(true)}
@@ -2132,8 +2139,8 @@ function App() {
             </div>
           )}
 
-          {/* 游戏标题（出牌阶段让位给出牌区） */}
-          {!isPlaying && !isRoundEnd && (
+          {/* 游戏标题（出牌阶段让位给出牌区；北家报主栏浮在手牌下方时会盖住标题，直接不渲染） */}
+          {!isPlaying && !isRoundEnd && !northBidBar && (
             <>
               <div className="game-title">
                 升级
@@ -2276,7 +2283,10 @@ function App() {
 
         {/* 东家 */}
         <div className="table__east">
-          <div className="side-line side-line--east">
+          <div className={northBidBar && visibility.E
+            ? 'side-line side-line--below-bid'
+            : 'side-line'}
+          >
           <OpponentHand
             position={PlayerPosition.East}
             cards={shownHands.E}

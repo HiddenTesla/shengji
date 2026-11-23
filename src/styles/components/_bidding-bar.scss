@@ -7,6 +7,8 @@
 
 .bidding-bar {
   display: flex;
+  /* 报主栏在侧栏里是定海神针：手牌变宽也不允许被压缩（否则栏会跟着变位置） */
+  flex-shrink: 0;
   align-items: stretch;
   gap: 10px;
   padding: 8px 14px;
