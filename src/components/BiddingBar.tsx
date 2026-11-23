@@ -95,18 +95,7 @@ export default function BiddingBar({
     label: string;
     decl: Declaration | null;
   }[] = [
-    {
-      strength: BidStrength.BigJokerPair,
-      label: '无主·大王',
-      decl: bigJokers.length >= 2
-        ? {
-            player,
-            suit: null,
-            strength: BidStrength.BigJokerPair,
-            cardIds: [bigJokers[0].id, bigJokers[1].id],
-          }
-        : null,
-    },
+    // 由弱到强排列：对小王更接近普通花色，对大王在最右
     {
       strength: BidStrength.SmallJokerPair,
       label: '无主·小王',
@@ -116,6 +105,18 @@ export default function BiddingBar({
             suit: null,
             strength: BidStrength.SmallJokerPair,
             cardIds: [smallJokers[0].id, smallJokers[1].id],
+          }
+        : null,
+    },
+    {
+      strength: BidStrength.BigJokerPair,
+      label: '无主·大王',
+      decl: bigJokers.length >= 2
+        ? {
+            player,
+            suit: null,
+            strength: BidStrength.BigJokerPair,
+            cardIds: [bigJokers[0].id, bigJokers[1].id],
           }
         : null,
     },
