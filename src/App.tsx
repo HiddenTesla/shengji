@@ -1693,6 +1693,15 @@ function App() {
   const showBar = southManual && (isDealing || (isBidding && !flipping));
   const barCanAct = !flipping && (isDealing || isBidding);
 
+  /** 被后来的声明盖过的报主记录（含被反主 / 被自己补强），按发生顺序 */
+  const earlierDeclarations = bidState.current
+    ? bidState.history.filter(decl => decl !== bidState.current)
+    : bidState.history;
+  /** 面板高度有限：只展示最近 4 条更早的记录（完整记录仍保留在 bidState.history） */
+  const shownEarlierDeclarations = earlierDeclarations.slice(-4);
+  const hiddenEarlierDeclarationCount =
+    earlierDeclarations.length - shownEarlierDeclarations.length;
+
   /** 报主栏（每家在各自位置）：该家为手动、发牌/叫主阶段（翻底时不可报）才显示 */
   function renderBiddingBar(position: PlayerPosition, vertical = false) {
     if (playerModes[position] !== PlayerMode.Manual) return null;
@@ -1944,6 +1953,46 @@ function App() {
                 </b>
               )}
         </div>
+
+        {/* 已被反主 / 被补强覆盖的报主记录：整局保留（直到下一局重新发牌） */}
+        {shownEarlierDeclarations.length > 0 && (
+          <div className="level-panel__row level-panel__row--previous">
+            <span className="level-panel__label">
+              先前
+            </span>
+            <span className="level-panel__bid-history">
+              {hiddenEarlierDeclarationCount > 0 && (
+                <span className="level-panel__bid-sep">…</span>
+              )}
+              {shownEarlierDeclarations.map((decl, index) => (
+                <span
+                  key={`${decl.player}-${index}`}
+                  className="level-panel__bid-entry"
+                >
+                  {index > 0 && (
+                    <span className="level-panel__bid-sep">·</span>
+                  )}
+                  <span className="level-panel__bid-player">
+                    {POSITION_NAME_ZH[decl.player]}家
+                  </span>
+                  <b
+                    className={decl.suit === null
+                      ? 'level-panel__bid-suit level-panel__bid-suit--text'
+                      : 'level-panel__bid-suit'}
+                    style={cssVars({
+                      '--trump-color': TRUMP_TEXT_COLORS[decl.suit ?? Suit.Joker],
+                    })}
+                  >
+                    {trumpOfDeclaration(decl)}
+                  </b>
+                  <span className="level-panel__bid-count">
+                    {decl.cardIds.length} 张
+                  </span>
+                </span>
+              ))}
+            </span>
+          </div>
+        )}
 
         {/* 庄家 */}
         <div className="level-panel__row">

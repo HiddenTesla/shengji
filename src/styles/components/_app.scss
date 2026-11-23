@@ -160,6 +160,53 @@
   color: $text-on-dark-muted;
 }
 
+/* 先前（已被反主 / 补强）的报主记录：一行小字，放不下就换行 */
+.level-panel__row--previous {
+  gap: 6px;
+}
+
+.level-panel__bid-history {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 4px;
+  min-width: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.level-panel__bid-entry {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.level-panel__bid-sep {
+  margin-right: 2px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.level-panel__bid-player {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.level-panel__bid-suit {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--trump-color, rgba(255, 255, 255, 0.5));
+
+  &--text {
+    font-size: 11px;
+  }
+}
+
+.level-panel__bid-count {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
 .level-panel__undecided {
   font-size: 19px;
   line-height: 1.1;
