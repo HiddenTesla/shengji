@@ -80,7 +80,7 @@ export default function MenuBar({
   onViewSeed,
   gameSpeed,
   onChangeSpeed,
-  rightClickConfirm = false,
+  rightClickConfirm = true,
   onChangeRightClick,
   hasActiveRound = true,
 }: MenuBarProps) {

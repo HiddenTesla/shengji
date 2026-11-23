@@ -89,7 +89,8 @@
   top: -5px; /* 抵消 dropdown 的 4px padding + 1px 边框 */
   left: 100%;
   z-index: 1;
-  min-width: clamp(64px, 6vw, 92px);
+  /* 要容纳勾选标记 + 「开启 / 关闭」等文字，保证每项只占一行 */
+  min-width: clamp(96px, 8vw, 120px);
   padding: 4px;
   border-radius: 6px;
   background: $color-menu-bg;
@@ -106,6 +107,7 @@
     clamp(12px, 1vw, 18px);
   font-size: $menu-font-size;
   text-align: left;
+  white-space: nowrap;
   color: #fff;
   cursor: pointer;
   border: none;

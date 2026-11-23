@@ -262,7 +262,7 @@ function App() {
   const [animatingCardIds, setAnimatingCardIds] = useState<Set<string>>(new Set());
   const [gameSpeed, setGameSpeed] = useState(3);
   /** 增强鼠标右键：开启后右键 = 点「出牌 / 埋底」（同时屏蔽浏览器右键菜单） */
-  const [rightClickConfirm, setRightClickConfirm] = useState(false);
+  const [rightClickConfirm, setRightClickConfirm] = useState(true);
   const [playerModes, setPlayerModes] = useState<Record<PlayerPosition, PlayerMode>>({
     E: PlayerMode.Auto,
     S: PlayerMode.Manual,
