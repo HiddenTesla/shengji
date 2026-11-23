@@ -3,6 +3,7 @@
 // ============================================================
 
 import { type Card, Suit, Rank, SUIT_SYMBOL, RANK_NAME } from '../core/types.ts';
+import clownUrl from '../assets/joker/clown.svg';
 
 interface CardComponentProps {
   card: Card;
@@ -136,15 +137,32 @@ function CardBack() {
   );
 }
 
-/** Joker 牌面 */
+/**
+ * 王牌牌面：clown.svg 小丑帽徽章 + 大王/小王。
+ * 大王用彩色版；小王用同一张 SVG + 灰度滤镜（黑白色）。
+ */
 function JokerFace({ card, small, inlineSuit }: {
   card: Card;
   small?: boolean;
   inlineSuit?: boolean;
 }) {
   const isBig = card.rank === Rank.BigJoker;
-  const label = isBig ? '大\n王' : '小\n王';
-  const color = isBig ? '#c62828' : '#1565c0';
+  const theme = isBig
+    ? { cardBg: '#fffdf4', border: '#7b1fa2', label: '#6a1b9a', sub: '#7b1fa2' }
+    : { cardBg: '#fafafa', border: '#616161', label: '#212121', sub: '#616161' };
+  const artStyle = isBig ? undefined : { filter: 'grayscale(1)' };
+  /** 绘制 clown.svg（cx/cy = 中心，size = 边长） */
+  const art = (cx: number, cy: number, size: number) => (
+    <image
+      href={clownUrl}
+      x={cx - size / 2}
+      y={cy - size / 2}
+      width={size}
+      height={size}
+      preserveAspectRatio="xMidYMid meet"
+      style={artStyle}
+    />
+  );
 
   return (
     <g>
@@ -154,69 +172,62 @@ function JokerFace({ card, small, inlineSuit }: {
         height={CARD_HEIGHT}
         rx={CARD_RADIUS}
         ry={CARD_RADIUS}
-        fill="#faf5ff"
-        stroke="#7c3aed"
+        fill={theme.cardBg}
+        stroke={theme.border}
         strokeWidth={1.5}
       />
+
+      {/* 中央小丑帽徽章 */}
+      {art(CARD_WIDTH / 2, small ? 46 : 47.5, small ? 38 : 44)}
+
+      {/* 大王 / 小王 */}
       <text
         x={CARD_WIDTH / 2}
-        y={CARD_HEIGHT / 2 - 2}
-        fontSize={small ? 20 : 26}
-        fill={color}
+        y={small ? 15 : 16}
+        fontSize={small ? 11 : 13}
+        fill={theme.label}
         textAnchor="middle"
         dominantBaseline="central"
         fontWeight="bold"
       >
-        {label}
+        {isBig ? '大王' : '小王'}
       </text>
+
       <text
         x={CARD_WIDTH / 2}
-        y={CARD_HEIGHT / 2 + (small ? 14 : 18)}
-        fontSize={small ? 9 : 11}
-        fill="#7c3aed"
+        y={small ? 86 : 89}
+        fontSize={small ? 6 : 6.5}
+        fill={theme.sub}
         textAnchor="middle"
         dominantBaseline="central"
         fontWeight={500}
+        letterSpacing={0.3}
       >
         {isBig ? 'BIG JOKER' : 'SMALL JOKER'}
       </text>
+
       {inlineSuit
         ? (
           <>
-            {/* 紧凑模式：大小王 + 王牌标记同一行，露出牌顶时也能分辨 */}
+            {/* 紧凑模式：大小王 + 小丑帽徽章同一行，露出牌顶时也能分辨 */}
             <text
               x={7}
               y={small ? 21 : 23}
               fontSize={small ? 15 : 17}
-              fill={color}
+              fill={theme.label}
               textAnchor="start"
               dominantBaseline="central"
               fontWeight="bold"
             >
               {isBig ? '大王' : '小王'}
             </text>
-            <SuitSymbol
-              suit={Suit.Joker}
-              x={small ? 53 : 56}
-              y={small ? 21 : 23}
-              size={small ? 15 : 17}
-            />
+            {art(small ? 53 : 56, small ? 21 : 23, small ? 15 : 17)}
           </>
         )
-        : (
-          <SuitSymbol
-            suit={Suit.Joker}
-            x={small ? 14 : 16}
-            y={small ? 20 : 22}
-            size={small ? 16 : 20}
-          />
-        )}
-      <SuitSymbol
-        suit={Suit.Joker}
-        x={small ? CARD_WIDTH - 14 : CARD_WIDTH - 16}
-        y={small ? CARD_HEIGHT - 20 : CARD_HEIGHT - 22}
-        size={small ? 16 : 20}
-      />
+        : art(small ? 14 : 15, small ? 17 : 18, small ? 15 : 17)}
+
+      {/* 右下角小丑帽 */}
+      {art(small ? CARD_WIDTH - 13 : CARD_WIDTH - 14, small ? CARD_HEIGHT - 17 : CARD_HEIGHT - 18, small ? 15 : 17)}
     </g>
   );
 }

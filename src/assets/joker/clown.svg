@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 -24 48 48" width="48" height="48" role="img" aria-label="clown">
+  <!-- clown：小丑帽徽章（彩色版；小王牌用 CSS grayscale 渲染成黑白） -->
+  <!-- 徽章底 -->
+  <circle r="22" fill="#fff8e6" stroke="#d4a72c" stroke-width="1.4"/>
+  <!-- 三根帽尖 -->
+  <path d="M-10 -4 C-15 -8 -18 -12 -16 -16" fill="none" stroke="#e53935" stroke-width="3.6" stroke-linecap="round"/>
+  <path d="M10 -4 C15 -8 18 -12 16 -16" fill="none" stroke="#1e88e5" stroke-width="3.6" stroke-linecap="round"/>
+  <path d="M0 -5 C0 -11 1 -15 3 -18" fill="none" stroke="#fbc02d" stroke-width="3.8" stroke-linecap="round"/>
+  <!-- 铃铛 -->
+  <circle cx="-16" cy="-17.2" r="2.5" fill="#ffd54f" stroke="#b8860b" stroke-width="0.9"/>
+  <circle cx="16" cy="-17.2" r="2.5" fill="#ffd54f" stroke="#b8860b" stroke-width="0.9"/>
+  <circle cx="3.4" cy="-19.2" r="2.6" fill="#ffd54f" stroke="#b8860b" stroke-width="0.9"/>
+  <!-- 帽带 -->
+  <path d="M-12 -4 Q0 -7.6 12 -4 Q12 0.4 0 -2 Q-12 0.4 -12 -4 Z" fill="#7b1fa2"/>
+  <path d="M-11 -3.4 Q0 -6.6 11 -3.4" fill="none" stroke="#ce93d8" stroke-width="1" stroke-linecap="round"/>
+  <!-- 小丑脸 -->
+  <ellipse cy="9" rx="8" ry="7" fill="#fffde7" stroke="#7b1fa2" stroke-width="1.1"/>
+  <circle cx="-3" cy="8" r="1.15" fill="#263238"/>
+  <circle cx="3" cy="8" r="1.15" fill="#263238"/>
+  <circle cx="-5.3" cy="10.4" r="1.5" fill="#f8bbd0"/>
+  <circle cx="5.3" cy="10.4" r="1.5" fill="#f8bbd0"/>
+  <path d="M-3.4 11.6 Q0 14.2 3.4 11.6" fill="none" stroke="#e53935" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- 领口锯齿 -->
+  <path d="M-7.5 15.6 L-5 19.4 L-2.5 16.4 L0 19.4 L2.5 16.4 L5 19.4 L7.5 16.4" fill="none" stroke="#43a047" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

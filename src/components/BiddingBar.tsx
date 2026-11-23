@@ -18,6 +18,7 @@ import {
   isSelfOverride,
 } from '../core/bidding.ts';
 import { cssVars } from '../utils/cssVars.ts';
+import clownUrl from '../assets/joker/clown.svg';
 
 interface BiddingBarProps {
   /** 该栏归属玩家 */
@@ -143,11 +144,12 @@ export default function BiddingBar({
         />
       ))}
 
-      {/* 无主：与四门花色同一层级，排在花色之后；大王 / 小王 分开显示 */}
+      {/* 无主：与四门花色同一层级，排在花色之后；小王 / 大王 分开显示 */}
       {jokerOptions.map(option => (
         <JokerColumn
           key={option.strength}
           label={option.label}
+          big={option.strength === BidStrength.BigJokerPair}
           decl={option.decl}
           isCurrent={current !== null
             && current.suit === null
@@ -179,6 +181,7 @@ export default function BiddingBar({
 
 function JokerColumn({
   label,
+  big,
   decl,
   isCurrent,
   canAct,
@@ -188,6 +191,8 @@ function JokerColumn({
 }: {
   /** 选项名（无主·大王 / 无主·小王） */
   label: string;
+  /** true = 大王（彩色小丑帽）；false = 小王（黑白） */
+  big: boolean;
   /** 当前手牌能否做这个声明（null = 没有对应的对王） */
   decl: Declaration | null;
   isCurrent: boolean;
@@ -196,7 +201,7 @@ function JokerColumn({
   rules: RuleOptions;
   onBid: (d: Declaration) => void;
 }) {
-  const color = SUIT_COLORS[Suit.Joker];
+  const color = big ? '#7b1fa2' : '#616161';
   // 若是在压自己先前的有主声明，且规则不允许反自己，则禁用
   const blocked = decl !== null && current !== null
     && isSelfOverride(decl, current)
@@ -226,9 +231,20 @@ function JokerColumn({
           '--suit-tint': `${color}14`,
         })}
       >
-        🃏
+        <img
+          src={clownUrl}
+          alt=""
+          className={big
+            ? 'bidding-bar__joker-icon'
+            : 'bidding-bar__joker-icon bidding-bar__joker-icon--mono'}
+        />
       </button>
-      <span className="bidding-bar__joker-label">{label}</span>
+      <span className={big
+        ? 'bidding-bar__joker-label'
+        : 'bidding-bar__joker-label bidding-bar__joker-label--mono'}
+      >
+        {label}
+      </span>
     </div>
   );
 }

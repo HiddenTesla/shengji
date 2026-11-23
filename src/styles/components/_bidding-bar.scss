@@ -45,6 +45,28 @@
   line-height: 1.2;
   color: #5e35b1;
   white-space: nowrap;
+
+  /* 小王：和小王牌一样用黑白配色 */
+  &--mono {
+    color: #616161;
+  }
+}
+
+/* 无主图标 = 王牌上的 clown.svg（大王彩色 / 小王黑白） */
+.bidding-bar__joker-icon {
+  display: block;
+  width: 30px;
+  height: 30px;
+  pointer-events: none;
+
+  &--mono {
+    filter: grayscale(1);
+  }
+}
+
+/* 不可用时只淡化，不转灰度：否则大王（彩色）会和小王（黑白）看起来一样 */
+.bidding-bar__suit-button:disabled .bidding-bar__joker-icon {
+  opacity: 0.45;
 }
 
 .bidding-bar__suit-button {
@@ -158,6 +180,11 @@
 
   .bidding-bar__joker-label {
     font-size: 9px;
+  }
+
+  .bidding-bar__joker-icon {
+    width: 22px;
+    height: 22px;
   }
 
   .bidding-bar__pass-group {
